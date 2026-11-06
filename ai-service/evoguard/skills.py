@@ -37,6 +37,7 @@ MAX_NEG_TRANSFER = 0.05
 
 
 def ensure_schema(store):
+    exp_mod.ensure_schema(store)      # evolution_events 在经验模块里，一起建
     with store.conn() as c:
         c.executescript(SCHEMA)
 

@@ -39,6 +39,9 @@ def ensure_schema(store):
 
 
 def event(store, kind, subject_id, detail=""):
+    # 审计表在本模块里，但别的模块（skills）也会来写事件。
+    # 不加这一行，先调 skills 再调 event 就会报 no such table。
+    ensure_schema(store)
     with store.conn() as c:
         c.execute("INSERT INTO evolution_events(id,ts,kind,subject_id,detail) VALUES(?,?,?,?,?)",
                   ("ev_" + uuid.uuid4().hex[:10], round(time.time(), 3), kind,
