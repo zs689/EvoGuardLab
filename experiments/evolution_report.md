@@ -8,9 +8,9 @@
 |---|---|
 | 训练集用例 | 24 |
 | 其中靠探索恢复成功 | 2 |
-| 通过准入校验的经验 | 22 |
-| 生成的候选技能 | 22 |
-| 晋升为正式技能 | 0 |
+| 通过准入校验的经验 | 23 |
+| 生成的候选技能 | 23 |
+| 晋升为正式技能 | 1 |
 
 ### 候选技能验证明细
 
@@ -31,6 +31,7 @@
 | 遇到 retrieval_failure 时改用 fal | kb/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 context_loss 时改用 replay_c | kb/context_loss | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 process_interruption 时改用  | kb/process_interruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 stale_data 时改用 cross_veri | kb/stale_data | 0.0% | 100.0% | 100.0 | 0.0% | **PROMOTE** |
 | 遇到 tool_timeout 时改用 retry | planner/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 tool_exception 时改用 retry | planner/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | planner/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -45,12 +46,12 @@
 |---|---|---|
 | A | 无恢复 | 0.0% |
 | B | 诊断+规则恢复，无经验学习 | 37.5% |
-| C | 用经验但**不严格验证** | 37.5% |
-| D | 完整闭环（验证+晋升） | 91.7% |
+| C | 用经验但**不严格验证** | 58.3% |
+| D | 完整闭环（验证+晋升） | 95.8% |
 
 - **负迁移率（B 成功但 D 失败）**：0.0%（0/48）
-- D 相对 B 提升：**54.2 个百分点**
-- D 相对 C 提升：**54.2 个百分点**
+- D 相对 B 提升：**58.3 个百分点**
+- D 相对 C 提升：**37.5 个百分点**
 
 ## 三、怎么读
 

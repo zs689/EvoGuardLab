@@ -245,12 +245,23 @@ def corrupt(fault_type, tool, output, args=None):
             del out["steps"]
         return out
     if fault_type == "stale_data":
-        # 返回同一篇文档的旧版本：结构完全合法，只有数字过期
+        # 返回同一篇文档的旧版本：结构完全合法，只有版本号和数字过期。
+        #
+        # 两个坑都踩过：
+        #   1. 版本号必须写进去，否则「陈旧」根本不可观测，诊断只能靠猜
+        #   2. 数字替换必须**一次性**做，不能链式 replace ——
+        #      7->15 之后，"15 个工作日"里的 "5 个工作日" 又被 5->20 命中，变成 120
         if tool == "kb.search":
             for d in out.get("docs") or []:
-                d["text"] = d.get("text", "").replace("7 个工作日", "15 个工作日") \
-                                            .replace("3 个工作日", "10 个工作日") \
-                                            .replace("5 个工作日", "20 个工作日")
+                d["version"] = 1
+                text = d.get("text", "")
+                for old, new_val in (("7 个工作日", "15 个工作日"),
+                                     ("3 个工作日", "10 个工作日"),
+                                     ("5 个工作日", "20 个工作日")):
+                    if old in text:
+                        text = text.replace(old, new_val)
+                        break
+                d["text"] = text
         return out
     if fault_type == "incorrect_planning":
         # 步骤齐全但顺序颠倒 —— schema 完全合法，只能靠业务预期发现
