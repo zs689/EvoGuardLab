@@ -144,16 +144,17 @@ class LocalProvider(Provider):
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             raise LLMError("E_LLM_UNREACHABLE", "连不上 %s（%s）" % (self.base, e))
 
+    def list_models(self):
+        """列出已加载的模型。缺这个方法时调用方只能猜模型名，实测会直接崩。"""
+        data = self._get("/models")
+        return [m.get("id") for m in data.get("data", [])]
+
     def resolve_model(self):
         if self.model:
             return self.model
         if self._resolved:
             return self._resolved
-        try:
-            data = self._get("/models")
-            ids = [m.get("id") for m in data.get("data", [])]
-        except LLMError:
-            raise
+        ids = self.list_models()
         if not ids:
             raise LLMError("E_LLM_MODEL", "服务是通的，但没有已加载的模型")
         self._resolved = ids[0]
