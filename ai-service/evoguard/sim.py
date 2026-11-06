@@ -26,13 +26,15 @@ ORDERS = {
 }
 
 KB = {
-    "KB-01": {"doc_id": "KB-01", "title": "退货政策",
+    "KB-01": {"doc_id": "KB-01", "title": "退货政策", "version": 2,
               "text": "自签收之日起 7 个工作日内可无理由退货，商品需保持完好。"},
-    "KB-02": {"doc_id": "KB-02", "title": "退款时效",
+    "KB-02": {"doc_id": "KB-02", "title": "退款时效", "version": 2,
               "text": "退货审核通过后 3 个工作日内原路退回，遇节假日顺延。"},
-    "KB-03": {"doc_id": "KB-03", "title": "发票规则",
+    "KB-03": {"doc_id": "KB-03", "title": "发票规则", "version": 2,
               "text": "电子发票在订单完成后 5 个工作日内开具，不支持修改抬头。"},
 }
+
+MIN_DOC_VERSION = 2      # 业务配置：低于此版本的证据不得用于作答
 
 PLAN_LIBRARY = {
     "weekly_report": ["收集本周销售数据", "核对异常订单", "生成周报草稿", "提交审核"],
@@ -259,6 +261,7 @@ def corrupt(fault_type, tool, output, args=None):
         # 返回同一篇文档的旧版本：结构完全合法，只有数字过期
         if tool == "kb.search":
             for d in out.get("docs") or []:
+                d["version"] = 1          # 关键：版本号可观测，否则陈旧数据无法被诊断
                 d["text"] = (d.get("text", "").replace("7 个工作日", "15 个工作日")
                              .replace("3 个工作日", "10 个工作日")
                              .replace("5 个工作日", "20 个工作日"))

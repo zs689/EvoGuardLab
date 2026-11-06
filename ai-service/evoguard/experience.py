@@ -56,8 +56,11 @@ def extract(store, run_id):
 
     # 证据：定位到的那一步 + 恢复过程产生的步
     refs = []
+    # 注意：diagnosis 里存的是**绝对 seq**（报告要对得上轨迹行），
+    # 这里必须按 seq 匹配，比成 logical 会一条证据都取不到 ->
+    # 经验被判「没有 evidence_refs」-> 探索出来的经验全被拒。
     for s in steps:
-        if s.get("logical") == dia["first_bad_step"]:
+        if s.get("seq") == dia["first_bad_step"]:
             refs.append(s["id"])
     for s in steps:
         if s["kind"] == "replay":

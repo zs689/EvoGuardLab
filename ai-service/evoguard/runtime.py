@@ -219,8 +219,9 @@ class Ctx:
         duration = int((time.time() - started) * 1000)
 
         poisoned = False
+        # 这里必须列全：漏一个，corrupt() 就永远不会被调用，故障等于没注入。
         if fault in ("invalid_json", "missing_field", "silent_corruption",
-                     "retrieval_failure"):
+                     "retrieval_failure", "stale_data", "incorrect_planning"):
             out = sim.corrupt(fault, tool, out, args)
             poisoned = True
 
@@ -272,11 +273,22 @@ def diagnose(steps):
                  "evidence": ev, "confidence": ev.get("confidence", 0.8)}
 
     bad = d.get("first_bad_step") or 0
+
+    # 定位不到时，退化成「最后一个数据步骤」。
+    # 为什么必须这么做：恢复期靠 first_bad_logical 决定抑制哪一步，
+    # 如果是 0，就什么也抑制不掉，重放必然再犯同一个错 ——
+    # 「未知故障永远救不回来」是个假象，其实是抑制点丢了。
+    if not bad:
+        tool_steps = [s for s in steps if s["kind"] in ("tool", "replay")]
+        if tool_steps:
+            bad = tool_steps[-1]["seq"]
+
     lg = bad
     for s in steps:
         if s["seq"] == bad:
             lg = s.get("logical") or bad
             break
+    d["first_bad_step"] = bad
     d["first_bad_logical"] = lg
     return d
 
@@ -375,6 +387,17 @@ def _diagnose_impl(steps):
                                 "evidence": {"step": s["seq"], "field": k,
                                              "requested": av, "returned": bv},
                                 "confidence": 0.85}
+
+    # 规则 7：证据陈旧 —— 返回的文档版本低于业务要求的最低版本
+    for s in steps:
+        if s["kind"] == "tool" and s["name"] == "kb.search" and isinstance(s["output"], dict):
+            for d in s["output"].get("docs") or []:
+                ver = d.get("version")
+                if isinstance(ver, int) and ver < sim.MIN_DOC_VERSION:
+                    return {"first_bad_step": s["seq"], "root_cause": "stale_data",
+                            "evidence": {"step": s["seq"], "doc": d.get("doc_id"),
+                                         "version": ver, "required": sim.MIN_DOC_VERSION},
+                            "confidence": 0.9}
 
     # 规则 6：检索失败 —— 返回文档与 query 字面完全不重合
     for s in steps:

@@ -7,7 +7,7 @@
 | 步骤 | 结果 |
 |---|---|
 | 训练集用例 | 24 |
-| 其中靠探索恢复成功 | 0 |
+| 其中靠探索恢复成功 | 2 |
 | 通过准入校验的经验 | 22 |
 | 生成的候选技能 | 22 |
 | 晋升为正式技能 | 0 |
@@ -16,23 +16,23 @@
 
 | 技能 | 目标病例 | 验证前成功率 | 验证后成功率 | 增益(pp) | 负迁移率 | 判定 |
 |---|---|---|---|---|---|---|
-| 遇到 tool_timeout 时改用 retry | order/tool_timeout | 100.0% | 100.0% | 0.0 | 71.4% | **REJECT** |
-| 遇到 tool_exception 时改用 retry | order/tool_exception | 100.0% | 100.0% | 0.0 | 71.4% | **REJECT** |
+| 遇到 tool_timeout 时改用 retry | order/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
+| 遇到 tool_exception 时改用 retry | order/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | order/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 missing_field 时改用 fallbac | order/missing_field | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 silent_corruption 时改用 cro | order/silent_corruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 retrieval_failure 时改用 fal | order/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 context_loss 时改用 replay_c | order/context_loss | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 process_interruption 时改用  | order/process_interruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
-| 遇到 tool_timeout 时改用 retry | kb/tool_timeout | 100.0% | 100.0% | 0.0 | 57.1% | **REJECT** |
-| 遇到 tool_exception 时改用 retry | kb/tool_exception | 100.0% | 100.0% | 0.0 | 57.1% | **REJECT** |
+| 遇到 tool_timeout 时改用 retry | kb/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
+| 遇到 tool_exception 时改用 retry | kb/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | kb/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 missing_field 时改用 fallbac | kb/missing_field | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 retrieval_failure 时改用 fal | kb/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 context_loss 时改用 replay_c | kb/context_loss | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 process_interruption 时改用  | kb/process_interruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
-| 遇到 tool_timeout 时改用 retry | planner/tool_timeout | 100.0% | 100.0% | 0.0 | 57.1% | **REJECT** |
-| 遇到 tool_exception 时改用 retry | planner/tool_exception | 100.0% | 100.0% | 0.0 | 57.1% | **REJECT** |
+| 遇到 tool_timeout 时改用 retry | planner/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
+| 遇到 tool_exception 时改用 retry | planner/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | planner/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 missing_field 时改用 fallbac | planner/missing_field | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 retrieval_failure 时改用 fal | planner/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -43,10 +43,10 @@
 
 | 模式 | 含义 | 成功率 |
 |---|---|---|
-| A | 无恢复 | 8.3% |
-| B | 诊断+规则恢复，无经验学习 | 45.8% |
-| C | 用经验但**不严格验证** | 45.8% |
-| D | 完整闭环（验证+晋升） | 100.0% |
+| A | 无恢复 | 0.0% |
+| B | 诊断+规则恢复，无经验学习 | 37.5% |
+| C | 用经验但**不严格验证** | 37.5% |
+| D | 完整闭环（验证+晋升） | 91.7% |
 
 - **负迁移率（B 成功但 D 失败）**：0.0%（0/48）
 - D 相对 B 提升：**54.2 个百分点**

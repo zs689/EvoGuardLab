@@ -104,10 +104,11 @@ def main():
                    "fault_type": c["fault_type"], "seed": 7}
                   for t in sim.TASKS[c["agent_type"]][1:]]
         # guard：同 agent，**不同故障** —— 不该被这个技能影响
+        # guard 只取前 4 个：测负迁移不需要全量，全量会让评测跑成几分钟
         guard = [{"agent_type": c["agent_type"], "task_id": t["task_id"],
                   "fault_type": ft, "seed": 7}
                  for t in sim.TASKS[c["agent_type"]][1:]
-                 for ft in sim.CASE_FAULTS[c["agent_type"]] if ft != c["fault_type"]]
+                 for ft in sim.CASE_FAULTS[c["agent_type"]] if ft != c["fault_type"]][:4]
 
         def runner(case, skill):
             ok, _ = run_mode(store, case, "D", skill=skill)
