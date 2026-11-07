@@ -29,6 +29,11 @@ import experience # noqa: E402
 
 VERSION = "0.3.0"
 METRICS = os.path.join(ROOT, "experiments", "metrics.json")
+REAL_METRICS = os.path.join(ROOT, "experiments", "real_model", "metrics.json")
+REAL_REPORT = os.path.join(ROOT, "experiments", "real_model", "report.md")
+REAL_ANALYSIS = os.path.join(ROOT, "experiments", "real_model", "analysis.md")
+REAL_ATTRIBUTION = os.path.join(ROOT, "experiments", "real_model", "attribution.md")
+REAL_CHECKPOINT = os.path.join(ROOT, "experiments", "real_model", "runs.jsonl")
 REPORT = os.path.join(ROOT, "experiments", "evolution_report.md")
 TAXONOMY = os.path.join(ROOT, "docs", "taxonomy.md")
 FRONTEND = os.path.join(ROOT, "frontend")
@@ -38,6 +43,7 @@ ROUTES = [
     ("GET", r"^/api/health$", "h_health"),
     ("GET", r"^/api/meta$", "h_meta"),
     ("GET", r"^/api/metrics$", "h_metrics"),
+    ("GET", r"^/api/real-model$", "h_real_model"),
     ("GET", r"^/api/taxonomy$", "h_taxonomy"),
     ("GET", r"^/api/report$", "h_report"),
     ("GET", r"^/api/skills$", "h_skills"),
@@ -164,6 +170,37 @@ class Handler(BaseHTTPRequestHandler):
         if m is None:
             return self._err("E_NOT_FOUND", "尚未生成指标，请先跑 ai-service/evolution_bench.py", 404)
         self._send(200, m)
+
+    def h_real_model(self):
+        """真实模型评测进度/结果。评测跑一半时也能看，不返回假数字。
+
+        关键：上一轮跑完会留下旧的 metrics.json。新一轮 --fresh 重跑时，
+        检查点会持续增长而 metrics 还是旧的 —— 只看「metrics 存在」会
+        把「正在跑」误报成「已完成」，前端就会显示过期数字。
+        """
+        n_done = 0
+        ck_mtime = 0
+        if os.path.exists(REAL_CHECKPOINT):
+            ck_mtime = os.path.getmtime(REAL_CHECKPOINT)
+            with open(REAL_CHECKPOINT, encoding="utf-8") as f:
+                n_done = sum(1 for line in f if line.strip())
+        m = _read_json(REAL_METRICS, None)
+        mt_mtime = os.path.getmtime(REAL_METRICS) if os.path.exists(REAL_METRICS) else 0
+        running = n_done > 0 and (
+            m is None
+            or n_done > int(m.get("runs_completed") or 0)
+            or ck_mtime > mt_mtime)
+        ready = m is not None and not running
+        return self._send(200, {
+            "ready": ready,
+            "running": running,
+            "checkpoint_runs": n_done,
+            "metrics": m if ready else None,
+            "stale_metrics_runs": (m or {}).get("runs_completed"),
+            "report": _read_text(REAL_REPORT, "") if ready else "",
+            "analysis": _read_text(REAL_ANALYSIS, "") if ready else "",
+            "attribution": _read_text(REAL_ATTRIBUTION, "") if ready else "",
+        })
 
     def h_taxonomy(self):
         self._send(200, {"markdown": _read_text(TAXONOMY, "（未找到 docs/taxonomy.md）")})

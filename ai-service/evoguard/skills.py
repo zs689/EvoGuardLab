@@ -93,15 +93,22 @@ def lookup(store, agent_type, fault_type, mode):
 
     D：只认 active 技能，且必须 **agent + 故障类型都匹配**（严格）
     C：认 candidate + active，且 **只按 agent 匹配**（不严格 → 经验被过度泛化 → 负迁移）
+
+    排序必须给足次序（version → created_at → rowid）：
+    C 只看 agent，同一 agent 下必然有多条技能并列（技能库里的 version 通常都是 2）。
+    只写 `ORDER BY version DESC` 时，SQLite 对并列行的取舍取决于扫描顺序，
+    实测就是「永远取到最早插入的那条」—— 这会让「C 的成功率」变成
+    技能库插入顺序的产物，而不是治理机制的效果。同一个 bug 之前在
+    get_recovery 里踩过（毫秒并列取到链中间的失败步），这里用同样的兜底。
     """
     ensure_schema(store)
+    ORDER = "ORDER BY version DESC, created_at DESC, rowid DESC LIMIT 1"
     if mode == "D":
         sql = ("SELECT * FROM skills WHERE status=? AND task_type=? AND fault_type=? "
-               "ORDER BY version DESC LIMIT 1")
+               + ORDER)
         args = (ACTIVE, agent_type, fault_type)
     elif mode == "C":
-        sql = ("SELECT * FROM skills WHERE status IN (?,?) AND task_type=? "
-               "ORDER BY version DESC LIMIT 1")
+        sql = ("SELECT * FROM skills WHERE status IN (?,?) AND task_type=? " + ORDER)
         args = (CANDIDATE, ACTIVE, agent_type)
     else:
         return None

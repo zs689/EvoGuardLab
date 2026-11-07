@@ -12,10 +12,19 @@
   Ollama     http://127.0.0.1:11434/v1
 
 环境变量：
-  AGENTLAB_LLM=mock | local
-  AGENTLAB_LLM_BASE=http://127.0.0.1:1234/v1
-  AGENTLAB_LLM_MODEL=qwen2.5-4b-instruct
+  AGENTLAB_LLM=mock | local | ollama | ollama_raw
+  AGENTLAB_LLM_BASE=http://127.0.0.1:1234/v1   （local 用 /v1，ollama 用同主机 /api）
+  AGENTLAB_LLM_MODEL=qwen3:4b
   AGENTLAB_LLM_TIMEOUT=60
+
+后端选择（实测结论，2026-11-07，Ollama 0.40.15 + qwen3:4b）：
+  local      OpenAI 兼容 /v1/chat/completions。Qwen3 默认思考，单次 ~14s，
+             reasoning 长度不稳定，max_tokens 给少时 content 会空 -> E_LLM_THINKING。
+  ollama     原生 /api/chat + think:false + format=json。单次 ~0.6s，三类题型
+             100% 严格 JSON。grammar 约束会从模型侧消除「自然产生的格式违规」，
+             所以用它跑评测时必须如实声明这一取舍（见 real_model 报告）。
+  ollama_raw 原生 /api/chat + think:false，**不加** format=json。
+             用来做「无 grammar 约束」对照，测模型自然格式违规率。
 """
 import json
 import os
@@ -207,6 +216,100 @@ class LocalProvider(Provider):
         raise last
 
 
+class OllamaNativeProvider(Provider):
+    """Ollama 原生 /api/chat：能真正关掉 Qwen3 的思考模式。
+
+    为什么不能用 OpenAI 兼容层：实测 `think:false` 在 /v1 上被忽略，
+    单次 14~22s 且 reasoning 长度波动；原生 /api/chat 的 think:false 生效。
+    单靠 think:false 还不够 —— 模型会把思考过程写进 content，
+    必须叠加 format=json 的 grammar 约束，它才只能输出 JSON（实测 0.5s）。
+
+    json_mode=False 时故意不加 grammar，用来测「模型自然格式违规率」。
+    """
+
+    def __init__(self, base=None, model=None, timeout=None,
+                 json_mode=True, num_predict=800):
+        self.base = (base or os.environ.get("AGENTLAB_LLM_BASE")
+                     or "http://127.0.0.1:11434/v1").rstrip("/")
+        # /v1 只是配置习惯，原生接口在根路径 /api/* 上
+        if self.base.endswith("/v1"):
+            self.base = self.base[:-3]
+        self.model = model or os.environ.get("AGENTLAB_LLM_MODEL") or None
+        self.timeout = int(timeout or os.environ.get("AGENTLAB_LLM_TIMEOUT") or 60)
+        self.json_mode = json_mode
+        self.num_predict = num_predict
+        self.name = "ollama" if json_mode else "ollama_raw"
+        self._resolved = None
+
+    def _post(self, path, payload):
+        req = urllib.request.Request(
+            self.base + path,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", "ignore")[:300]
+            except Exception:
+                pass
+            if e.code in (400, 404):
+                raise LLMError("E_LLM_MODEL", "模型名可能不对（%s）：%s" % (e.code, body))
+            if e.code in (502, 503, 504):
+                raise LLMError("E_LLM_DOWN", "模型服务没起来（%s）" % e.code)
+            raise LLMError("E_LLM_HTTP", "HTTP %s：%s" % (e.code, body))
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            if isinstance(e, TimeoutError):
+                raise LLMError("E_LLM_TIMEOUT", "等待 %s 秒无响应" % self.timeout)
+            raise LLMError("E_LLM_UNREACHABLE",
+                           "连不上 %s（%s）" % (self.base, getattr(e, "reason", e)))
+
+    def _get(self, path):
+        req = urllib.request.Request(self.base + path, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            raise LLMError("E_LLM_UNREACHABLE", "连不上 %s（%s）" % (self.base, e))
+
+    def list_models(self):
+        data = self._get("/api/tags")
+        return [m.get("name") for m in data.get("models", [])]
+
+    def resolve_model(self):
+        if self.model:
+            return self.model
+        if self._resolved:
+            return self._resolved
+        ids = self.list_models()
+        if not ids:
+            raise LLMError("E_LLM_MODEL", "服务是通的，但没有已加载的模型")
+        self._resolved = ids[0]
+        return self._resolved
+
+    def complete(self, messages, temperature=0.0, max_tokens=256):
+        model = self.resolve_model()
+        payload = {
+            "model": model, "messages": messages, "stream": False,
+            "think": False,
+            # num_predict 是**上限**不是目标：grammar 约束下模型写完 JSON 就 EOS，
+            # 实测 ~43 字符 / 0.5s。这里刻意不跟随调用方的 max_tokens=1500，
+            # 否则配置被悄悄放大，评测记录的参数就和实际不一致了。
+            "options": {"temperature": temperature,
+                        "num_predict": self.num_predict},
+        }
+        if self.json_mode:
+            payload["format"] = "json"
+        data = self._post("/api/chat", payload)
+        msg = data.get("message") or {}
+        text = strip_think(msg.get("content") or "")
+        tokens = int(data.get("eval_count") or 0) + int(data.get("prompt_eval_count") or 0)
+        return text, tokens or max(1, len(text) // 2), model
+
+
 _CACHE = {}
 
 
@@ -215,7 +318,14 @@ def get_provider(force=None):
     mode = force or os.environ.get("AGENTLAB_LLM") or "mock"
     if mode in _CACHE:
         return _CACHE[mode]
-    p = MockProvider() if mode == "mock" else LocalProvider()
+    if mode == "mock":
+        p = MockProvider()
+    elif mode == "ollama":
+        p = OllamaNativeProvider(json_mode=True)
+    elif mode == "ollama_raw":
+        p = OllamaNativeProvider(json_mode=False)
+    else:
+        p = LocalProvider()
     _CACHE[mode] = p
     return p
 

@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（21 个）
+# 2) 回归测试（23 个）
 python -m unittest tests.test_core -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -23,6 +23,10 @@ python ai-service/api/app.py           # http://127.0.0.1:8770
 
 # 4) 可选：检查本地模型是否就绪
 python scripts/check_model.py --base http://127.0.0.1:11434/v1
+
+# 5) 真实模型全量评测（936 run，约 13 分钟，可断点续跑）
+python ai-service/real_model_bench.py
+python ai-service/real_model_attribution.py   # 归因：C/D 命中了哪条技能
 ```
 
 不需要 pip 安装任何东西，Python 3.9+ 标准库即可跑（接本地模型才需要 Ollama）。
@@ -51,6 +55,29 @@ Web 看板是**原生 HTML/CSS/JS 单文件**，不引 CDN、不需要 Node 构�
 
 闭环产出：78 个训练用例 → 77 条经验 → 77 个候选技能 → 独立验证后晋升 7 个，
 其中 **10 条经验是组合策略链**（不是单策略换个名字）。
+
+### 真实模型实测（Qwen3 4B / Ollama，2026-11-07 已跑完）
+
+936 个 run（204 单故障 + 30 复合故障，各 × A/B/C/D），780.9 秒，972 次模型调用。
+
+| 测试集 | A 无恢复 | B 固定规则 | C 用经验不严格验证 | D 完整闭环 |
+|---|---|---|---|---|
+| 单故障 204 例 | 0.0% | 26.5% | 100.0% | 100.0% |
+| 复合故障 30 例 | 0.0% | 0.0% | 100.0% | 100.0% |
+
+三条读法（完整解读见 `experiments/real_model/analysis.md`）：
+
+- **策略链的收益在真实模型下复现**：复合故障上，单步策略 0%（B=0%，第一轮命中单步技能的 C 也是 0%），
+  两步链 100%。这是机制收益，不是 mock 特有。
+- **B 的 26.5% 与 mock 完全一致不是巧合**：B 不诊断不查表，204 个 run 里 102 个连模型都没调到，
+  剩下 102 个里 972 次调用**模型答错 0 次**。这条路径上模型没有发挥空间，所以它由故障机制决定。
+- **C = D = 100% 而 D 只有 42/204 个 run 真的用到技能**，其余 162 个是内置规则表兜底。
+  也就是说四组对照大部分时间在给规则表打分 —— 这是当前实验设计最真实的短板，不是优点。
+
+**这轮没证明的**：治理价值（C/D 打平）、模型能力（抽取式任务 + grammar 约束，972 次调用 0 错答）、
+自举（技能库是跨模型迁移来的）、稳定性（单次运行无多 seed）。
+另外，第一轮复合故障 C 只有 40%，查下去发现是 `skills.lookup()` 在并列版本上按数据库扫描顺序取行，
+取到了单步技能；定序修复后变 100%。两轮数据都留在 `experiments/real_model/archive_run1/`。
 
 ### 三个必须讲清楚的解释
 
@@ -99,14 +126,17 @@ EvoGuardLab/
 │   │   ├── skills.py        候选技能 / 独立验证 / 晋升 / 回滚 / 负迁移
 │   │   └── evaluate.py      A/B/C/D 四组对照 + 指标
 │   ├── evolution_bench.py   闭环入口（产出 report.md + metrics.json）
+│   ├── real_model_bench.py  真实模型全量评测（断点续跑 / grammar 对照 / 指纹）
+│   ├── real_model_attribution.py  归因：C/D 命中的是哪条技能
 │   └── api/app.py           REST API（标准库 http.server）
 ├── frontend/index.html      BoardUI 风格看板（双主题，零依赖）
-├── tests/test_core.py       21 个测试（含对抗性投毒 / 策略链 / 不变量）
+├── tests/test_core.py       23 个测试（含对抗性投毒 / 策略链 / 不变量 / 技能定序）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
 │   └── taxonomy.md          15 类故障与 MAST/TRAIL 分类法映射
 ├── experiments/             evolution_report.md + metrics.json（自动生成）
+│   └── real_model/          runs.jsonl / metrics.json / report.md / analysis.md
 └── data/                    SQLite（运行时生成，不入库）
 ```
 
@@ -170,30 +200,61 @@ python ai-service/evolution_bench.py
 
 **为什么要先跑探针**：Qwen3 4B 在 Ollama 下默认开启思考模式，`content` 可能为空、
 `reasoning` 占满 token（`E_LLM_THINKING`）。探针把 `max_tokens` 提到 1500，
-在你白跑一轮之前把这件事查出来。**真实模型全量四组评测尚未完成**（204 例 × 4 模式，
-单次调用 12–20 秒，全量约 45 分钟以上）。
+在你白跑一轮之前把这件事查出来。
+
+**跑全量评测走这条**（OpenAI 兼容层关不掉思考，单次 14–22 秒，全量要 5 小时以上；
+原生 `/api/chat` + `think:false` + `format=json` 压到 0.6 秒）：
+
+```bash
+# 1. 启动服务（模型目录在 F 盘，别放 C 盘）
+cd /f/ollama && OLLAMA_MODELS='F:\Qwen3' ./ollama.exe serve &
+# 2. 全量 936 run，断点续跑，约 13 分钟
+python ai-service/real_model_bench.py            # 加了 --fresh 就从零重跑
+# 3. 归因：C/D 到底命中了哪条技能（解释数字用，不跑模型）
+python ai-service/real_model_attribution.py
+```
+
+产物：`experiments/real_model/{runs.jsonl, metrics.json, report.md, attribution.md}`，
+手写解读在 `experiments/real_model/analysis.md`。评测用独立库 `data/real_model.db`，
+不覆盖 mock 结果。
+
+**注意 grammar 约束的代价**：`format=json` 会从模型侧消除自然格式违规，
+所以主实验里的 `format_violation` 只能靠注入产生。脚本内置 `ollama_raw` 无约束对照
+（实测 0/6 严格 JSON、平均 10.4 秒、模型输出中文推理散文），用来测模型真实格式违规率。
 
 ---
 
 ## 已知限制（别当成能力）
 
-1. **模型默认是 mock**：本报告衡量的是**机制自洽性**，不是模型能力。切真实模型后 B/C/D 都会掉。
-2. **故障是构造出来的**，不是真实事故里自然共现的错误；复合故障证明的是「机制上限」，
+1. **四组对照区分不出治理价值**：C = D = 100%，因为规则表已覆盖全部单故障，
+   且 D 的 204 个单故障 run 里只有 42 个真的用到技能。治理价值目前只由
+   `tests/test_core.py::TestAdversarialGovernance`（投毒后 C 失败、D 成功）证明，
+   不由对照实验证明。
+2. **模型层没被测到**：任务是抽取式的，grammar 约束清掉格式错误，真实模型 972 次调用 0 次错答。
+   要测模型的推理可靠性，得把任务难度提上去。
+3. **故障是构造出来的**，不是真实事故里自然共现的错误；复合故障证明的是「机制上限」，
    不是「真实分布下的收益」。
-3. **策略空间仍是固定词表**（6 种策略的组合），不是开放式规划；技能是声明式映射，不生成代码。
-4. **真实工具链未接入**：仍是内存模拟工具，没有真文件读写 / HTTP 超时 / DB 错误 / 限流。
-5. **流程不变量有盲区**：纯执行型流程（步骤里没有启动/收尾动作词）检测不到顺序颠倒。
-6. **RAG 仍是 SQL 过滤**，没有 embedding / 向量检索 / rerank。
-7. **负迁移率 0% 证据仍弱**：技能只有 7 个，只能说「本实验未观察到」，
-   不能说「不会发生负迁移」。
-8. FastAPI / PostgreSQL / Vue / Java / Docker / OpenTelemetry 一律未做。
+4. **策略空间仍是固定词表**（6 种策略的组合），不是开放式规划；技能是声明式映射，不生成代码。
+5. **真实工具链未接入**：仍是内存模拟工具，没有真文件读写 / HTTP 超时 / DB 错误 / 限流。
+6. **流程不变量有盲区**：纯执行型流程（步骤里没有启动/收尾动作词）检测不到顺序颠倒。
+7. **RAG 仍是 SQL 过滤**，没有 embedding / 向量检索 / rerank。
+8. **负迁移率 0% 证据仍弱**：技能只有 7 个，且 5 条是同一个链（策略同质化），
+   只能说「本实验未观察到」，不能说「不会发生负迁移」。
+9. **单次运行无多 seed**，模型随机性未量化。
+10. FastAPI / PostgreSQL / Vue / Java / Docker / OpenTelemetry 一律未做。
 
 ---
 
 ## 下一步（按对「落地」的贡献排序）
 
+- [ ] **让 C 走自己的放宽验证流程重训技能库**：现在 C 与 D 共用 mock 迁移来的库，
+      C 的「不严格验证」根本没被激活 —— 这是 C/D 打平的根因
+- [ ] **让技能覆盖全部用例**：现在每个 (agent, 故障) 只有 1 条技能、只覆盖 6 个测试用例，
+      剩下全靠规则表；技能覆盖不上去，对比永远是规则表的成绩
 - [ ] 接**真实工具**：真文件读写 + 真 HTTP 超时/错误，验证故障在真实链路上还能不能被抓到
-- [ ] 真实模型全量四组评测（含模型版本 / Prompt 版本 / 数据版本记录）
+- [x] 真实模型全量四组评测（含模型版本 / Prompt 版本 / 代码指纹记录）
+- [ ] 提任务难度：多步计算 / 跨文档推理，让模型真的会答错
 - [ ] 负迁移压力测试：批量投毒，测晋升门槛在不同投毒比例下的召回/误报
 - [ ] 策略组合规划：从固定词表组合，升级为按轨迹状态动态生成组合
 - [ ] 跨 Agent 迁移实验（H3：迁移距离越远收益越低，可能被证伪）
+

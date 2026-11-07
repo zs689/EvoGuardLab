@@ -274,6 +274,8 @@ select:focus, input.fld:focus { border-color: var(--primary); }
       <div class="nav-label">进化资产</div>
       <div class="nav-item" data-view="skills"><span class="nav-icon">◇</span>技能库<span class="nav-badge" id="badge-skills">–</span></div>
       <div class="nav-item" data-view="experiences"><span class="nav-icon">≋</span>经验库<span class="nav-badge" id="badge-exp">–</span></div>
+      <div class="nav-label">真实模型</div>
+      <div class="nav-item" data-view="realmodel"><span class="nav-icon">◉</span>全量评测<span class="nav-badge" id="badge-real">–</span></div>
       <div class="nav-label">运行时</div>
       <div class="nav-item" data-view="runner"><span class="nav-icon">▶</span>单次运行</div>
       <div class="nav-item" data-view="runs"><span class="nav-icon">≡</span>历史轨迹</div>
@@ -391,6 +393,44 @@ select:focus, input.fld:focus { border-color: var(--primary); }
           <div class="table-wrap" style="max-height:620px"><table><thead><tr>
             <th>Task</th><th>根因</th><th>恢复动作</th><th>结果</th><th>置信度</th><th>准入</th>
           </tr></thead><tbody id="exp-body"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- 真实模型全量评测 -->
+      <section class="view" id="view-realmodel">
+        <div id="real-status"></div>
+        <div class="grid g4" id="real-kpis" style="margin-top:14px"></div>
+        <div class="grid g2" style="margin-top:14px">
+          <div class="card">
+            <div class="card-head"><div><div class="card-title">单故障：真实模型 vs mock</div>
+              <div class="card-desc" id="real-single-desc">–</div></div></div>
+            <div class="bars" id="real-single-bars"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div><div class="card-title">复合故障 & 无约束对照</div>
+              <div class="card-desc">grammar 约束会消除模型自然格式违规，必须看对照</div></div></div>
+            <div class="bars" id="real-comp-bars"></div>
+            <div class="note" id="real-control" style="margin-top:12px"></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <div class="card-head"><div><div class="card-title">D 模式仍然失败的用例</div>
+            <div class="card-desc">真实模型下的失败归因，不隐藏</div></div>
+            <span class="chip" id="real-fails-chip">–</span></div>
+          <div class="table-wrap" style="max-height:420px"><table><thead><tr>
+            <th>集合</th><th>Agent</th><th>任务</th><th>故障</th><th>诊断链</th><th>恢复链</th><th>答案</th>
+          </tr></thead><tbody id="real-fails"></tbody></table></div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <div class="card-head"><div><div class="card-title">实验配置与报告</div>
+            <div class="card-desc">模型、prompt 指纹、代码指纹，保证可复现</div></div></div>
+          <div id="real-meta" class="md" style="font-size:12px"></div>
+          <details style="margin-top:12px"><summary style="cursor:pointer;color:var(--primary-text);font-size:12px">展开完整报告</summary>
+            <div class="md" id="real-report" style="margin-top:12px"></div></details>
+          <details style="margin-top:12px"><summary style="cursor:pointer;color:var(--primary-text);font-size:12px">展开解读：这些数字怎么读（手写，不是自动生成）</summary>
+            <div class="md" id="real-analysis" style="margin-top:12px"></div></details>
+          <details style="margin-top:12px"><summary style="cursor:pointer;color:var(--primary-text);font-size:12px">展开归因：C / D 到底命中了哪条技能</summary>
+            <div class="md" id="real-attribution" style="margin-top:12px"></div></details>
         </div>
       </section>
 
@@ -762,14 +802,95 @@ async function loadDocs() {
 }
 
 /* ---------------- 交互 ---------------- */
+let REAL = null;
+async function loadReal() {
+  try {
+    REAL = await api('/api/real-model');
+    const n = REAL.checkpoint_runs || 0;
+    $('#badge-real').textContent = REAL.ready ? '完成' : (n ? n + ' runs' : '–');
+    if (!REAL.ready) {
+      const total = 936;
+      const p = Math.min(100, Math.round(100 * n / total));
+      $('#real-status').innerHTML = '<div class="note warn"><b>' +
+        (REAL.running ? '评测进行中' : '评测尚未开始') + '</b><br>' +
+        '检查点已写入 <b>' + n + '</b> / ' + total + ' 个 run（' + p + '%）。' +
+        '完成后自动显示完整对比；现在不显示任何估算成功率。<br>' +
+        '<div class="kpi-bar" style="margin-top:8px"><i style="width:' + p + '%"></i></div>' +
+        '<span class="mono">python ai-service/real_model_bench.py --suite all</span></div>';
+      ['#real-kpis','#real-single-bars','#real-comp-bars','#real-fails','#real-meta','#real-report',
+       '#real-analysis','#real-attribution']
+        .forEach(s => { $(s).innerHTML = '<div class="empty">等待评测完成</div>'; });
+      $('#real-control').textContent = '–';
+      return;
+    }
+    const m = REAL.metrics, meta = m.meta || {}, sg = m.single || {}, cp = m.composite || {};
+    $('#real-status').innerHTML = '<div class="note"><b>真实模型全量评测已完成</b> · 模型 <b>' +
+      esc(meta.model || '–') + '</b> · 后端 <b>' + esc(meta.backend || '–') +
+      '</b> · 完成 <b>' + m.runs_completed + '</b> 个 run · 耗时 <b>' +
+      fmt(m.elapsed_s) + 's</b> · grammar 约束 <b>' +
+      (meta.json_grammar ? '开启' : '关闭') + '</b></div>';
+    const sr = sg.modes || {}, cr = cp.modes || {};
+    $('#real-single-desc').textContent = sg.cases + ' 个单故障用例 × 4 模式（真实模型）';
+    $('#real-kpis').innerHTML = ['A','B','C','D'].map(k => {
+      const r = sr[k] || {rate:0,ok:0,n:0}; const mk = (m.mock_baseline||{}).four_groups||{};
+      return '<div class="card"><div class="kpi-label">' + k + ' · 真实模型</div>' +
+        '<div class="kpi-value">' + fmt(r.rate) + '<span style="font-size:14px;color:var(--text-3)">%</span></div>' +
+        '<div class="kpi-foot">mock ' + fmt(mk[k]) + '% ｜ 差 ' +
+        '<span class="trend ' + (r.rate - (mk[k]||0) >= 0 ? 'up':'down') + '">' +
+        ((r.rate-(mk[k]||0))>=0?'+':'') + (r.rate-(mk[k]||0)).toFixed(1) + ' pp</span></div>' +
+        '<div class="kpi-bar"><i style="width:' + r.rate + '%;background:' + COLORS[k] + '"></i></div></div>';
+    }).join('');
+    bars($('#real-single-bars'), ['A','B','C','D'].flatMap(k => [
+      {label:'<b>'+k+'</b> 真实模型', value:(sr[k]||{}).rate||0, color:COLORS[k]},
+      {label:'<span style="color:var(--text-3)">'+k+' mock 基线</span>', value:((m.mock_baseline||{}).four_groups||{})[k]||0, color:'var(--border-strong)'},
+    ]));
+    const crs = ['A','B','C','D'].map(k => ({label:'<b>'+k+'</b> 复合故障', value:(cr[k]||{}).rate||0, color:COLORS[k]}));
+    const ctl = m.grammar_control;
+    if (ctl) crs.push({label:'<b>RAW</b> 无约束严格 JSON 率', value:ctl.strict_rate, color:'var(--warn)'});
+    bars($('#real-comp-bars'), crs);
+    $('#real-control').innerHTML = ctl ?
+      ('<b>无 grammar 对照</b>：' + ctl.strict_ok + '/' + ctl.n + ' 次输出严格 JSON（<b>' +
+       fmt(ctl.strict_rate) + '%</b>），平均 ' + fmt(ctl.avg_latency_ms) + ' ms。' +
+       '主实验用 grammar 约束后单次约 0.5s，但<b>从模型侧消除了自然格式违规</b>，' +
+       '所以 format_violation 只能靠注入产生，不能当作模型真实犯错率。') : '未跑无约束对照。';
+    const fails = [].concat((sg.D_failures||[]).map(x=>Object.assign({suite:'单故障'},x)),
+                            (cp.D_failures||[]).map(x=>Object.assign({suite:'复合'},x)));
+    $('#real-fails-chip').textContent = fails.length + ' 条失败';
+    $('#real-fails').innerHTML = fails.slice(0,40).map(f =>
+      '<tr><td>'+esc(f.suite)+'</td><td>'+esc(f.agent)+'</td><td class="mono">'+esc(f.task)+
+      '</td><td class="mono">'+esc(f.fault)+'</td><td>'+
+      esc((f.root_causes||[]).join(' → ')||'–')+'</td><td>'+
+      esc((f.chain||[]).join(' → ')||'–')+'</td><td class="mono">'+
+      esc(String(f.answer||'').slice(0,40))+'</td></tr>').join('') ||
+      '<tr><td colspan="7" class="empty">D 模式全部成功</td></tr>';
+    $('#real-meta').innerHTML = '<div class="table-wrap"><table><tbody>' +
+      [['模型',meta.model],['服务',meta.base],['Ollama',meta.ollama_version],
+       ['后端',meta.backend],['关闭思考',String(meta.think_disabled)],
+       ['JSON grammar',String(meta.json_grammar)],
+       ['Prompt 指纹',meta.system_prompt_sha256],['代码指纹',meta.code_sha256],
+       ['模型调用次数',(sg.model_calls||0)+(cp.model_calls||0)],
+       ['bad_model_output',(sg.bad_model_output||0)+(cp.bad_model_output||0)],
+       ['LLM 错误',JSON.stringify(Object.assign({},sg.llm_errors,cp.llm_errors))]]
+      .map(([k,v])=>'<tr><td style="width:170px;color:var(--text-3)">'+esc(k)+
+        '</td><td class="mono">'+esc(v)+'</td></tr>').join('') + '</tbody></table></div>';
+    $('#real-report').innerHTML = md2html(REAL.report || '');
+    $('#real-analysis').innerHTML = md2html(REAL.analysis || '（没有 analysis.md）');
+    $('#real-attribution').innerHTML = md2html(REAL.attribution || '（没有 attribution.md）');
+  } catch (e) {
+    $('#real-status').innerHTML = '<div class="err-banner">读取真实模型评测失败：'+esc(e.message)+'</div>';
+  }
+}
+
 const TITLES = {overview:'实验总览',composite:'策略链对照',skills:'技能库',
-  experiences:'经验库',runner:'单次运行',runs:'历史轨迹',taxonomy:'故障分类法',report:'实验报告'};
+  experiences:'经验库',runner:'单次运行',runs:'历史轨迹',taxonomy:'故障分类法',
+  report:'实验报告',realmodel:'真实模型评测'};
 function switchView(v) {
   $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
   $$('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === v));
   $('#crumb').textContent = TITLES[v] || v;
   $('#crumb-sub').textContent = v === 'runner' ? '真实 Runtime' : '';
   if (v === 'runs' && !RUNS.length) loadRuns();
+  if (v === 'realmodel') loadReal();
   if ((v === 'taxonomy' || v === 'report') && $('#md-report').textContent.indexOf('加载') >= 0) loadDocs();
 }
 $$('.nav-item').forEach(n => n.onclick = () => switchView(n.dataset.view));
@@ -786,7 +907,12 @@ $('#btn-theme').onclick = () => {
   localStorage.setItem('eg-theme', next);
 };
 if (localStorage.getItem('eg-theme') === 'dark') document.documentElement.setAttribute('data-theme','dark');
-$('#btn-refresh').onclick = async () => { $('#btn-refresh').disabled = true; await loadAll(); await loadRuns(); $('#btn-refresh').disabled = false; };
+$('#btn-refresh').onclick = async () => {
+  $('#btn-refresh').disabled = true;
+  await loadAll(); await loadRuns();
+  if ($('#view-realmodel').classList.contains('active')) await loadReal();
+  $('#btn-refresh').disabled = false;
+};
 ['#f-status','#f-agent','#f-kw'].forEach(s => $(s).addEventListener('input', renderSkills));
 $('#r-agent').addEventListener('change', fillTasks);
 $('#btn-runs').onclick = loadRuns;

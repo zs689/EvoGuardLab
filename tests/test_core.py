@@ -168,6 +168,44 @@ class TestSkills(unittest.TestCase):
         self.assertEqual(st, skills.CANDIDATE, "回滚后应退回候选，不再参与 D 模式")
 
 
+class TestSkillLookupDeterminism(unittest.TestCase):
+    """C 模式的「取哪一条」必须由显式次序决定，不能靠数据库扫描顺序。
+
+    这条测试存在的理由很具体：技能库里的 version 通常都是 2（晋升一次），
+    所以 C 的 `task_type` 匹配一定命中多条并列行。只写 `ORDER BY version DESC`
+    时 SQLite 返回**最先扫到的那条**（= 最早插入的），
+    于是「C 的成功率」变成了技能库插入顺序的产物 —— 一次真实模型全量评测里，
+    复合故障 C 恰好因为这个原因停在 40%，差点被解读成「经验在真实模型下失效」。
+    """
+
+    def _mk(self, sid, fault, created_at):
+        return {"id": sid, "name": sid, "task_type": "order", "fault_type": fault,
+                "strategy": "cross_verify", "required_tools": [],
+                "safety": {"max_retry": 2}, "status": skills.ACTIVE,
+                "version": 2, "created_at": created_at}
+
+    def test_C_picks_latest_not_first_inserted(self):
+        s = fresh()
+        skills.ensure_schema(s)
+        # 故意先插最旧，再插最新：旧实现会返回 sk_old
+        skills.save(s, self._mk("sk_old", "stale_data", 100.0))
+        skills.save(s, self._mk("sk_mid", "missing_field", 200.0))
+        skills.save(s, self._mk("sk_new", "wrong_tool", 300.0))
+        hit = skills.lookup(s, "order", "anything", "C")
+        self.assertEqual(hit["id"], "sk_new",
+                         "并列版本时必须取最近创建的，不能取最早插入的")
+
+    def test_D_requires_fault_match(self):
+        s = fresh()
+        skills.ensure_schema(s)
+        skills.save(s, self._mk("sk_old", "stale_data", 100.0))
+        skills.save(s, self._mk("sk_new", "wrong_tool", 300.0))
+        self.assertEqual(skills.lookup(s, "order", "stale_data", "D")["id"], "sk_old",
+                         "D 必须按故障类型精确命中，不能被「最新」抢走")
+        self.assertIsNone(skills.lookup(s, "order", "tool_timeout", "D"),
+                          "没有对应故障的技能时 D 不能拿别的故障技能顶替")
+
+
 class TestFourGroups(unittest.TestCase):
     """四组对照必须呈现 A < B < D 的层级，且 D 不伤害原本能成功的任务。"""
 
