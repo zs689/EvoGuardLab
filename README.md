@@ -1,7 +1,7 @@
-# EvoGuard Lab
+# EvoGuard
 
-**自进化 Agent 可靠性与自主恢复实验平台**
-Self-Evolving Agent Reliability & Autonomous Recovery Laboratory
+**自进化 Agent 可靠性与自主恢复系统**
+Self-Evolving Agent Reliability & Autonomous Recovery
 
 > 一句话：不只让 Agent 从错误里「学到经验」，还要用**独立测试**证明这条经验真的有用、且没有把原本能做的事弄坏。
 

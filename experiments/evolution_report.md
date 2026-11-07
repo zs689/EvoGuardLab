@@ -1,4 +1,4 @@
-# EvoGuard Lab · 进化闭环实验报告
+# EvoGuard · 进化闭环实验报告
 
 > 由 `ai-service/evolution_bench.py` 自动生成，数字全部来自本次运行。
 

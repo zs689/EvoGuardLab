@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""EvoGuard Lab · AI 服务核心包。
+"""EvoGuard · AI 服务核心包。
 
 模块（每个都对应规格里的一层，没有空壳）：
   core        数据表 / 状态机 / 错误码

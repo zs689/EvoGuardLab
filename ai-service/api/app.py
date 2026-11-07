@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""EvoGuard Lab REST API（标准库 http.server，零依赖）。
+"""EvoGuard REST API（标准库 http.server，零依赖）。
 
 启动（在 EvoGuardLab 目录下）：
     python ai-service/api/app.py            # http://127.0.0.1:8770
@@ -292,7 +292,7 @@ def main():
     if not os.path.isdir(FRONTEND):
         raise SystemExit("找不到前端目录：%s" % FRONTEND)
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print("EvoGuard Lab  ->  http://127.0.0.1:%d" % port, flush=True)
+    print("EvoGuard  ->  http://127.0.0.1:%d" % port, flush=True)
     print("数据：%s" % METRICS, flush=True)
     try:
         srv.serve_forever()

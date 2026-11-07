@@ -1,4 +1,4 @@
-# EvoGuard Lab · 阶段 0 研究报告
+# EvoGuard · 阶段 0 研究报告
 
 > 日期：2026-11-06　｜　作者：阿光（代张硕执行）
 > **本报告的证据边界**：我检查了 `E:\agent\github` 下 10 个仓库的**实际存在性、目录结构、许可证、
@@ -156,7 +156,7 @@ EvoGuard 应该拆成独立的 `fault proxy`。
 
 ---
 
-## 五、EvoGuard Lab 架构（在 EvoGuard 名义下，但复用 AgentLab 的已验证部分）
+## 五、EvoGuard 架构（复用 AgentLab 的已验证部分，不重写）
 
 ### 5.1 我的反驳：不要从零开始
 

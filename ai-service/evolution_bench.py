@@ -221,7 +221,7 @@ def main():
              % (comp_rates["single"], comp_rates["chain"], comp_rates["D"]))
 
     # ---------- 4. 报告 ----------
-    L = ["# EvoGuard Lab · 进化闭环实验报告", ""]
+    L = ["# EvoGuard · 进化闭环实验报告", ""]
     L.append("> 由 `ai-service/evolution_bench.py` 自动生成，数字全部来自本次运行。")
     L.append("")
     L.append("## 一、这次跑通的闭环")
