@@ -19,7 +19,8 @@ import experience as exp_mod  # noqa: E402
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS skills(
   id TEXT PRIMARY KEY, name TEXT, task_type TEXT, fault_type TEXT, strategy TEXT,
-  required_tools TEXT, safety TEXT, status TEXT, version INTEGER, created_at REAL);
+  required_tools TEXT, safety TEXT, status TEXT, version INTEGER, created_at REAL,
+  scope TEXT DEFAULT 'single');
 
 CREATE TABLE IF NOT EXISTS skill_versions(
   id TEXT PRIMARY KEY, skill_id TEXT, version INTEGER, snapshot TEXT, created_at REAL);
@@ -31,6 +32,14 @@ CREATE TABLE IF NOT EXISTS skill_evaluations(
 
 CANDIDATE, ACTIVE, REJECTED, NEEDS_REVIEW = "candidate", "active", "rejected", "needs_review"
 
+# 技能作用域：这条经验是「一个坏点」学来的，还是「两个坏点」学来的。
+# 为什么必须分开：技能只按 (agent, fault_type) 建索引，而复合故障的根因是
+# 它链路里的**第一个**故障 —— 于是复合学到的两步链会被挂到单故障的键上。
+# 实测后果很具体：kb/retrieval_failure 上被放进一条两步链后，
+# 单故障 retrieval_failure 的 6 个用例全挂了（本该用一步 fallback_tool）。
+# 这不是「负迁移难测」，是键里少了一个维度。
+SINGLE, MULTI = "single", "multi"
+
 # 晋升门槛（固定在这里，技能与模型都改不了）
 MIN_GAIN_PP = 15.0
 MAX_NEG_TRANSFER = 0.05
@@ -40,6 +49,11 @@ def ensure_schema(store):
     exp_mod.ensure_schema(store)      # evolution_events 在经验模块里，一起建
     with store.conn() as c:
         c.executescript(SCHEMA)
+        # 老库没有 scope 列，补上（幂等）。已有技能默认算 single ——
+        # 它们大多是单故障经验；复合链会在重新训练时带上正确的作用域。
+        cols = [r[1] for r in c.execute("PRAGMA table_info(skills)").fetchall()]
+        if "scope" not in cols:
+            c.execute("ALTER TABLE skills ADD COLUMN scope TEXT DEFAULT 'single'")
 
 
 def propose(exp):
@@ -51,6 +65,9 @@ def propose(exp):
     """
     chain = core.as_chain(exp["recovery_action"])
     stored = core.dumps(chain) if len(chain) > 1 else (chain[0] if chain else "")
+    # 作用域取自经验本身：一次运行里诊断出几个坏点，就决定了这条技能能在
+    # 「第几轮恢复」被命中。链长>1 但只有一个坏点时仍是 single。
+    scope = exp.get("fault_scope") or (MULTI if len(chain) > 1 else SINGLE)
     return {
         "id": "sk_" + uuid.uuid4().hex[:10],
         "name": "遇到 %s 时按序执行 %s" % (exp["failure_type"], " -> ".join(chain) or "-"),
@@ -58,6 +75,7 @@ def propose(exp):
         "fault_type": exp["failure_type"],
         "strategy": stored,
         "strategy_chain": chain,
+        "scope": scope,
         "required_tools": [],
         "safety": {"max_retry": 2, "require_approval_for_write": True,
                    "max_chain": 3},
@@ -75,11 +93,12 @@ def save(store, skill):
         strategy = core.dumps(list(strategy))
     with store.conn() as c:
         c.execute("INSERT INTO skills(id,name,task_type,fault_type,strategy,required_tools,"
-                  "safety,status,version,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                  "safety,status,version,created_at,scope) "
+                  "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                   (skill["id"], skill["name"], skill["task_type"], skill["fault_type"],
                    strategy, core.dumps(skill["required_tools"]),
                    core.dumps(skill["safety"]), skill["status"], skill["version"],
-                   skill["created_at"]))
+                   skill["created_at"], skill.get("scope") or SINGLE))
         c.execute("INSERT INTO skill_versions(id,skill_id,version,snapshot,created_at) "
                   "VALUES(?,?,?,?,?)",
                   ("skv_" + uuid.uuid4().hex[:8], skill["id"], skill["version"],
@@ -88,13 +107,18 @@ def save(store, skill):
     return skill
 
 
-def lookup(store, agent_type, fault_type, mode):
+def lookup(store, agent_type, fault_type, mode, scope=SINGLE):
     """恢复期查技能。这是 A/B/C/D 四组差异的关键开关。
 
     D：只认 active 技能，且必须 **agent + 故障类型都匹配**（严格）
     C：认 candidate + active，且 **只按 agent 匹配**（不严格 → 经验被过度泛化 → 负迁移）
 
-    排序必须给足次序（version → created_at → rowid）：
+    scope 是「现在是第几轮恢复」：
+      第 1 轮（single）优先单故障技能，第 2 轮起（multi）优先多故障技能。
+      只按 prefer 排序、不硬过滤 —— 多故障场景下一条单步策略仍可能是正确的第二步。
+      硬过滤会让「单故障经验在复合场景下彻底失效」，那是另一个方向的错误。
+
+    排序必须给足次序（prefer → version → created_at → rowid）：
     C 只看 agent，同一 agent 下必然有多条技能并列（技能库里的 version 通常都是 2）。
     只写 `ORDER BY version DESC` 时，SQLite 对并列行的取舍取决于扫描顺序，
     实测就是「永远取到最早插入的那条」—— 这会让「C 的成功率」变成
@@ -102,14 +126,14 @@ def lookup(store, agent_type, fault_type, mode):
     get_recovery 里踩过（毫秒并列取到链中间的失败步），这里用同样的兜底。
     """
     ensure_schema(store)
-    ORDER = "ORDER BY version DESC, created_at DESC, rowid DESC LIMIT 1"
+    ORDER = ("ORDER BY (scope=?) DESC, version DESC, created_at DESC, rowid DESC LIMIT 1")
     if mode == "D":
         sql = ("SELECT * FROM skills WHERE status=? AND task_type=? AND fault_type=? "
                + ORDER)
-        args = (ACTIVE, agent_type, fault_type)
+        args = (ACTIVE, agent_type, fault_type, scope)
     elif mode == "C":
         sql = ("SELECT * FROM skills WHERE status IN (?,?) AND task_type=? " + ORDER)
-        args = (CANDIDATE, ACTIVE, agent_type)
+        args = (CANDIDATE, ACTIVE, agent_type, scope)
     else:
         return None
     with store.conn() as c:

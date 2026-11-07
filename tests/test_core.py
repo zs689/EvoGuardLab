@@ -205,6 +205,29 @@ class TestSkillLookupDeterminism(unittest.TestCase):
         self.assertIsNone(skills.lookup(s, "order", "tool_timeout", "D"),
                           "没有对应故障的技能时 D 不能拿别的故障技能顶替")
 
+    def test_scope_separates_multi_from_single(self):
+        """复合学到的链不能占住单故障的键位。
+
+        真实故障：kb/retrieval_failure 上放了一条两步链之后，
+        单故障 retrieval_failure 的 6 个用例全挂了（本该用一步 fallback_tool）。
+        所以第一轮恢复必须优先单故障技能，第二轮起才优先多故障技能。
+        """
+        s = fresh()
+        skills.ensure_schema(s)
+        single = self._mk("sk_single", "retrieval_failure", 100.0)
+        single.update(scope="single", strategy="fallback_tool")
+        multi = self._mk("sk_multi", "retrieval_failure", 200.0)   # 故意更新
+        multi.update(scope="multi", strategy=["fallback_tool", "cross_verify"])
+        skills.save(s, single)
+        skills.save(s, multi)
+
+        first = skills.lookup(s, "order", "retrieval_failure", "D", scope="single")
+        self.assertEqual(first["id"], "sk_single",
+                         "第一轮必须用单故障技能，哪怕多故障技能更新")
+        second = skills.lookup(s, "order", "retrieval_failure", "D", scope="multi")
+        self.assertEqual(second["id"], "sk_multi",
+                         "第二轮起才该用复合学到的链")
+
 
 class TestFourGroups(unittest.TestCase):
     """四组对照必须呈现 A < B < D 的层级，且 D 不伤害原本能成功的任务。"""

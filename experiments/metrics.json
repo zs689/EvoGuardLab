@@ -1,5 +1,5 @@
 {
-  "generated_at": 1794038932.301,
+  "generated_at": 1794047258.803,
   "dataset": {
     "tasks": {
       "order": 8,
@@ -939,7 +939,7 @@
   ],
   "skills": [
     {
-      "id": "sk_197089d986",
+      "id": "sk_d89518918d",
       "name": "遇到 premature_termination 时按序执行 fallback_tool -> cross_verify",
       "task_type": "planner",
       "fault_type": "premature_termination",
@@ -951,7 +951,7 @@
       "version": 1
     },
     {
-      "id": "sk_48984aa8ce",
+      "id": "sk_ad2c69895c",
       "name": "遇到 premature_termination 时按序执行 fallback_tool -> cross_verify",
       "task_type": "planner",
       "fault_type": "premature_termination",
@@ -963,7 +963,7 @@
       "version": 2
     },
     {
-      "id": "sk_63dd1fff0d",
+      "id": "sk_63d2a3d111",
       "name": "遇到 context_loss 时按序执行 fallback_tool -> cross_verify",
       "task_type": "kb",
       "fault_type": "context_loss",
@@ -975,7 +975,7 @@
       "version": 1
     },
     {
-      "id": "sk_37b2ecabd0",
+      "id": "sk_76318e0967",
       "name": "遇到 context_loss 时按序执行 fallback_tool -> cross_verify",
       "task_type": "kb",
       "fault_type": "context_loss",
@@ -987,7 +987,7 @@
       "version": 2
     },
     {
-      "id": "sk_5bf8710a3b",
+      "id": "sk_752bf1d7ee",
       "name": "遇到 retrieval_failure 时按序执行 fallback_tool -> cross_verify",
       "task_type": "kb",
       "fault_type": "retrieval_failure",
@@ -999,7 +999,7 @@
       "version": 1
     },
     {
-      "id": "sk_085cda83bc",
+      "id": "sk_0151f47125",
       "name": "遇到 retrieval_failure 时按序执行 fallback_tool -> cross_verify",
       "task_type": "kb",
       "fault_type": "retrieval_failure",
@@ -1011,7 +1011,7 @@
       "version": 2
     },
     {
-      "id": "sk_3fe311f0cd",
+      "id": "sk_81b528c3cd",
       "name": "遇到 wrong_tool 时按序执行 fallback_tool -> cross_verify",
       "task_type": "order",
       "fault_type": "wrong_tool",
@@ -1023,7 +1023,7 @@
       "version": 1
     },
     {
-      "id": "sk_ebcf162f7e",
+      "id": "sk_840f42a59d",
       "name": "遇到 wrong_tool 时按序执行 fallback_tool -> cross_verify",
       "task_type": "order",
       "fault_type": "wrong_tool",
@@ -1035,7 +1035,7 @@
       "version": 2
     },
     {
-      "id": "sk_daa6433b4e",
+      "id": "sk_3b8eac1c99",
       "name": "遇到 missing_field 时按序执行 fallback_tool -> cross_verify",
       "task_type": "order",
       "fault_type": "missing_field",
@@ -1047,7 +1047,7 @@
       "version": 1
     },
     {
-      "id": "sk_f685024466",
+      "id": "sk_f1dc716f87",
       "name": "遇到 missing_field 时按序执行 fallback_tool -> cross_verify",
       "task_type": "order",
       "fault_type": "missing_field",
@@ -1059,7 +1059,7 @@
       "version": 2
     },
     {
-      "id": "sk_65dc5bc754",
+      "id": "sk_9865e18c86",
       "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
       "task_type": "planner",
       "fault_type": "premature_termination",
@@ -1070,7 +1070,7 @@
       "version": 1
     },
     {
-      "id": "sk_cccb56639e",
+      "id": "sk_2eaddd95e6",
       "name": "遇到 tool_hallucination 时按序执行 cross_verify",
       "task_type": "planner",
       "fault_type": "tool_hallucination",
@@ -1081,7 +1081,7 @@
       "version": 1
     },
     {
-      "id": "sk_7bb98cec09",
+      "id": "sk_a548a6e3d5",
       "name": "遇到 format_violation 时按序执行 reformat",
       "task_type": "planner",
       "fault_type": "format_violation",
@@ -1092,7 +1092,7 @@
       "version": 1
     },
     {
-      "id": "sk_a28688d566",
+      "id": "sk_0ce8683866",
       "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
       "task_type": "planner",
       "fault_type": "process_interruption",
@@ -1103,7 +1103,7 @@
       "version": 1
     },
     {
-      "id": "sk_c8d044b466",
+      "id": "sk_add785a612",
       "name": "遇到 context_loss 时按序执行 replay_checkpoint",
       "task_type": "planner",
       "fault_type": "context_loss",
@@ -1114,7 +1114,7 @@
       "version": 1
     },
     {
-      "id": "sk_666381092c",
+      "id": "sk_f944b99d7f",
       "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
       "task_type": "planner",
       "fault_type": "retrieval_failure",
@@ -1125,7 +1125,7 @@
       "version": 1
     },
     {
-      "id": "sk_9c180abdf5",
+      "id": "sk_b74c179161",
       "name": "遇到 missing_field 时按序执行 fallback_tool",
       "task_type": "planner",
       "fault_type": "missing_field",
@@ -1136,7 +1136,7 @@
       "version": 1
     },
     {
-      "id": "sk_5e800addcf",
+      "id": "sk_0e199b55ca",
       "name": "遇到 invalid_json 时按序执行 fallback_tool",
       "task_type": "planner",
       "fault_type": "invalid_json",
@@ -1147,7 +1147,7 @@
       "version": 1
     },
     {
-      "id": "sk_37f58aa10b",
+      "id": "sk_4ffb8b1355",
       "name": "遇到 tool_exception 时按序执行 retry",
       "task_type": "planner",
       "fault_type": "tool_exception",
@@ -1158,7 +1158,7 @@
       "version": 1
     },
     {
-      "id": "sk_03e23e028c",
+      "id": "sk_14f547c340",
       "name": "遇到 tool_timeout 时按序执行 retry",
       "task_type": "planner",
       "fault_type": "tool_timeout",
@@ -1169,7 +1169,7 @@
       "version": 1
     },
     {
-      "id": "sk_af1aaba1c2",
+      "id": "sk_a3c0a0a35e",
       "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
       "task_type": "planner",
       "fault_type": "premature_termination",
@@ -1180,7 +1180,7 @@
       "version": 1
     },
     {
-      "id": "sk_9685bfe263",
+      "id": "sk_3a3d0319e5",
       "name": "遇到 tool_hallucination 时按序执行 cross_verify",
       "task_type": "planner",
       "fault_type": "tool_hallucination",
@@ -1191,7 +1191,7 @@
       "version": 1
     },
     {
-      "id": "sk_5e0ef8c4dd",
+      "id": "sk_ebb13c97ee",
       "name": "遇到 format_violation 时按序执行 reformat",
       "task_type": "planner",
       "fault_type": "format_violation",
@@ -1202,7 +1202,7 @@
       "version": 1
     },
     {
-      "id": "sk_026bb19fdc",
+      "id": "sk_2246d26e55",
       "name": "遇到 incorrect_planning 时按序执行 cross_verify",
       "task_type": "planner",
       "fault_type": "incorrect_planning",
@@ -1213,7 +1213,7 @@
       "version": 2
     },
     {
-      "id": "sk_3ab6386874",
+      "id": "sk_87a9d59d60",
       "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
       "task_type": "planner",
       "fault_type": "process_interruption",
@@ -1224,7 +1224,7 @@
       "version": 1
     },
     {
-      "id": "sk_9936b4e107",
+      "id": "sk_23c735aad3",
       "name": "遇到 context_loss 时按序执行 replay_checkpoint",
       "task_type": "planner",
       "fault_type": "context_loss",
@@ -1235,7 +1235,7 @@
       "version": 1
     },
     {
-      "id": "sk_ef1464989a",
+      "id": "sk_a6717e7fdd",
       "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
       "task_type": "planner",
       "fault_type": "retrieval_failure",
@@ -1246,7 +1246,7 @@
       "version": 1
     },
     {
-      "id": "sk_d8e33007cb",
+      "id": "sk_f9da0b83d7",
       "name": "遇到 missing_field 时按序执行 fallback_tool",
       "task_type": "planner",
       "fault_type": "missing_field",
@@ -1257,7 +1257,7 @@
       "version": 1
     },
     {
-      "id": "sk_1d2ffdc090",
+      "id": "sk_9e492c604d",
       "name": "遇到 invalid_json 时按序执行 fallback_tool",
       "task_type": "planner",
       "fault_type": "invalid_json",
@@ -1268,7 +1268,7 @@
       "version": 1
     },
     {
-      "id": "sk_918d76e33d",
+      "id": "sk_b8f8c9c1d0",
       "name": "遇到 tool_exception 时按序执行 retry",
       "task_type": "planner",
       "fault_type": "tool_exception",
@@ -1279,7 +1279,7 @@
       "version": 1
     },
     {
-      "id": "sk_b9bd6493b8",
+      "id": "sk_1c61a51a91",
       "name": "遇到 tool_timeout 时按序执行 retry",
       "task_type": "planner",
       "fault_type": "tool_timeout",
@@ -1290,7 +1290,7 @@
       "version": 1
     },
     {
-      "id": "sk_099b15ba3f",
+      "id": "sk_ccefb73f12",
       "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
       "task_type": "kb",
       "fault_type": "premature_termination",
@@ -1301,7 +1301,7 @@
       "version": 1
     },
     {
-      "id": "sk_3de41c7300",
+      "id": "sk_e059348e6e",
       "name": "遇到 tool_hallucination 时按序执行 cross_verify",
       "task_type": "kb",
       "fault_type": "tool_hallucination",
@@ -1312,7 +1312,7 @@
       "version": 1
     },
     {
-      "id": "sk_7ea228ef7b",
+      "id": "sk_942ec500b7",
       "name": "遇到 format_violation 时按序执行 reformat",
       "task_type": "kb",
       "fault_type": "format_violation",
@@ -1323,7 +1323,7 @@
       "version": 1
     },
     {
-      "id": "sk_2de88d8fc9",
+      "id": "sk_383e218c4e",
       "name": "遇到 stale_data 时按序执行 cross_verify",
       "task_type": "kb",
       "fault_type": "stale_data",
@@ -1334,7 +1334,7 @@
       "version": 1
     },
     {
-      "id": "sk_7a1272bcaa",
+      "id": "sk_2250cbe6a2",
       "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
       "task_type": "kb",
       "fault_type": "process_interruption",
@@ -1345,7 +1345,7 @@
       "version": 1
     },
     {
-      "id": "sk_b92cab3b6e",
+      "id": "sk_391d9ef1d9",
       "name": "遇到 context_loss 时按序执行 replay_checkpoint",
       "task_type": "kb",
       "fault_type": "context_loss",
@@ -1356,7 +1356,7 @@
       "version": 1
     },
     {
-      "id": "sk_93459e1870",
+      "id": "sk_ecc06f5719",
       "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
       "task_type": "kb",
       "fault_type": "retrieval_failure",
@@ -1367,7 +1367,7 @@
       "version": 1
     },
     {
-      "id": "sk_1e6e95c157",
+      "id": "sk_02fd5da072",
       "name": "遇到 missing_field 时按序执行 fallback_tool",
       "task_type": "kb",
       "fault_type": "missing_field",
@@ -1378,7 +1378,7 @@
       "version": 1
     },
     {
-      "id": "sk_2c95bcd0f7",
+      "id": "sk_6adb6caa65",
       "name": "遇到 invalid_json 时按序执行 fallback_tool",
       "task_type": "kb",
       "fault_type": "invalid_json",
@@ -1389,7 +1389,7 @@
       "version": 1
     },
     {
-      "id": "sk_5e33d41092",
+      "id": "sk_f305024593",
       "name": "遇到 tool_exception 时按序执行 retry",
       "task_type": "kb",
       "fault_type": "tool_exception",
@@ -1400,7 +1400,7 @@
       "version": 1
     },
     {
-      "id": "sk_d0393ad820",
+      "id": "sk_a0c50ac1fb",
       "name": "遇到 tool_timeout 时按序执行 retry",
       "task_type": "kb",
       "fault_type": "tool_timeout",
@@ -1411,7 +1411,7 @@
       "version": 1
     },
     {
-      "id": "sk_30a4edfe0a",
+      "id": "sk_ff91e9f7b0",
       "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
       "task_type": "kb",
       "fault_type": "premature_termination",
@@ -1422,7 +1422,7 @@
       "version": 1
     },
     {
-      "id": "sk_3f7a84c92f",
+      "id": "sk_eb86ad4dff",
       "name": "遇到 tool_hallucination 时按序执行 cross_verify",
       "task_type": "kb",
       "fault_type": "tool_hallucination",
@@ -1433,7 +1433,7 @@
       "version": 1
     },
     {
-      "id": "sk_6d36520ca2",
+      "id": "sk_9dbbd8675f",
       "name": "遇到 format_violation 时按序执行 reformat",
       "task_type": "kb",
       "fault_type": "format_violation",
@@ -1444,7 +1444,7 @@
       "version": 1
     },
     {
-      "id": "sk_c7ac9ad897",
+      "id": "sk_7291d4f312",
       "name": "遇到 stale_data 时按序执行 cross_verify",
       "task_type": "kb",
       "fault_type": "stale_data",
@@ -1455,7 +1455,7 @@
       "version": 2
     },
     {
-      "id": "sk_bb6cb45ccc",
+      "id": "sk_e05e04020a",
       "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
       "task_type": "kb",
       "fault_type": "process_interruption",
@@ -1466,7 +1466,7 @@
       "version": 1
     },
     {
-      "id": "sk_7efcf84a8f",
+      "id": "sk_56234099b5",
       "name": "遇到 context_loss 时按序执行 replay_checkpoint",
       "task_type": "kb",
       "fault_type": "context_loss",
@@ -1477,7 +1477,7 @@
       "version": 1
     },
     {
-      "id": "sk_67f4b3640c",
+      "id": "sk_d66d75f8f7",
       "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
       "task_type": "kb",
       "fault_type": "retrieval_failure",
@@ -1488,7 +1488,7 @@
       "version": 1
     },
     {
-      "id": "sk_e4e5de9ec2",
+      "id": "sk_8d95bb106f",
       "name": "遇到 missing_field 时按序执行 fallback_tool",
       "task_type": "kb",
       "fault_type": "missing_field",
@@ -1499,7 +1499,7 @@
       "version": 1
     },
     {
-      "id": "sk_f5383bf8a1",
+      "id": "sk_d88edd4749",
       "name": "遇到 invalid_json 时按序执行 fallback_tool",
       "task_type": "kb",
       "fault_type": "invalid_json",
@@ -1510,7 +1510,7 @@
       "version": 1
     },
     {
-      "id": "sk_2565509aab",
+      "id": "sk_4ed312d8fb",
       "name": "遇到 tool_exception 时按序执行 retry",
       "task_type": "kb",
       "fault_type": "tool_exception",
@@ -1521,7 +1521,7 @@
       "version": 1
     },
     {
-      "id": "sk_62037df2e3",
+      "id": "sk_cf2e0fb8f4",
       "name": "遇到 tool_timeout 时按序执行 retry",
       "task_type": "kb",
       "fault_type": "tool_timeout",
@@ -1532,7 +1532,7 @@
       "version": 1
     },
     {
-      "id": "sk_fcc60f8a3b",
+      "id": "sk_32f023f353",
       "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
       "task_type": "order",
       "fault_type": "premature_termination",
@@ -1543,7 +1543,7 @@
       "version": 1
     },
     {
-      "id": "sk_817bcf6ad0",
+      "id": "sk_61a7e44c62",
       "name": "遇到 tool_hallucination 时按序执行 cross_verify",
       "task_type": "order",
       "fault_type": "tool_hallucination",
@@ -1554,7 +1554,7 @@
       "version": 1
     },
     {
-      "id": "sk_531910e8a3",
+      "id": "sk_e2ab0e2b2a",
       "name": "遇到 wrong_tool 时按序执行 fallback_tool",
       "task_type": "order",
       "fault_type": "wrong_tool",
@@ -1565,7 +1565,7 @@
       "version": 1
     },
     {
-      "id": "sk_d9cfad6256",
+      "id": "sk_d463d109e0",
       "name": "遇到 format_violation 时按序执行 reformat",
       "task_type": "order",
       "fault_type": "format_violation",
@@ -1576,7 +1576,7 @@
       "version": 1
     },
     {
-      "id": "sk_a061f79401",
+      "id": "sk_6a424e7436",
       "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
       "task_type": "order",
       "fault_type": "process_interruption",
@@ -1587,7 +1587,7 @@
       "version": 1
     },
     {
-      "id": "sk_99591ff43e",
+      "id": "sk_666fa2001a",
       "name": "遇到 context_loss 时按序执行 replay_checkpoint",
       "task_type": "order",
       "fault_type": "context_loss",
@@ -1598,7 +1598,7 @@
       "version": 1
     },
     {
-      "id": "sk_d0197ab154",
+      "id": "sk_46c25008da",
       "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
       "task_type": "order",
       "fault_type": "retrieval_failure",
@@ -1609,7 +1609,7 @@
       "version": 1
     },
     {
-      "id": "sk_fa1d05f53b",
+      "id": "sk_f5f0405c00",
       "name": "遇到 silent_corruption 时按序执行 cross_verify",
       "task_type": "order",
       "fault_type": "silent_corruption",
@@ -1620,7 +1620,7 @@
       "version": 1
     },
     {
-      "id": "sk_6c78e1ffa6",
+      "id": "sk_4f9675e069",
       "name": "遇到 missing_field 时按序执行 fallback_tool",
       "task_type": "order",
       "fault_type": "missing_field",
@@ -1631,7 +1631,7 @@
       "version": 1
     },
     {
-      "id": "sk_3ba71f6b96",
+      "id": "sk_e41e7e8c6a",
       "name": "遇到 invalid_json 时按序执行 fallback_tool",
       "task_type": "order",
       "fault_type": "invalid_json",
@@ -1642,7 +1642,7 @@
       "version": 1
     },
     {
-      "id": "sk_903c832868",
+      "id": "sk_f194d22c2f",
       "name": "遇到 tool_exception 时按序执行 retry",
       "task_type": "order",
       "fault_type": "tool_exception",
@@ -1653,7 +1653,7 @@
       "version": 1
     },
     {
-      "id": "sk_bdb04e3616",
+      "id": "sk_aecc24191d",
       "name": "遇到 tool_timeout 时按序执行 retry",
       "task_type": "order",
       "fault_type": "tool_timeout",
@@ -1664,7 +1664,7 @@
       "version": 1
     },
     {
-      "id": "sk_fa3311788d",
+      "id": "sk_9cd980b43a",
       "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
       "task_type": "order",
       "fault_type": "premature_termination",
@@ -1675,7 +1675,7 @@
       "version": 1
     },
     {
-      "id": "sk_7b0d367c11",
+      "id": "sk_caf400a1d3",
       "name": "遇到 tool_hallucination 时按序执行 cross_verify",
       "task_type": "order",
       "fault_type": "tool_hallucination",
@@ -1686,7 +1686,7 @@
       "version": 1
     },
     {
-      "id": "sk_c7f7a2544d",
+      "id": "sk_d8f63ad859",
       "name": "遇到 wrong_tool 时按序执行 fallback_tool",
       "task_type": "order",
       "fault_type": "wrong_tool",
@@ -1697,7 +1697,7 @@
       "version": 1
     },
     {
-      "id": "sk_9c59e3dcdc",
+      "id": "sk_99b7276dd4",
       "name": "遇到 format_violation 时按序执行 reformat",
       "task_type": "order",
       "fault_type": "format_violation",
@@ -1708,7 +1708,7 @@
       "version": 1
     },
     {
-      "id": "sk_1535c47fab",
+      "id": "sk_0539e96cc0",
       "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
       "task_type": "order",
       "fault_type": "process_interruption",
@@ -1719,7 +1719,7 @@
       "version": 1
     },
     {
-      "id": "sk_139141e17f",
+      "id": "sk_c2bfa50dbc",
       "name": "遇到 context_loss 时按序执行 replay_checkpoint",
       "task_type": "order",
       "fault_type": "context_loss",
@@ -1730,7 +1730,7 @@
       "version": 1
     },
     {
-      "id": "sk_e3344dc7af",
+      "id": "sk_dd0ba36436",
       "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
       "task_type": "order",
       "fault_type": "retrieval_failure",
@@ -1741,7 +1741,7 @@
       "version": 1
     },
     {
-      "id": "sk_608f1ee9ce",
+      "id": "sk_1abb072b39",
       "name": "遇到 silent_corruption 时按序执行 cross_verify",
       "task_type": "order",
       "fault_type": "silent_corruption",
@@ -1752,7 +1752,7 @@
       "version": 1
     },
     {
-      "id": "sk_1fd1f4f64c",
+      "id": "sk_98ea35e32e",
       "name": "遇到 missing_field 时按序执行 fallback_tool",
       "task_type": "order",
       "fault_type": "missing_field",
@@ -1763,7 +1763,7 @@
       "version": 1
     },
     {
-      "id": "sk_170adb1d04",
+      "id": "sk_7cb1e9492d",
       "name": "遇到 invalid_json 时按序执行 fallback_tool",
       "task_type": "order",
       "fault_type": "invalid_json",
@@ -1774,7 +1774,7 @@
       "version": 1
     },
     {
-      "id": "sk_d189e85885",
+      "id": "sk_56cd4ad362",
       "name": "遇到 tool_exception 时按序执行 retry",
       "task_type": "order",
       "fault_type": "tool_exception",
@@ -1785,7 +1785,7 @@
       "version": 1
     },
     {
-      "id": "sk_ab06d221e3",
+      "id": "sk_ada9f442ee",
       "name": "遇到 tool_timeout 时按序执行 retry",
       "task_type": "order",
       "fault_type": "tool_timeout",

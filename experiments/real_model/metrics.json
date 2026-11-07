@@ -8,7 +8,7 @@
     "base": "http://127.0.0.1:11434",
     "system_prompt": "你是业务 Agent。只看用户给出的上下文回答，不要使用上下文以外的知识。只输出一个 JSON 对象，不要输出解释、不要复述要求、不要输出思考过程。",
     "system_prompt_sha256": "8da48e6cbf348d7b",
-    "code_sha256": "71ce4a89f4da44fd",
+    "code_sha256": "ecf75283f3e16de9",
     "ollama_version": "0.40.15",
     "dataset": {
       "tasks": {
@@ -48,10 +48,17 @@
       "C",
       "D"
     ],
-    "started_at": 1794044430.049
+    "started_at": 1794048176.636,
+    "skillset": {
+      "kind": "two_libs",
+      "d": 6,
+      "c": 38,
+      "d_path": "library_d.db",
+      "c_path": "library_c.db"
+    }
   },
-  "finished_at": 1794045214.727,
-  "elapsed_s": 780.9,
+  "finished_at": 1794048982.203,
+  "elapsed_s": 654.6,
   "runs_completed": 936,
   "single": {
     "suite": "single",
@@ -74,19 +81,19 @@
       },
       "D": {
         "n": 204,
-        "ok": 204,
-        "rate": 100.0
+        "ok": 198,
+        "rate": 97.1
       }
     },
     "errors": {},
     "llm_errors": {
-      "E_LLM_HTTP": 14
+      "E_LLM_HTTP": 16
     },
     "bad_model_output": 0,
-    "model_calls": 822,
-    "avg_latency_ms": 693.5,
-    "total_latency_s": 565.9,
-    "avg_tokens": 105.0,
+    "model_calls": 816,
+    "avg_latency_ms": 734.4,
+    "total_latency_s": 599.3,
+    "avg_tokens": 104.1,
     "by_fault": {
       "tool_timeout": {
         "n": 18,
@@ -142,10 +149,83 @@
       },
       "incorrect_planning": {
         "n": 6,
-        "ok": 6
+        "ok": 0
       }
     },
-    "D_failures": []
+    "D_failures": [
+      {
+        "agent": "planner",
+        "task": "release",
+        "fault": "incorrect_planning",
+        "root_causes": [
+          "incorrect_planning"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['灰度发布', '生成变更说明', '跑回归测试', '冻结代码']}"
+      },
+      {
+        "agent": "planner",
+        "task": "refund",
+        "fault": "incorrect_planning",
+        "root_causes": [
+          "incorrect_planning"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['财务退款', '生成退货单', '确认退货原因', '核对订单']}"
+      },
+      {
+        "agent": "planner",
+        "task": "procurement",
+        "fault": "incorrect_planning",
+        "root_causes": [
+          "incorrect_planning"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['下单验收', '提交审批', '三家比价', '汇总需求']}"
+      },
+      {
+        "agent": "planner",
+        "task": "incident",
+        "fault": "incorrect_planning",
+        "root_causes": [
+          "incorrect_planning"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['复盘归档', '定位根因', '止血', '确认故障范围']}"
+      },
+      {
+        "agent": "planner",
+        "task": "audit",
+        "fault": "incorrect_planning",
+        "root_causes": [
+          "incorrect_planning"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['整改跟踪', '出具报告', '抽样检查', '准备资料']}"
+      },
+      {
+        "agent": "planner",
+        "task": "training",
+        "fault": "incorrect_planning",
+        "root_causes": [
+          "incorrect_planning"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['归档成绩', '组织考核', '邀请讲师', '确定课表']}"
+      }
+    ]
   },
   "composite": {
     "suite": "composite",
@@ -163,8 +243,8 @@
       },
       "C": {
         "n": 30,
-        "ok": 30,
-        "rate": 100.0
+        "ok": 0,
+        "rate": 0.0
       },
       "D": {
         "n": 30,
@@ -174,13 +254,14 @@
     },
     "errors": {},
     "llm_errors": {
-      "E_LLM_HTTP": 6
+      "E_LLM_DOWN": 4,
+      "E_LLM_UNREACHABLE": 11
     },
     "bad_model_output": 0,
-    "model_calls": 150,
-    "avg_latency_ms": 1264.3,
-    "total_latency_s": 151.7,
-    "avg_tokens": 88.8,
+    "model_calls": 120,
+    "avg_latency_ms": 455.3,
+    "total_latency_s": 54.6,
+    "avg_tokens": 53.6,
     "by_fault": {
       "missing_field+silent_corruption": {
         "n": 6,
@@ -209,41 +290,41 @@
     "n": 6,
     "strict_ok": 0,
     "errors": {},
-    "latency_ms_total": 62411,
+    "latency_ms_total": 63027,
     "samples": [
       {
         "strict": false,
-        "latency_ms": 11490,
+        "latency_ms": 10538,
         "head": "好的，我现在需要处理用户的这个请求。首先，用户给了一个上下文：“订单 A1001，计价工具返回总额 504.0。”然后要求输出一个JSON对"
       },
       {
         "strict": false,
-        "latency_ms": 9223,
-        "head": "好的，我现在需要处理用户的这个查询。首先，用户给了一个上下文证据：“自签收之日起 7 个工作日内可无理由退货。”然后问题问的是“退货要几天内"
+        "latency_ms": 10568,
+        "head": "首先，用户要求我作为业务 Agent，只根据上下文证据来回答问题。上下文证据是：\"自签收之日起 7 个工作日内可无理由退货。\" 问题：\"退货"
       },
       {
         "strict": false,
-        "latency_ms": 9479,
+        "latency_ms": 10600,
         "head": "好的，我现在需要处理用户的这个请求。用户给了一个上下文步骤：收集本周销售数据 / 核对异常订单 / 生成周报草稿 / 提交审核。然后要输出一"
       },
       {
         "strict": false,
-        "latency_ms": 11427,
+        "latency_ms": 11542,
         "head": "好的，我现在需要处理用户的这个请求。首先，用户给了一个上下文：“订单 A1002，计价工具返回总额 899.0。”然后要求输出一个JSON对"
       },
       {
         "strict": false,
-        "latency_ms": 11417,
+        "latency_ms": 10524,
         "head": "首先，用户要求我作为业务 Agent，只根据上下文证据来回答问题。上下文证据是：\"退货审核通过后 3 个工作日内原路退回。\" 问题：\"退款多"
       },
       {
         "strict": false,
-        "latency_ms": 9375,
-        "head": "好的，我现在需要处理用户的这个请求。用户给了一个上下文步骤：冻结代码 / 跑回归测试 / 生成变更说明 / 灰度发布。然后要输出一个JSON"
+        "latency_ms": 9255,
+        "head": "好的，我现在需要处理用户的这个请求。用户给了一个上下文步骤：“冻结代码 / 跑回归测试 / 生成变更说明 / 灰度发布”，然后要我输出一个J"
       }
     ],
     "strict_rate": 0.0,
-    "avg_latency_ms": 10401.8
+    "avg_latency_ms": 10504.5
   },
   "mock_baseline": {
     "source": "experiments/metrics.json（mock 闭环）",

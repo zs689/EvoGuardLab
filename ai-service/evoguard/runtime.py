@@ -35,6 +35,13 @@ TRANSIENT_FAULTS = {"tool_timeout", "tool_exception", "process_interruption"}
 # 仅离线评测使用：强制某个候选技能参与恢复（晋升前单独测它）
 FORCED_SKILL = None
 
+# 仅离线评测使用：按模式指定技能库。
+# 为什么需要它：C 和 D 的差别本来只在「验证严不严」，但如果两边共用同一个库，
+# 这个变量根本没被激活 —— 库是严格验证出来的，C 用不用严格验证都一样。
+# 要测出治理价值，C 必须用**自己**那套放宽流程训出来的库（里面全是没验证过的经验）。
+# 生产运行时不设置它，行为与以前完全一致（就用调用方传进来的 store）。
+STORE_BY_MODE = {}
+
 # 策略真实语义：哪些策略只是「重放」，哪些会**修复输出**。
 # 这一层是关键 —— 如果所有策略都只靠 suppress 把故障点绕过去，
 # 那"策略"就只是个名字，组合起来也不会有任何增量。
@@ -722,12 +729,16 @@ STRATEGY_BY_CAUSE = {
 }
 
 
-def plan_recovery(store, agent_type, root_cause, mode):
+def plan_recovery(store, agent_type, root_cause, mode, scope="single"):
     """产出一条**策略链** list[str]，不再是一个孤立字符串。
 
     为什么必须是链：一次运行里可以同时存在多个故障点，
     单策略只能处理诊断到的第一个；处理完重放后第二个才暴露。
     「查表」永远给出一步，「规划」才能给出有顺序的多步。
+
+    scope：这是第几轮恢复（single = 第一轮，multi = 第二轮起）。
+    技能按作用域优先命中 —— 复合学到的两步链不能占住单故障的键位，
+    否则单故障用例会被强行套上多出来的一步（实测打挂 6 个用例）。
 
     B 模式：固定规则（无诊断，一律重试），链长恒为 1。
     C / D 模式：先查技能库
@@ -737,6 +748,7 @@ def plan_recovery(store, agent_type, root_cause, mode):
 
     FORCED_SKILL 只给离线评测用（要在晋升前单独测某个候选技能），
     运行时不设置它就是 None，不影响正常流程。
+    STORE_BY_MODE 同理：让 C / D 各查自己的库，才测得出「验证严不严」的差别。
     """
     def pack(chain, params, reason, source):
         chain = [str(x) for x in core.as_chain(chain) if x][:MAX_CHAIN]
@@ -762,7 +774,8 @@ def plan_recovery(store, agent_type, root_cause, mode):
 
     try:
         import skills
-        sk = skills.lookup(store, agent_type, root_cause, mode)
+        sk_store = STORE_BY_MODE.get(mode) or store
+        sk = skills.lookup(sk_store, agent_type, root_cause, mode, scope=scope)
     except Exception:
         sk = None
 
@@ -875,6 +888,10 @@ def _recover(store, exp, run_exp, rid, ctx, mode):
          这样「策略」就不只是一个用来决定 suppress 与否的标签。
     """
     steps = store.list_steps(rid)
+    # 这是第几轮恢复？之前已经诊断过 = 前面至少修过一次，说明坏点不止一个。
+    # 只用「此刻已知的信息」判断作用域，不去偷看注入的故障链。
+    prev_rounds = len(store.list_diagnoses(rid))
+    scope = "multi" if prev_rounds >= 1 else "single"
     # C 和 D 都要先诊断；只有 B 是「不诊断、盲目重试」
     if mode in ("C", "D", "R"):
         d = diagnose(steps)
@@ -886,7 +903,7 @@ def _recover(store, exp, run_exp, rid, ctx, mode):
              "root_cause": "unknown", "confidence": 0.0, "evidence": {}}
         did = None
 
-    plan = plan_recovery(store, exp["agent_type"], d["root_cause"], mode)
+    plan = plan_recovery(store, exp["agent_type"], d["root_cause"], mode, scope=scope)
     chain = plan["strategy_chain"]
     if chain[0] == "human_takeover":
         store.add_recovery(rid, did, "human_takeover", plan["params"],

@@ -49,11 +49,21 @@ REPORT = os.path.join(OUT, "report.md")
 METRICS = os.path.join(OUT, "metrics.json")
 DB = os.path.join(ROOT, "data", "real_model.db")
 MOCK_DB = os.path.join(ROOT, "data", "evoguard.db")
+LIB_D = os.path.join(ROOT, "data", "library_d.db")
+LIB_C = os.path.join(ROOT, "data", "library_c.db")
 MODES = ("A", "B", "C", "D")
 
 
 def pct(a, b):
     return round(100.0 * a / b, 1) if b else 0.0
+
+
+def _read_json(path, default):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
 
 
 def build_cases(suite):
@@ -95,17 +105,34 @@ def load_checkpoint(fresh):
 
 
 def prepare_db():
-    """独立 DB + 从 mock 库迁移已晋升技能。
+    """准备评测用的技能库，两种设置，报告里必须写清楚用的是哪一套。
 
-    为什么不重新训练：这轮要测的是「技能/经验在真实模型下还灵不灵」。
-    如果连技能库都用真实模型重新学一遍，就把两个变量混在一起了。
-    报告里会明确写这是跨模型迁移，不是真实模型自举闭环。
+    设置 A（双库，`real_model_train.py` 跑过就用这个）：
+        C 查 data/library_c.db（放宽入库，没验证过的经验全在里面）
+        D 查 data/library_d.db（独立验证通过才入库）
+        —— 只有这样，「要不要严格验证」这个变量才真的被激活。
+        上一轮 C/D 共用一套 mock 迁移来的严格库，所以 C = D = 100% 什么也说明不了。
+
+    设置 B（单库回退，没跑过训练时用）：
+        从 mock 库复制 active 技能到一个库，C/D 共用。
+        这时 C 与 D 的差别只剩「匹配条件宽不宽」，不是「验证严不严」。
     """
     if os.path.exists(DB):
         os.remove(DB)
     store = core.Store(DB, fast=True)
     experience.ensure_schema(store)
     skills.ensure_schema(store)
+
+    if os.path.exists(LIB_D) and os.path.exists(LIB_C):
+        d_store = core.Store(LIB_D)
+        c_store = core.Store(LIB_C)
+        n_d = count_skills(d_store)
+        n_c = count_skills(c_store)
+        runtime.STORE_BY_MODE = {"C": c_store, "D": d_store}
+        return store, {"kind": "two_libs", "d": n_d, "c": n_c,
+                       "d_path": os.path.basename(LIB_D),
+                       "c_path": os.path.basename(LIB_C)}
+
     copied = 0
     if os.path.exists(MOCK_DB):
         src = core.Store(MOCK_DB)
@@ -122,7 +149,12 @@ def prepare_db():
                            r["strategy"], r["required_tools"], r["safety"],
                            r["status"], r["version"], r["created_at"]))
                 copied += 1
-    return store, copied
+    return store, {"kind": "shared_mock_migration", "shared": copied}
+
+
+def count_skills(store):
+    with store.conn() as c:
+        return c.execute("SELECT COUNT(*) FROM skills WHERE status='active'").fetchone()[0]
 
 
 def run_one(store, c, mode):
@@ -322,6 +354,12 @@ def write_outputs(meta, single, composite, control, done, elapsed):
     L.append("| JSON grammar 约束 | %s |" % meta["json_grammar"])
     L.append("| System prompt 指纹 | `%s` |" % meta["system_prompt_sha256"])
     L.append("| 代码指纹 | `%s` |" % meta["code_sha256"])
+    sk = meta.get("skillset") or {}
+    if sk.get("kind") == "two_libs":
+        L.append("| 技能库 | **双库**：D 严格库 %d 条 ｜ C 放宽库 %d 条 |"
+                 % (sk.get("d"), sk.get("c")))
+    else:
+        L.append("| 技能库 | 单库（mock 迁移 %d 条，C/D 共用） |" % sk.get("shared", 0))
     L.append("| 单故障用例 | %d |" % single["cases"])
     L.append("| 复合故障用例 | %d |" % composite["cases"])
     L.append("| 完成 run 数 | %d |" % len(done))
@@ -403,9 +441,14 @@ def write_outputs(meta, single, composite, control, done, elapsed):
     L.append("1. **速度换来的代价**：为把 936 个 run 从 5 小时压到可接受时间，")
     L.append("   用了原生 `/api/chat` + `think:false` + `format=json`。实测单次 14s → 0.5s。")
     L.append("   代价是 grammar 约束消除了模型自然产生的格式违规，第四节给了无约束对照数据。")
-    L.append("2. **技能库是跨模型迁移**：D 用的是 mock 闭环训练出的已晋升技能，")
-    L.append("   不是在真实模型下重新学一遍。这测的是「技能迁移是否有效」，")
-    L.append("   **不是**「真实模型自举闭环」。这两个变量不能混为一谈。")
+    L.append("2. **技能库来源**：%s" % (
+        "D 用严格库（独立验证通过才入库）、C 用放宽库（探索成功就入库、不验证），"
+        "两套库都由 `real_model_train.py` 用同一个真实模型训出来 —— "
+        "这才是「验证严不严」这个变量的真正对照。"
+        if (meta.get("skillset") or {}).get("kind") == "two_libs" else
+        "C 与 D 共用一套从 mock 闭环迁移来的严格库。"
+        "这时候两者的差别只剩「匹配条件宽不宽」，**不是**「验证严不严」，"
+        "所以这轮不能用来证明治理价值；要测治理先跑 real_model_train.py。"))
     L.append("3. **故障仍是注入的**：不是真实事故里自然共现的错误。")
     L.append("4. **只有一次运行**：没有多次 seed 取均值，模型随机性未量化。")
     L.append("5. `format_violation` 类故障由代码注入，不能当作模型真实犯错率。")
@@ -436,6 +479,8 @@ def main():
 
     try:
         models = provider.list_models()
+    except AttributeError:
+        models = ["mock"]          # mock 后端没有 list_models，冒烟要能跑
     except Exception as e:
         print("[×] 模型服务不可用：%s" % e, flush=True)
         print("    先启动：cd /f/ollama && OLLAMA_MODELS='F:\\Qwen3' ./ollama.exe serve", flush=True)
@@ -443,8 +488,30 @@ def main():
     print("[√] 服务可达，模型：%s ｜ 后端 %s" % (models, provider.name), flush=True)
 
     meta = meta_info(args, provider)
-    store, copied = prepare_db()
-    print("[√] 独立 DB 就绪，迁移已晋升技能 %d 条" % copied, flush=True)
+    # 护栏：换了技能库设置就不能续跑。
+    # 检查点按 key（suite|agent|task|fault|mode）去重，不含库信息 ——
+    # 单库/双库两种设置会得到同一个 key，混在一张表里算出来的就是垃圾。
+    want_kind = "two_libs" if (os.path.exists(LIB_D) and os.path.exists(LIB_C)) \
+        else "shared_mock_migration"
+    old = _read_json(METRICS, {})
+    old_kind = ((old or {}).get("meta") or {}).get("skillset", {}).get("kind")
+    if old_kind and old_kind != want_kind and not args.fresh:
+        print("[×] 技能库设置变了（检查点里是 %s，现在是 %s），不能续跑。"
+              % (old_kind, want_kind), flush=True)
+        print("    先把旧结果归档，再加 --fresh 从零跑：", flush=True)
+        print("    mv experiments/real_model/{runs.jsonl,metrics.json,report.md} "
+              "experiments/real_model/archive_runN/", flush=True)
+        return 2
+
+    store, skillset = prepare_db()
+    meta["skillset"] = skillset
+    if skillset["kind"] == "two_libs":
+        print("[√] 双库就绪：D 用严格库 %d 条（%s）｜ C 用放宽库 %d 条（%s）"
+              % (skillset["d"], skillset["d_path"], skillset["c"], skillset["c_path"]),
+              flush=True)
+    else:
+        print("[√] 单库就绪，从 mock 迁移已晋升技能 %d 条（C/D 共用，变量未激活）"
+              % skillset.get("shared", 0), flush=True)
 
     cases = build_cases(args.suite)
     if args.limit:

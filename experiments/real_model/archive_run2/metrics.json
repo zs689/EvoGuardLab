@@ -1,0 +1,262 @@
+{
+  "meta": {
+    "model": "qwen3:4b",
+    "backend": "ollama",
+    "provider_name": "ollama",
+    "json_grammar": true,
+    "think_disabled": true,
+    "base": "http://127.0.0.1:11434",
+    "system_prompt": "你是业务 Agent。只看用户给出的上下文回答，不要使用上下文以外的知识。只输出一个 JSON 对象，不要输出解释、不要复述要求、不要输出思考过程。",
+    "system_prompt_sha256": "8da48e6cbf348d7b",
+    "code_sha256": "71ce4a89f4da44fd",
+    "ollama_version": "0.40.15",
+    "dataset": {
+      "tasks": {
+        "order": 8,
+        "kb": 8,
+        "planner": 8
+      },
+      "cases": 272,
+      "dev_cases": 68,
+      "test_cases": 204,
+      "per_agent": {
+        "order": {
+          "tasks": 8,
+          "faults": 12,
+          "dev_cases": 24,
+          "test_cases": 72
+        },
+        "kb": {
+          "tasks": 8,
+          "faults": 11,
+          "dev_cases": 22,
+          "test_cases": 66
+        },
+        "planner": {
+          "tasks": 8,
+          "faults": 11,
+          "dev_cases": 22,
+          "test_cases": 66
+        }
+      },
+      "composite_patterns": 5,
+      "composite_test_cases": 30
+    },
+    "modes": [
+      "A",
+      "B",
+      "C",
+      "D"
+    ],
+    "started_at": 1794044430.049
+  },
+  "finished_at": 1794045214.727,
+  "elapsed_s": 780.9,
+  "runs_completed": 936,
+  "single": {
+    "suite": "single",
+    "cases": 204,
+    "modes": {
+      "A": {
+        "n": 204,
+        "ok": 0,
+        "rate": 0.0
+      },
+      "B": {
+        "n": 204,
+        "ok": 54,
+        "rate": 26.5
+      },
+      "C": {
+        "n": 204,
+        "ok": 204,
+        "rate": 100.0
+      },
+      "D": {
+        "n": 204,
+        "ok": 204,
+        "rate": 100.0
+      }
+    },
+    "errors": {},
+    "llm_errors": {
+      "E_LLM_HTTP": 14
+    },
+    "bad_model_output": 0,
+    "model_calls": 822,
+    "avg_latency_ms": 693.5,
+    "total_latency_s": 565.9,
+    "avg_tokens": 105.0,
+    "by_fault": {
+      "tool_timeout": {
+        "n": 18,
+        "ok": 18
+      },
+      "tool_exception": {
+        "n": 18,
+        "ok": 18
+      },
+      "invalid_json": {
+        "n": 18,
+        "ok": 18
+      },
+      "missing_field": {
+        "n": 18,
+        "ok": 18
+      },
+      "silent_corruption": {
+        "n": 6,
+        "ok": 6
+      },
+      "retrieval_failure": {
+        "n": 18,
+        "ok": 18
+      },
+      "context_loss": {
+        "n": 18,
+        "ok": 18
+      },
+      "process_interruption": {
+        "n": 18,
+        "ok": 18
+      },
+      "format_violation": {
+        "n": 18,
+        "ok": 18
+      },
+      "wrong_tool": {
+        "n": 6,
+        "ok": 6
+      },
+      "tool_hallucination": {
+        "n": 18,
+        "ok": 18
+      },
+      "premature_termination": {
+        "n": 18,
+        "ok": 18
+      },
+      "stale_data": {
+        "n": 6,
+        "ok": 6
+      },
+      "incorrect_planning": {
+        "n": 6,
+        "ok": 6
+      }
+    },
+    "D_failures": []
+  },
+  "composite": {
+    "suite": "composite",
+    "cases": 30,
+    "modes": {
+      "A": {
+        "n": 30,
+        "ok": 0,
+        "rate": 0.0
+      },
+      "B": {
+        "n": 30,
+        "ok": 0,
+        "rate": 0.0
+      },
+      "C": {
+        "n": 30,
+        "ok": 30,
+        "rate": 100.0
+      },
+      "D": {
+        "n": 30,
+        "ok": 30,
+        "rate": 100.0
+      }
+    },
+    "errors": {},
+    "llm_errors": {
+      "E_LLM_HTTP": 6
+    },
+    "bad_model_output": 0,
+    "model_calls": 150,
+    "avg_latency_ms": 1264.3,
+    "total_latency_s": 151.7,
+    "avg_tokens": 88.8,
+    "by_fault": {
+      "missing_field+silent_corruption": {
+        "n": 6,
+        "ok": 6
+      },
+      "wrong_tool+format_violation": {
+        "n": 6,
+        "ok": 6
+      },
+      "retrieval_failure+tool_hallucination": {
+        "n": 6,
+        "ok": 6
+      },
+      "stale_data+context_loss": {
+        "n": 6,
+        "ok": 6
+      },
+      "incorrect_planning+premature_termination": {
+        "n": 6,
+        "ok": 6
+      }
+    },
+    "D_failures": []
+  },
+  "grammar_control": {
+    "n": 6,
+    "strict_ok": 0,
+    "errors": {},
+    "latency_ms_total": 62411,
+    "samples": [
+      {
+        "strict": false,
+        "latency_ms": 11490,
+        "head": "好的，我现在需要处理用户的这个请求。首先，用户给了一个上下文：“订单 A1001，计价工具返回总额 504.0。”然后要求输出一个JSON对"
+      },
+      {
+        "strict": false,
+        "latency_ms": 9223,
+        "head": "好的，我现在需要处理用户的这个查询。首先，用户给了一个上下文证据：“自签收之日起 7 个工作日内可无理由退货。”然后问题问的是“退货要几天内"
+      },
+      {
+        "strict": false,
+        "latency_ms": 9479,
+        "head": "好的，我现在需要处理用户的这个请求。用户给了一个上下文步骤：收集本周销售数据 / 核对异常订单 / 生成周报草稿 / 提交审核。然后要输出一"
+      },
+      {
+        "strict": false,
+        "latency_ms": 11427,
+        "head": "好的，我现在需要处理用户的这个请求。首先，用户给了一个上下文：“订单 A1002，计价工具返回总额 899.0。”然后要求输出一个JSON对"
+      },
+      {
+        "strict": false,
+        "latency_ms": 11417,
+        "head": "首先，用户要求我作为业务 Agent，只根据上下文证据来回答问题。上下文证据是：\"退货审核通过后 3 个工作日内原路退回。\" 问题：\"退款多"
+      },
+      {
+        "strict": false,
+        "latency_ms": 9375,
+        "head": "好的，我现在需要处理用户的这个请求。用户给了一个上下文步骤：冻结代码 / 跑回归测试 / 生成变更说明 / 灰度发布。然后要输出一个JSON"
+      }
+    ],
+    "strict_rate": 0.0,
+    "avg_latency_ms": 10401.8
+  },
+  "mock_baseline": {
+    "source": "experiments/metrics.json（mock 闭环）",
+    "four_groups": {
+      "A": 0.0,
+      "B": 26.5,
+      "C": 100.0,
+      "D": 100.0
+    },
+    "composite": {
+      "single": 0.0,
+      "chain": 100.0,
+      "D": 100.0
+    }
+  }
+}

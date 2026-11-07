@@ -101,6 +101,10 @@ def extract(store, run_id):
         "validation_status": PENDING,
         "created_at": round(time.time(), 3),
         "version": 1,
+        # 一次运行里诊断出几个坏点 = 这条经验是「单故障」还是「多故障」学来的。
+        # 技能层用它决定作用域：单故障经验不该被套到复合场景的第一步，
+        # 复合学到的链也不该占住单故障的键位（实测会把单故障 6 个用例打挂）。
+        "fault_scope": "multi" if len(diagnoses) > 1 else "single",
     }
     return exp
 
