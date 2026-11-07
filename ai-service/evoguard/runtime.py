@@ -8,9 +8,11 @@
 """
 import json
 import os
+import re
 import time
 
 import agents
+import core
 import gateway
 import invariants
 import sim
@@ -130,7 +132,41 @@ class Ctx:
         if self.tokens > TOKEN_BUDGET:
             raise ApiError("E_BUDGET_EXCEEDED", "Token 超过预算 %d" % TOKEN_BUDGET, 409)
 
-        parsed = gateway.extract_json(text) if text else None
+        fault = self._fault_at(self.logical)
+
+        if fault == "premature_termination":
+            self.store.add_step(self.run_id, seq, "stop", "early_exit",
+                                {"prompt": prompt[:80]}, {"reason": "没拿到结果就宣布完成"},
+                                status="ok", logical=self.logical)
+            return {}
+
+        if fault == "format_violation":
+            text = "好的，我来回答：%s" % core.dumps(fallback)
+            parsed = None
+            self.store.add_step(self.run_id, seq, "model", "answer",
+                                {"prompt": prompt[:120], "provider": provider.name},
+                                {"text": text[:500], "parsed": None},
+                                status="mismatch", error_type="format_violation",
+                                model_id=model_id, tokens=tokens or 0, logical=self.logical)
+            # 关键：这里**不能**返回 fallback。模型没按格式给出结构，Agent 实际上拿不到答案，
+            # 返回正确兜底会把「格式违规」洗成成功，A 组就永远测不出这一类。
+            return {}
+
+        parsed = gateway.extract_json_strict(text) if text else None
+        if fault == "tool_hallucination":
+            # mock 后端没有模型输出可篡改，就拿兜底答案开刀 —— 语义一样：
+            # 答案里出现了一个任何工具都没返回过的数字
+            if not isinstance(parsed, dict):
+                parsed = dict(fallback) if isinstance(fallback, dict) else {}
+            for k, v in list(parsed.items()):
+                if isinstance(v, (int, float)):
+                    parsed[k] = round(v + 777.0, 2)
+                elif isinstance(v, str):
+                    # 文字答案就改数字：只追加一句话不会影响「必须包含某片段」的判定
+                    parsed[k] = re.sub(r"\d+", lambda m: str(int(m.group(0)) + 7), v)
+                elif isinstance(v, list):
+                    parsed[k] = list(v) + ["补充步骤 777"]
+            parsed = parsed or {}
         status, bad = "ok", None
         if err:
             status, bad = "error", err
@@ -221,7 +257,8 @@ class Ctx:
         poisoned = False
         # 这里必须列全：漏一个，corrupt() 就永远不会被调用，故障等于没注入。
         if fault in ("invalid_json", "missing_field", "silent_corruption",
-                     "retrieval_failure", "stale_data", "incorrect_planning"):
+                     "retrieval_failure", "stale_data", "incorrect_planning",
+                     "wrong_tool"):
             out = sim.corrupt(fault, tool, out, args)
             poisoned = True
 
@@ -313,6 +350,37 @@ def _diagnose_impl(steps):
     if not steps:
         return {"first_bad_step": 0, "root_cause": "unknown",
                 "evidence": {"reason": "没有轨迹"}, "confidence": 0.0}
+
+    # 规则 0a：工具契约错配（选错工具）—— 输出字段凑齐了**另一个**工具的契约
+    for s in steps:
+        if s["kind"] in ("tool", "replay") and isinstance(s["output"], dict):
+            cur = sim.TOOLS.get(s["name"], {})
+            req = set(cur.get("out_required") or [])
+            keys = set(s["output"].keys())
+            if req and not (req & keys):
+                for other, spec in sim.TOOLS.items():
+                    if other != s["name"] and set(spec.get("out_required") or []) <= keys:
+                        return {"first_bad_step": s["seq"], "root_cause": "wrong_tool",
+                                "evidence": {"step": s["seq"], "invoked": s["name"],
+                                             "output_matches": other},
+                                "confidence": 0.9}
+
+    # 规则 0b：资源滥用 —— 同工具同参数被重复调用
+    seen = {}
+    for s in steps:
+        if s["kind"] == "tool":
+            key = (s["name"], core.dumps(s["input"] or {}))
+            seen[key] = seen.get(key, 0) + 1
+            if seen[key] >= 2:
+                return {"first_bad_step": s["seq"], "root_cause": "resource_abuse",
+                        "evidence": {"step": s["seq"], "tool": s["name"],
+                                     "times": seen[key]}, "confidence": 0.85}
+
+    # 规则 0c：过早终止 —— 出现 early_exit 步但没走到答案步
+    for s in steps:
+        if s["kind"] == "stop" and s["name"] == "early_exit":
+            return {"first_bad_step": s["seq"], "root_cause": "premature_termination",
+                    "evidence": {"step": s["seq"]}, "confidence": 0.9}
 
     # 规则 1：显式错误
     for s in steps:
@@ -412,6 +480,34 @@ def _diagnose_impl(steps):
                                      "returned": [d.get("doc_id") for d in docs]},
                         "confidence": 0.6}
 
+    # 规则 8：格式违规 —— 答案步有内容但不是纯 JSON（TRAIL: instruction non-compliance）
+    for s in steps:
+        if s["kind"] == "model" and s["name"] == "answer":
+            out = s["output"] if isinstance(s["output"], dict) else {}
+            text = (out.get("text") or "").strip()
+            if text and not out.get("parsed"):
+                return {"first_bad_step": s["seq"], "root_cause": "format_violation",
+                        "evidence": {"step": s["seq"], "head": text[:60]},
+                        "confidence": 0.8}
+
+    # 规则 9：工具输出幻觉 —— 答案里的数字在任何工具返回里都找不到
+    tool_nums = set()
+    for s in steps:
+        if s["kind"] in ("tool", "replay") and isinstance(s["output"], dict):
+            for m in re.findall(r"\d+(?:\.\d+)?", core.dumps(s["output"])):
+                tool_nums.add(m)
+    for s in steps:
+        if s["kind"] == "model" and s["name"] == "answer" and isinstance(s["output"], dict):
+            parsed = s["output"].get("parsed")
+            if not isinstance(parsed, dict):
+                continue
+            for m in re.findall(r"\d+(?:\.\d+)?", core.dumps(parsed)):
+                if m not in tool_nums:
+                    return {"first_bad_step": s["seq"], "root_cause": "tool_hallucination",
+                            "evidence": {"step": s["seq"], "number": m,
+                                         "known": sorted(tool_nums)[:6]},
+                            "confidence": 0.75}
+
     return {"first_bad_step": 0, "root_cause": "unknown",
             "evidence": {"reason": "所有规则都没命中"}, "confidence": 0.0}
 
@@ -467,6 +563,12 @@ STRATEGY_BY_CAUSE = {
     "silent_corruption": "cross_verify",
     #   context_loss —— 状态本身错了，要从检查点重建上下文
     "context_loss": "replay_checkpoint",
+    # TRAIL / MAST 补进来的五类
+    "format_violation": "reformat",
+    "wrong_tool": "fallback_tool",
+    "tool_hallucination": "cross_verify",
+    "resource_abuse": "replay_checkpoint",
+    "premature_termination": "replay_checkpoint",
     "unknown": "human_takeover",
 }
 

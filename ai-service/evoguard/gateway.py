@@ -67,6 +67,26 @@ def extract_json(text):
     return None
 
 
+def extract_json_strict(text):
+    """严格版：整个回答必须就是一个 JSON 对象。
+
+    为什么要严格：宽松版会从"好的，我来回答：{...}"这种散文里把 JSON 抠出来，
+    于是"没按格式输出"这件事永远测不出来 —— 而 TRAIL 的实测数据说，
+    格式违规/指令不依从占真实 agent 错误的约 42%，是最大的一类。
+    """
+    if not text:
+        return None
+    t = strip_think(text).strip()
+    if t.startswith("```"):
+        t = _FENCE_RE.sub(r"\1", t).strip()
+    if not (t.startswith("{") and t.endswith("}")):
+        return None
+    try:
+        return json.loads(t)
+    except Exception:
+        return None
+
+
 class Provider:
     name = "base"
     is_mock = False

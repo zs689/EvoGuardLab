@@ -6,10 +6,10 @@
 
 | 步骤 | 结果 |
 |---|---|
-| 训练集用例 | 48 |
+| 训练集用例 | 68 |
 | 其中靠探索恢复成功 | 4 |
-| 通过准入校验的经验 | 46 |
-| 生成的候选技能 | 46 |
+| 通过准入校验的经验 | 66 |
+| 生成的候选技能 | 66 |
 | 晋升为正式技能 | 1 |
 
 ### 候选技能验证明细
@@ -24,6 +24,10 @@
 | 遇到 retrieval_failure 时改用 fal | order/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 context_loss 时改用 replay_c | order/context_loss | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 process_interruption 时改用  | order/process_interruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 format_violation 时改用 refo | order/format_violation | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 wrong_tool 时改用 fallback_t | order/wrong_tool | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_hallucination 时改用 cr | order/tool_hallucination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 premature_termination 时改用 | order/premature_termination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 tool_timeout 时改用 retry | order/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 tool_exception 时改用 retry | order/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | order/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -32,6 +36,10 @@
 | 遇到 retrieval_failure 时改用 fal | order/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 context_loss 时改用 replay_c | order/context_loss | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 process_interruption 时改用  | order/process_interruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 format_violation 时改用 refo | order/format_violation | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 wrong_tool 时改用 fallback_t | order/wrong_tool | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_hallucination 时改用 cr | order/tool_hallucination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 premature_termination 时改用 | order/premature_termination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 tool_timeout 时改用 retry | kb/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 tool_exception 时改用 retry | kb/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | kb/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -40,6 +48,9 @@
 | 遇到 context_loss 时改用 replay_c | kb/context_loss | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 process_interruption 时改用  | kb/process_interruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 stale_data 时改用 cross_veri | kb/stale_data | 0.0% | 100.0% | 100.0 | 0.0% | **PROMOTE** |
+| 遇到 format_violation 时改用 refo | kb/format_violation | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_hallucination 时改用 cr | kb/tool_hallucination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 premature_termination 时改用 | kb/premature_termination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 tool_timeout 时改用 retry | kb/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 tool_exception 时改用 retry | kb/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | kb/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -48,6 +59,9 @@
 | 遇到 context_loss 时改用 replay_c | kb/context_loss | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 process_interruption 时改用  | kb/process_interruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 stale_data 时改用 cross_veri | kb/stale_data | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 format_violation 时改用 refo | kb/format_violation | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_hallucination 时改用 cr | kb/tool_hallucination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 premature_termination 时改用 | kb/premature_termination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 tool_timeout 时改用 retry | planner/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 tool_exception 时改用 retry | planner/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | planner/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -55,6 +69,9 @@
 | 遇到 retrieval_failure 时改用 fal | planner/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 context_loss 时改用 replay_c | planner/context_loss | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 process_interruption 时改用  | planner/process_interruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 format_violation 时改用 refo | planner/format_violation | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_hallucination 时改用 cr | planner/tool_hallucination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 premature_termination 时改用 | planner/premature_termination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 tool_timeout 时改用 retry | planner/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 tool_exception 时改用 retry | planner/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | planner/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -62,19 +79,22 @@
 | 遇到 retrieval_failure 时改用 fal | planner/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 context_loss 时改用 replay_c | planner/context_loss | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 process_interruption 时改用  | planner/process_interruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 format_violation 时改用 refo | planner/format_violation | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_hallucination 时改用 cr | planner/tool_hallucination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 premature_termination 时改用 | planner/premature_termination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 
-## 二、四组对照（独立测试集 144 个用例）
+## 二、四组对照（独立测试集 204 个用例）
 
 | 模式 | 含义 | 成功率 |
 |---|---|---|
-| A | 无恢复 | 0.0% |
-| B | 诊断+规则恢复，无经验学习 | 37.5% |
-| C | 用经验但**不严格验证** | 58.3% |
-| D | 完整闭环（验证+晋升） | 95.8% |
+| A | 无恢复 | 0.5% |
+| B | 诊断+规则恢复，无经验学习 | 27.0% |
+| C | 用经验但**不严格验证** | 50.0% |
+| D | 完整闭环（验证+晋升） | 97.1% |
 
-- **负迁移率（B 成功但 D 失败）**：0.0%（0/144）
-- D 相对 B 提升：**58.3 个百分点**
-- D 相对 C 提升：**37.5 个百分点**
+- **负迁移率（B 成功但 D 失败）**：0.0%（0/204）
+- D 相对 B 提升：**70.1 个百分点**
+- D 相对 C 提升：**47.1 个百分点**
 
 ## 三、怎么读
 
@@ -85,5 +105,5 @@
 ## 四、已知局限
 
 1. 模型仍是 mock（`AGENTLAB_LLM=mock`），本报告衡量的是**机制是否自洽**，不是模型能力。
-2. 训练/测试划分只按 task_id 切，样本量小（各 48 / 144），不能当统计结论。
+2. 训练/测试划分只按 task_id 切，样本量小（各 68 / 204），不能当统计结论。
 3. 技能是声明式策略映射，不是生成代码，所以不涉及沙箱执行风险。

@@ -69,6 +69,12 @@ FAULT_TYPES = [
     "silent_corruption", "retrieval_failure", "context_loss", "process_interruption",
     # 以下两类是「规则表里没有对应策略」的故障 —— 进化的价值只能在这类故障上体现
     "stale_data", "incorrect_planning",
+    # 以下来自 TRAIL / MAST 分类法（见 docs/taxonomy.md），单 Agent 可复现的那部分
+    "format_violation",      # TRAIL: Output Generation / Instruction Non-compliance
+    "wrong_tool",            # TRAIL: Decision Making / Tool Selection Error
+    "tool_hallucination",    # TRAIL: Hallucination / Tool-related
+    "resource_abuse",        # TRAIL: Context Management / Resource Abuse
+    "premature_termination", # MAST: Task Verification / Premature Termination
 ]
 
 FAULT_DESC = {
@@ -82,6 +88,11 @@ FAULT_DESC = {
     "process_interruption": "执行中断",
     "stale_data": "数据陈旧（返回旧版本，结构合法）",
     "incorrect_planning": "计划顺序错误（步骤齐全但次序颠倒）",
+    "format_violation": "输出格式违规（要求 JSON，返回散文）",
+    "wrong_tool": "工具选错（返回了另一个工具的结构）",
+    "tool_hallucination": "工具输出幻觉（答案里的数字不存在于任何工具返回）",
+    "resource_abuse": "资源滥用（同一工具同参数被重复调用）",
+    "premature_termination": "过早终止（没拿到结果就宣布完成）",
 }
 
 # 不是所有故障对每个 Agent 都成立。
@@ -91,9 +102,14 @@ FAULT_DESC = {
 CASE_FAULTS = {
     # silent_corruption 只对订单成立（KB/规划没有可交叉验算的数值）
     # stale_data 只对 KB 成立；incorrect_planning 只对规划成立
-    "order": [f for f in FAULT_TYPES if f not in ("stale_data", "incorrect_planning")],
-    "kb": [f for f in FAULT_TYPES if f not in ("silent_corruption", "incorrect_planning")],
-    "planner": [f for f in FAULT_TYPES if f not in ("silent_corruption", "stale_data")],
+    # resource_abuse 是「成本型」故障：任务会成功，只是白花钱，不能用成功率衡量，
+    # 所以不进成功率矩阵，单独用 steps/token 指标测（见 tests/test_taxonomy.py）。
+    "order": [f for f in FAULT_TYPES
+              if f not in ("stale_data", "incorrect_planning", "resource_abuse")],
+    "kb": [f for f in FAULT_TYPES
+           if f not in ("silent_corruption", "incorrect_planning", "wrong_tool", "resource_abuse")],
+    "planner": [f for f in FAULT_TYPES
+                if f not in ("silent_corruption", "stale_data", "wrong_tool", "resource_abuse")],
 }
 
 
@@ -182,6 +198,10 @@ TOOLS = {
 }
 
 
+# 各 Agent 的答案步逻辑序号（1 plan / 2 tool / 3 context / 4 tool / 5 settle / 6 plan / 7 answer）
+ANSWER_STEP = {"order": 7, "kb": 5, "planner": 5}
+
+
 def auto_target(agent_type, fault_type):
     """故障自动落到哪一步。人工指定 fault_target 时以人指定的为准。
 
@@ -193,6 +213,9 @@ def auto_target(agent_type, fault_type):
         return 3                      # context 构建步
     if fault_type == "silent_corruption":
         return 4 if agent_type == "order" else 2
+    if fault_type in ("format_violation", "tool_hallucination", "premature_termination"):
+        # 这三类是「答案那一层」的故障，必须打到最后一步，打在第 2 步等于没注入
+        return ANSWER_STEP.get(agent_type, 5)
     return 2                          # 第一个工具调用步
 
 
@@ -256,6 +279,12 @@ def corrupt(fault_type, tool, output, args=None):
                 d["version"] = 1
                 d["text"] = re.sub(r"\d+", bump, d.get("text", ""))
         return out
+    if fault_type == "wrong_tool":
+        # 选错了工具：返回的是 kb.search 的结构。字段名全对、JSON 合法，
+        # 但和当前工具的契约不匹配 —— 只有做「工具契约校验」才看得出来。
+        if tool == "order.get_order":
+            return {"docs": [dict(KB["KB-01"])]}
+        return out
     if fault_type == "incorrect_planning":
         # 步骤齐全但顺序颠倒 —— schema 完全合法，只能靠业务预期发现
         if tool == "task.make_plan" and out.get("steps"):
@@ -269,6 +298,12 @@ def corrupt(fault_type, tool, output, args=None):
                 d["text"] = (d.get("text", "").replace("7 个工作日", "15 个工作日")
                              .replace("3 个工作日", "10 个工作日")
                              .replace("5 个工作日", "20 个工作日"))
+        return out
+    if fault_type == "wrong_tool":
+        # 选错了工具：返回的是 kb.search 的结构。字段名全对、JSON 合法，
+        # 但和当前工具的契约不匹配 —— 只有做「工具契约校验」才看得出来。
+        if tool == "order.get_order":
+            return {"docs": [dict(KB["KB-01"])]}
         return out
     if fault_type == "incorrect_planning":
         # 步骤齐全但顺序颠倒 —— schema 完全合法，只能靠业务预期发现
