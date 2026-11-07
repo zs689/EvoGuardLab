@@ -120,7 +120,7 @@ class Ctx:
             text, tokens, model_id = provider.complete(
                 [{"role": "system", "content": SYSTEM_PROMPT},
                  {"role": "user", "content": prompt}],
-                temperature=0.0, max_tokens=256)
+                temperature=0.0, max_tokens=1500)
         except gateway.LLMError as e:
             err = e.code
             model_id = "unavailable"

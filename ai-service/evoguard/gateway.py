@@ -171,6 +171,11 @@ class LocalProvider(Provider):
                 data = self._post("/chat/completions", payload)
                 msg = data["choices"][0]["message"]
                 text = strip_think(msg.get("content") or "")
+                # 思考型模型（Qwen3 等）在 token 预算不足时会把预算全花在 reasoning 上，
+                # content 变成空串。这种情况必须明确报出来，否则会被当成"模型什么都没说"。
+                if not text and (msg.get("reasoning") or "").strip():
+                    raise LLMError("E_LLM_THINKING",
+                                   "模型把 token 全用在思考上，content 为空。把 max_tokens 调大（>=600）。")
                 usage = data.get("usage") or {}
                 tokens = int(usage.get("total_tokens") or max(1, len(text) // 2))
                 return text, tokens, model

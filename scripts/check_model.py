@@ -52,7 +52,7 @@ def main():
         text, tokens, mid = p.complete(
             [{"role": "system", "content": SYS},
              {"role": "user", "content": PROBE}],
-            temperature=0.0, max_tokens=128)
+            temperature=0.0, max_tokens=1500)
     except gateway.LLMError as e:
         print("[×] 调用失败：%s" % e.message)
         return 1
