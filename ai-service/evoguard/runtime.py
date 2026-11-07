@@ -589,7 +589,11 @@ def plan_recovery(store, agent_type, root_cause, mode):
                 "reason": "固定规则：一律重试", "source": "fixed_rule"}
 
     forced = FORCED_SKILL
-    if forced and forced.get("task_type") == agent_type:
+    # 候选技能只在**它自己声称的故障类型**上生效。
+    # 不限制的话，评测时它会被强行套到同一个 Agent 的所有故障上，
+    # guard 用例全被污染 -> 负迁移虚高 -> 真正有效的技能也会被拒。
+    if forced and forced.get("task_type") == agent_type and \
+            (not forced.get("fault_type") or forced.get("fault_type") == root_cause):
         return {"strategy": forced["strategy"],
                 "params": {"max_retry": MAX_RETRY, "root_cause": root_cause,
                            "skill_id": forced["id"], "forced": True},

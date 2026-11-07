@@ -133,6 +133,27 @@ def _num(v):
         return None
 
 
+def _contains_bounded(haystack, needle):
+    """带数字边界的包含判断。
+
+    为什么需要：原来用朴素子串匹配，"2 张"会被"12 张"命中 ——
+    于是把 2 改成 5、5 改成 12 之后，判定居然还是"答对了"。
+    判分器自己漏判，比故障没注入更危险：它会让所有指标虚高。
+    """
+    if not haystack or not needle:
+        return False
+    i = 0
+    while True:
+        i = haystack.find(needle, i)
+        if i < 0:
+            return False
+        before = haystack[i - 1] if i > 0 else ""
+        after = haystack[i + len(needle)] if i + len(needle) < len(haystack) else ""
+        if not before.isdigit() and not after.isdigit():
+            return True
+        i += 1
+
+
 def is_correct(agent_type, answer, expect):
     """用真值判对错 —— 只有 evaluate 会调用它。"""
     if not isinstance(answer, dict) or expect is None:
@@ -141,7 +162,7 @@ def is_correct(agent_type, answer, expect):
         t = _num(answer.get("total"))
         return t is not None and abs(t - expect["total"]) < 0.02
     if agent_type == "kb":
-        return expect["must"] in (answer.get("text") or "")
+        return _contains_bounded(answer.get("text") or "", expect["must"])
     if agent_type == "planner":
         return list(answer.get("steps") or []) == expect["steps"]
     return False

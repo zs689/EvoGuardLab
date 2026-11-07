@@ -16,8 +16,8 @@
 
 | 技能 | 目标病例 | 验证前成功率 | 验证后成功率 | 增益(pp) | 负迁移率 | 判定 |
 |---|---|---|---|---|---|---|
-| 遇到 tool_timeout 时改用 retry | order/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
-| 遇到 tool_exception 时改用 retry | order/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
+| 遇到 tool_timeout 时改用 retry | order/tool_timeout | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_exception 时改用 retry | order/tool_exception | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | order/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 missing_field 时改用 fallbac | order/missing_field | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 silent_corruption 时改用 cro | order/silent_corruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -28,8 +28,8 @@
 | 遇到 wrong_tool 时改用 fallback_t | order/wrong_tool | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 tool_hallucination 时改用 cr | order/tool_hallucination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 premature_termination 时改用 | order/premature_termination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
-| 遇到 tool_timeout 时改用 retry | order/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
-| 遇到 tool_exception 时改用 retry | order/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
+| 遇到 tool_timeout 时改用 retry | order/tool_timeout | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_exception 时改用 retry | order/tool_exception | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | order/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 missing_field 时改用 fallbac | order/missing_field | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 silent_corruption 时改用 cro | order/silent_corruption | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -40,8 +40,8 @@
 | 遇到 wrong_tool 时改用 fallback_t | order/wrong_tool | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 tool_hallucination 时改用 cr | order/tool_hallucination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 premature_termination 时改用 | order/premature_termination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
-| 遇到 tool_timeout 时改用 retry | kb/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
-| 遇到 tool_exception 时改用 retry | kb/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
+| 遇到 tool_timeout 时改用 retry | kb/tool_timeout | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_exception 时改用 retry | kb/tool_exception | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | kb/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 missing_field 时改用 fallbac | kb/missing_field | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 retrieval_failure 时改用 fal | kb/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -51,8 +51,8 @@
 | 遇到 format_violation 时改用 refo | kb/format_violation | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 tool_hallucination 时改用 cr | kb/tool_hallucination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 premature_termination 时改用 | kb/premature_termination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
-| 遇到 tool_timeout 时改用 retry | kb/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
-| 遇到 tool_exception 时改用 retry | kb/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
+| 遇到 tool_timeout 时改用 retry | kb/tool_timeout | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_exception 时改用 retry | kb/tool_exception | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | kb/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 missing_field 时改用 fallbac | kb/missing_field | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 retrieval_failure 时改用 fal | kb/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -62,8 +62,8 @@
 | 遇到 format_violation 时改用 refo | kb/format_violation | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 tool_hallucination 时改用 cr | kb/tool_hallucination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 premature_termination 时改用 | kb/premature_termination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
-| 遇到 tool_timeout 时改用 retry | planner/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
-| 遇到 tool_exception 时改用 retry | planner/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
+| 遇到 tool_timeout 时改用 retry | planner/tool_timeout | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_exception 时改用 retry | planner/tool_exception | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | planner/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 missing_field 时改用 fallbac | planner/missing_field | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 retrieval_failure 时改用 fal | planner/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -72,8 +72,8 @@
 | 遇到 format_violation 时改用 refo | planner/format_violation | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 tool_hallucination 时改用 cr | planner/tool_hallucination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 premature_termination 时改用 | planner/premature_termination | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
-| 遇到 tool_timeout 时改用 retry | planner/tool_timeout | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
-| 遇到 tool_exception 时改用 retry | planner/tool_exception | 100.0% | 100.0% | 0.0 | 75.0% | **REJECT** |
+| 遇到 tool_timeout 时改用 retry | planner/tool_timeout | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
+| 遇到 tool_exception 时改用 retry | planner/tool_exception | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 invalid_json 时改用 fallback | planner/invalid_json | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 missing_field 时改用 fallbac | planner/missing_field | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
 | 遇到 retrieval_failure 时改用 fal | planner/retrieval_failure | 100.0% | 100.0% | 0.0 | 0.0% | **REJECT** |
@@ -87,13 +87,13 @@
 
 | 模式 | 含义 | 成功率 |
 |---|---|---|
-| A | 无恢复 | 0.5% |
-| B | 诊断+规则恢复，无经验学习 | 27.0% |
+| A | 无恢复 | 0.0% |
+| B | 诊断+规则恢复，无经验学习 | 26.5% |
 | C | 用经验但**不严格验证** | 50.0% |
 | D | 完整闭环（验证+晋升） | 97.1% |
 
 - **负迁移率（B 成功但 D 失败）**：0.0%（0/204）
-- D 相对 B 提升：**70.1 个百分点**
+- D 相对 B 提升：**70.6 个百分点**
 - D 相对 C 提升：**47.1 个百分点**
 
 ## 三、怎么读
