@@ -44,10 +44,10 @@ def _inv_order_total(steps, ctx):
     """订单总额必须等于「按明细重算」的结果。这是治静默篡改的核心不变量。"""
     items = policy = None
     for s in steps:
-        if s["kind"] == "tool" and s["name"] == "order.get_order" and isinstance(s["output"], dict):
+        if s["kind"] in ("tool", "replay") and s["name"] == "order.get_order" and isinstance(s["output"], dict):
             items = s["output"].get("items")
             policy = s["output"].get("discount_policy")
-        if s["kind"] == "tool" and s["name"] == "pricing.calc_total" and isinstance(s["output"], dict):
+        if s["kind"] in ("tool", "replay") and s["name"] == "pricing.calc_total" and isinstance(s["output"], dict):
             if not items or not isinstance(policy, dict):
                 continue
             subtotal = sum(float(i["price"]) * int(i["qty"]) for i in items)
@@ -113,6 +113,39 @@ def _inv_plan_steps_sane(steps, ctx):
     return None
 
 
+# 通用流程阶段词典：**不依赖任何任务的真值**。
+# 只表达「任何业务流程都该先启动、后收尾」这条常识，
+# 不出现 PLAN_LIBRARY 里的具体步骤，也不读 expected_answer。
+PHASE_OPEN = ("收集", "确认", "核对", "汇总", "准备", "冻结", "确定", "抽样", "创建", "设置")
+PHASE_CLOSE = ("提交", "发布", "归档", "复盘", "退款", "验收", "跟踪", "审核", "考核", "审批")
+
+
+def _inv_plan_order(steps, ctx):
+    """流程首尾阶段不得颠倒。
+
+    为什么这条能治 incorrect_planning 又不算作弊：
+      - 故障注入把步骤整体 reverse()，首尾必然互换；
+      - 正常流程不会「以收尾动作开头、以启动动作结尾」；
+      - 规则只看动作词的通用语义，完全不看这题的标准步骤是什么。
+    局限（如实记录）：纯执行型流程（如 onboarding 四步都是执行动作）
+    首尾没有阶段信号，这条规则检测不到 —— 属于已知盲区，不假装全覆盖。
+    """
+    for s in steps:
+        if s["kind"] == "tool" and s["name"] == "task.make_plan" and isinstance(s["output"], dict):
+            plan = [str(x) for x in (s["output"].get("steps") or [])]
+            if len(plan) < 2:
+                continue
+            first, last = plan[0], plan[-1]
+            starts_closed = any(k in first for k in PHASE_CLOSE)
+            ends_open = any(k in last for k in PHASE_OPEN)
+            if starts_closed and ends_open:
+                return Violation(
+                    "INV-PLAN-ORDER", "流程首尾阶段颠倒（收尾在前、启动在后）",
+                    s["seq"], {"first": first, "last": last},
+                    "先启动后收尾", {"phase_open": PHASE_OPEN, "phase_close": PHASE_CLOSE})
+    return None
+
+
 INVARIANTS = [
     {"id": "INV-ORDER-TOTAL", "desc": "总额必须等于明细重算值",
      "applies": ["order"], "check": _inv_order_total},
@@ -124,6 +157,8 @@ INVARIANTS = [
      "applies": ["kb"], "check": _inv_kb_cited},
     {"id": "INV-PLAN-SANE", "desc": "计划步骤非空且不重复",
      "applies": ["planner"], "check": _inv_plan_steps_sane},
+    {"id": "INV-PLAN-ORDER", "desc": "流程首尾阶段不得颠倒",
+     "applies": ["planner"], "check": _inv_plan_order},
 ]
 
 

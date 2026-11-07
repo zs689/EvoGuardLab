@@ -43,15 +43,24 @@ def ensure_schema(store):
 
 
 def propose(exp):
-    """从一条已验证经验生成候选技能。声明式，不含任何可执行代码。"""
+    """从一条已验证经验生成候选技能。声明式，不含任何可执行代码。
+
+    strategy 允许是**策略链**（list），落库时序列化成 JSON 字符串；
+    单策略仍存裸字符串，保证旧版技能与测试的行为完全一致。
+    技能永远只声明「遇到 X 用哪几步策略」，不携带任何可执行代码。
+    """
+    chain = core.as_chain(exp["recovery_action"])
+    stored = core.dumps(chain) if len(chain) > 1 else (chain[0] if chain else "")
     return {
         "id": "sk_" + uuid.uuid4().hex[:10],
-        "name": "遇到 %s 时改用 %s" % (exp["failure_type"], exp["recovery_action"]),
+        "name": "遇到 %s 时按序执行 %s" % (exp["failure_type"], " -> ".join(chain) or "-"),
         "task_type": exp["task_type"],
         "fault_type": exp["failure_type"],
-        "strategy": exp["recovery_action"],
+        "strategy": stored,
+        "strategy_chain": chain,
         "required_tools": [],
-        "safety": {"max_retry": 2, "require_approval_for_write": True},
+        "safety": {"max_retry": 2, "require_approval_for_write": True,
+                   "max_chain": 3},
         "status": CANDIDATE,
         "version": 1,
         "created_at": round(time.time(), 3),
@@ -61,11 +70,14 @@ def propose(exp):
 
 def save(store, skill):
     ensure_schema(store)
+    strategy = skill["strategy"]
+    if isinstance(strategy, (list, tuple)):
+        strategy = core.dumps(list(strategy))
     with store.conn() as c:
         c.execute("INSERT INTO skills(id,name,task_type,fault_type,strategy,required_tools,"
                   "safety,status,version,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
                   (skill["id"], skill["name"], skill["task_type"], skill["fault_type"],
-                   skill["strategy"], core.dumps(skill["required_tools"]),
+                   strategy, core.dumps(skill["required_tools"]),
                    core.dumps(skill["safety"]), skill["status"], skill["version"],
                    skill["created_at"]))
         c.execute("INSERT INTO skill_versions(id,skill_id,version,snapshot,created_at) "

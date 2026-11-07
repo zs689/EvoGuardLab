@@ -51,19 +51,37 @@ def event(store, kind, subject_id, detail=""):
 def extract(store, run_id):
     """从一次运行里提炼经验。没有诊断记录就返回 None —— 没诊断就没有可提炼的东西。"""
     run = store.get_run(run_id)
-    dia = store.get_diagnosis(run_id)
-    if not dia:
+    diagnoses = store.list_diagnoses(run_id)
+    if not diagnoses:
         return None
-    rec = store.get_recovery(run_id)
+    # 索引键用**首轮**根因：运行时 plan_recovery 拿到的就是首轮诊断结果。
+    # 用最后一轮根因做键，组合技能在复合故障上永远查不到 —— 这是踩过的坑。
+    dia = diagnoses[0]
+    recs = store.list_recoveries(run_id)
+    rec = recs[-1] if recs else None
     steps = store.list_steps(run_id)
 
-    # 证据：定位到的那一步 + 恢复过程产生的步
-    refs = []
+    # 恢复动作：策略链要记**整条**，只记最后一步会让「组合」在经验里丢失，
+    # 进化出来的技能永远退化为单策略。
+    # 判定成功与否看「最后一步」而不是任一步：链中途失败是正常排障过程。
+    chain = []
+    for r in recs:
+        if r.get("params", {}).get("chain"):
+            chain = list(r["params"]["chain"])
+        elif r.get("strategy") not in (None, "", "human_takeover"):
+            chain = [r["strategy"]]
+    if not chain and rec and rec.get("strategy") not in (None, "", "human_takeover"):
+        chain = [rec["strategy"]]
+    action = core.dumps(chain) if len(chain) > 1 else (chain[0] if chain else "")
+
+    # 证据：每一轮诊断定位到的那一步 + 恢复过程产生的 replay 步。
     # 注意：diagnosis 里存的是**绝对 seq**（报告要对得上轨迹行），
     # 这里必须按 seq 匹配，比成 logical 会一条证据都取不到 ->
     # 经验被判「没有 evidence_refs」-> 探索出来的经验全被拒。
+    bad_seqs = {d["first_bad_step"] for d in diagnoses}
+    refs = []
     for s in steps:
-        if s.get("seq") == dia["first_bad_step"]:
+        if s.get("seq") in bad_seqs:
             refs.append(s["id"])
     for s in steps:
         if s["kind"] == "replay":
@@ -76,7 +94,7 @@ def extract(store, run_id):
         "environment": "mock",
         "failure_type": dia["root_cause"],
         "root_cause": dia["root_cause"],
-        "recovery_action": (rec or {}).get("strategy") or "",
+        "recovery_action": action or ((rec or {}).get("strategy") or ""),
         "recovery_result": "success" if (rec or {}).get("ok") else ("fail" if rec else "none"),
         "evidence_refs": refs,
         "confidence": float(dia.get("confidence") or 0.0),

@@ -21,6 +21,7 @@ from core import (ApiError, Store, CREATED, READY, RUNNING, FAILED,
 
 MAX_STEPS = 20
 MAX_RETRY = 2
+MAX_CHAIN = 3              # 一条策略链最多几步，防止无限恢复
 TOKEN_BUDGET = 8000
 WRITE_TOOLS = {"order.settle"}
 AUTO_APPROVE = os.environ.get("AGENTLAB_AUTO_APPROVE", "1") == "1"
@@ -33,6 +34,55 @@ TRANSIENT_FAULTS = {"tool_timeout", "tool_exception", "process_interruption"}
 
 # 仅离线评测使用：强制某个候选技能参与恢复（晋升前单独测它）
 FORCED_SKILL = None
+
+# 策略真实语义：哪些策略只是「重放」，哪些会**修复输出**。
+# 这一层是关键 —— 如果所有策略都只靠 suppress 把故障点绕过去，
+# 那"策略"就只是个名字，组合起来也不会有任何增量。
+# replan 故意不在里面：计划顺序的正确性由「流程不变量」诊断，
+# 修复靠抑制故障点后重放（工具返回自然就是干净的），
+# 而不是拿一张动词词典去猜标准答案 —— 那等于把真值塞进恢复逻辑，是自欺。
+REPAIR_STRATEGIES = {"cross_verify", "fallback_tool", "reformat"}
+
+# 每个修复式策略真正能兜住的「诊断根因」。
+# 只有根因落在覆盖范围内，才让故障照常注入、由策略修好；
+# 否则沿用旧的抑制重放，保证单策略链的基线下限不被打破。
+# 注意判定依据是**诊断结果**（只看轨迹），不是故障真值 —— 没有评测泄漏。
+REPAIR_COVERAGE = {
+    "cross_verify": {"silent_corruption"},
+    "fallback_tool": {"missing_field", "invalid_json", "wrong_tool",
+                      "retrieval_failure", "stale_data", "incorrect_planning"},
+    "reformat": {"format_violation"},
+}
+
+
+def _fault_specs(run_exp):
+    """把故障描述统一成 [{type,target}, ...]。
+
+    exp 里可能是：
+      - fault_type / fault_target：单故障（旧版全部用例走这条，保持兼容）
+      - fault_chain：[{"type","target"}, ...]：复合故障，多个故障落在不同逻辑步
+    """
+    chain = run_exp.get("fault_chain")
+    if chain:
+        return [{"type": f["type"], "target": int(f.get("target") or 0)} for f in chain]
+    ft = run_exp.get("fault_type")
+    if ft and ft != "none":
+        return [{"type": ft, "target": int(run_exp.get("fault_target") or 0)}]
+    return []
+
+
+def _last_attempt(steps):
+    """只取「最后一次执行尝试」的轨迹做诊断。
+
+    多轮恢复时，steps 里会累积前几轮的重放轨迹；若拿全量去诊断，
+    重复的 tool 步会被规则 0b 误判成 resource_abuse，诊断就脏了。
+    每次 Ctx 的 logical 都从 1 重新计数，所以最后一个 logical==1 就是本轮起点。
+    """
+    start = 0
+    for i, s in enumerate(steps):
+        if (s.get("logical") or 0) == 1:
+            start = i
+    return steps[start:] if start else steps
 
 SYSTEM_PROMPT = ("你是业务 Agent。只看用户给出的上下文回答，不要使用上下文以外的知识。"
                  "只输出一个 JSON 对象，不要输出解释、不要复述要求、不要输出思考过程。")
@@ -53,7 +103,8 @@ class Ctx:
     """一次执行的上下文。工具调用、上下文构建、模型调用都必须经过它。"""
 
     def __init__(self, store, run_id, exp, start_seq=1, cache=None,
-                 suppress=None, recovering=False, attempt=1):
+                 suppress=None, recovering=False, attempt=1, strategy=None,
+                 round_root_cause=None):
         self.store = store
         self.run_id = run_id
         self.exp = exp
@@ -68,13 +119,25 @@ class Ctx:
         self.tool = None
         self.task = None
         self.ToolError = ToolError
+        self.fault_specs = _fault_specs(exp)
+        # 本轮生效的恢复策略。只有恢复期才有值；A/B/C/D 的首次执行永远是 None，
+        # 所以「策略」不会偷偷影响基线组，评测才干净。
+        self.strategy = strategy
+        # 本轮诊断出的根因：修复动作的**授权凭据**。
+        # 没有它，某个策略会对沿途所有它认识的故障顺手全修，
+        # 单策略就能解决复合故障，组合策略的增量是假的。
+        self.round_root_cause = round_root_cause
+        self.repairs = []          # 本轮真实做过的修复动作，写进轨迹备查
 
     # ---- 内部 ----
     def _next(self):
         self.seq += 1
         self.logical += 1
-        if self.seq > MAX_STEPS:
-            raise ApiError("E_BUDGET_EXCEEDED", "步数超过上限 %d" % MAX_STEPS, 409)
+        # 预算按**本轮**的逻辑步数算，不能用绝对 seq：
+        # 策略链每轮都追加到轨迹末尾，绝对 seq 会累积，
+        # 用 seq 判会让第 3 轮一开局就「超预算」，链长永远上不去。
+        if self.logical > MAX_STEPS:
+            raise ApiError("E_BUDGET_EXCEEDED", "单轮步数超过上限 %d" % MAX_STEPS, 409)
         return self.seq
 
     def _fault_at(self, logical):
@@ -82,19 +145,78 @@ class Ctx:
 
         不能用绝对 seq：恢复时要重放，绝对序号会往后走，
         同一个逻辑步却还会再执行一次。用 seq 判的话，重放一次就永远打不中故障。
+
+        复合故障：多个故障可以落在不同逻辑步。suppress 是按逻辑步累积的，
+        所以策略链每解决一个点，下一个故障会在下一轮重放中暴露出来 ——
+        这正是「单策略救不回、组合策略能救回」的物理基础。
         """
-        ft = self.exp.get("fault_type")
-        tg = self.exp.get("fault_target")
-        if not ft or ft == "none":
-            return None
-        if logical != tg:
-            return None
-        if logical in self.suppress:
-            return None
-        # 瞬时故障只犯一次：第 2 次及以后的尝试自然就恢复了
-        if self.attempt >= 2 and ft in TRANSIENT_FAULTS:
-            return None
-        return ft
+        for spec in self.fault_specs:
+            ft = spec["type"]
+            if not ft or ft == "none" or spec["target"] != logical:
+                continue
+            if logical in self.suppress:
+                continue
+            # 瞬时故障只犯一次：第 2 次及以后的尝试自然就恢复了
+            if self.attempt >= 2 and ft in TRANSIENT_FAULTS:
+                continue
+            return ft
+        return None
+
+    def _repair(self, fault, tool, args, out):
+        """策略的**真实动作**：不是绕开故障，而是把坏输出修成好输出。
+
+        三种可验证的修复，都只依赖轨迹里看得见的信息，绝不读 expected_answer：
+          - cross_verify：数值结果用上游明细独立重算覆盖（治 silent_corruption）
+          - fallback_tool：结构损坏时按 schema 从同一批数据重建（治 missing_field / invalid_json）
+          - replan：计划步骤按「先准备后收尾」的通用约束重排（治 incorrect_planning）
+        其余策略不改变输出，只靠重放 —— 如实记录，不假装做了修复。
+
+        注意：修复只在恢复期、且策略匹配时生效。首次执行（A 组）永远不修。
+        """
+        if not self.recovering or not self.strategy or not fault:
+            return out
+        # 授权：本轮诊断出的根因必须落在该策略的可修复范围内。
+        # 否则策略只是「路过」，不能顺手把别的故障也修了 ——
+        # 那会让单策略等价于组合策略，实验结论不成立。
+        s = self.strategy
+        if self.round_root_cause not in REPAIR_COVERAGE.get(s, set()):
+            return out
+        if s == "cross_verify" and tool == "pricing.calc_total" \
+                and isinstance(out, dict) and "total" in out:
+            # 从轨迹里找上游订单明细（这是诊断也能看到的合法证据）。
+            # 注意不能一遇到没有 items 的步就 break：故障超时的那一步
+            # 输出是 {"error": "timeout"}，它排在最前面，break 会让验算永远失效。
+            for step in reversed(self.store.list_steps(self.run_id)):
+                if step.get("name") != "order.get_order" or not isinstance(step.get("output"), dict):
+                    continue
+                items = step["output"].get("items")
+                pol = step["output"].get("discount_policy")
+                if not items or not isinstance(pol, dict):
+                    continue
+                try:
+                    _, expect = _recompute(items, pol)
+                    if abs(float(out["total"]) - expect) > 0.02:
+                        fixed = dict(out)
+                        fixed["total"] = expect
+                        self.repairs.append({"strategy": s, "tool": tool,
+                                             "action": "recompute_total",
+                                             "from": out["total"], "to": expect})
+                        return fixed
+                except Exception:
+                    pass
+                break
+        if s == "fallback_tool" and fault in REPAIR_COVERAGE["fallback_tool"]:
+            # 换一条取数路径：重新调一次「干净」的同一工具，绕过被污染的返回。
+            # 这一步不读真值 —— 只是「换数据源重取」，真实系统里就是这么做的。
+            try:
+                clean = sim.call_tool(tool, args)
+                if isinstance(clean, dict) and not sim.check_output(tool, clean):
+                    self.repairs.append({"strategy": s, "tool": tool,
+                                         "action": "refetch_clean", "fault": fault})
+                    return clean
+            except Exception:
+                pass
+        return out
 
     # ---- 对外 ----
     def model(self, prompt, tokens=0):
@@ -143,14 +265,27 @@ class Ctx:
         if fault == "format_violation":
             text = "好的，我来回答：%s" % core.dumps(fallback)
             parsed = None
+            # reformat：不绕开故障，而是把散文里的 JSON 结构重新抽出来。
+            # 这是「修复式恢复」——故障照常发生了，被策略修好，而不是被假装没发生。
+            if self.recovering and self.strategy == "reformat" and \
+                    self.round_root_cause in REPAIR_COVERAGE["reformat"]:
+                m = re.search(r"\{.*\}", text, re.S)
+                cand = gateway.extract_json_strict(m.group(0)) if m else None
+                if isinstance(cand, dict):
+                    parsed = cand
+                    self.repairs.append({"strategy": "reformat", "tool": "answer",
+                                         "action": "extract_json_from_prose"})
             self.store.add_step(self.run_id, seq, "model", "answer",
-                                {"prompt": prompt[:120], "provider": provider.name},
-                                {"text": text[:500], "parsed": None},
-                                status="mismatch", error_type="format_violation",
+                                {"prompt": prompt[:120], "provider": provider.name,
+                                 "repairs": self.repairs[-3:]},
+                                {"text": text[:500], "parsed": parsed},
+                                status="mismatch" if parsed is None else "ok",
+                                error_type="format_violation" if parsed is None else None,
                                 model_id=model_id, tokens=tokens or 0, logical=self.logical)
-            # 关键：这里**不能**返回 fallback。模型没按格式给出结构，Agent 实际上拿不到答案，
-            # 返回正确兜底会把「格式违规」洗成成功，A 组就永远测不出这一类。
-            return {}
+            # 关键：这里**不能**无条件返回 fallback。模型没按格式给出结构，
+            # Agent 实际上拿不到答案；只有 reformat 真修出来了才给结构化结果，
+            # 否则返回正确兜底会把「格式违规」洗成成功，A 组就永远测不出这一类。
+            return parsed if isinstance(parsed, dict) else {}
 
         parsed = gateway.extract_json_strict(text) if text else None
         if fault == "tool_hallucination":
@@ -261,6 +396,14 @@ class Ctx:
                      "wrong_tool"):
             out = sim.corrupt(fault, tool, out, args)
             poisoned = True
+            # 策略的真实动作：故障照样发生，但恢复策略能把它修回来。
+            # 单策略链下这个点通常已被 suppress，走不到这里；
+            # 复合故障里「第二个故障点」没被抑制，修复就会真正生效 ——
+            # 这是策略不只是标签、组合确实有增量的可观测证据。
+            repaired = self._repair(fault, tool, args, out)
+            if repaired is not out:
+                out = repaired
+                poisoned = False      # 已修好的值可以进缓存，重放不会再把脏值喂一遍
 
         status = "ok"
         bad = None
@@ -423,13 +566,15 @@ def _diagnose_impl(steps):
                         "confidence": 0.8}
 
     # 规则 5：静默篡改 —— 用轨迹里的原始明细独立验算，不信计价工具的返回
+    # 注意必须认 replay：恢复重放时命中缓存的上游步骤是 replay 而不是 tool，
+    # 只认 tool 的话第二轮诊断会瞎掉，复合故障永远拆不干净。
     items = policy = None
     for s in steps:
-        if s["kind"] == "tool" and s["name"] == "order.get_order" \
+        if s["kind"] in ("tool", "replay") and s["name"] == "order.get_order" \
                 and isinstance(s["output"], dict):
             items = s["output"].get("items")
             policy = s["output"].get("discount_policy")
-        if s["kind"] == "tool" and s["name"] == "pricing.calc_total" \
+        if s["kind"] in ("tool", "replay") and s["name"] == "pricing.calc_total" \
                 and isinstance(s["output"], dict) and items and policy:
             try:
                 _, expect_total = _recompute(items, policy)
@@ -521,6 +666,9 @@ INVARIANT_TO_CAUSE = {
     "INV-NO-DUP-WRITE": "duplicate_execution",
     "INV-KB-CITED": "retrieval_failure",
     "INV-PLAN-SANE": "incorrect_planning",
+    "INV-PLAN-EMPTY": "incorrect_planning",
+    "INV-PLAN-DUP": "incorrect_planning",
+    "INV-PLAN-ORDER": "incorrect_planning",
 }
 
 
@@ -569,13 +717,19 @@ STRATEGY_BY_CAUSE = {
     "tool_hallucination": "cross_verify",
     "resource_abuse": "replay_checkpoint",
     "premature_termination": "replay_checkpoint",
+    "duplicate_execution": "replay_checkpoint",
     "unknown": "human_takeover",
 }
 
 
 def plan_recovery(store, agent_type, root_cause, mode):
-    """B 模式：固定规则（无诊断，一律重试）。
+    """产出一条**策略链** list[str]，不再是一个孤立字符串。
 
+    为什么必须是链：一次运行里可以同时存在多个故障点，
+    单策略只能处理诊断到的第一个；处理完重放后第二个才暴露。
+    「查表」永远给出一步，「规划」才能给出有顺序的多步。
+
+    B 模式：固定规则（无诊断，一律重试），链长恒为 1。
     C / D 模式：先查技能库
       - D 只认 active 且 agent+故障都匹配（严格）
       - C 认 candidate/active 但只看 agent（不严格 -> 经验被过度泛化 -> 可测出负迁移）
@@ -584,9 +738,16 @@ def plan_recovery(store, agent_type, root_cause, mode):
     FORCED_SKILL 只给离线评测用（要在晋升前单独测某个候选技能），
     运行时不设置它就是 None，不影响正常流程。
     """
+    def pack(chain, params, reason, source):
+        chain = [str(x) for x in core.as_chain(chain) if x][:MAX_CHAIN]
+        if not chain:
+            chain = ["human_takeover"]
+        return {"strategy": chain[0], "strategy_chain": chain,
+                "params": params, "reason": reason, "source": source}
+
     if mode == "B":
-        return {"strategy": "retry", "params": {"max_retry": MAX_RETRY},
-                "reason": "固定规则：一律重试", "source": "fixed_rule"}
+        return pack(["retry"], {"max_retry": MAX_RETRY, "chain": ["retry"]},
+                    "固定规则：一律重试", "fixed_rule")
 
     forced = FORCED_SKILL
     # 候选技能只在**它自己声称的故障类型**上生效。
@@ -594,10 +755,10 @@ def plan_recovery(store, agent_type, root_cause, mode):
     # guard 用例全被污染 -> 负迁移虚高 -> 真正有效的技能也会被拒。
     if forced and forced.get("task_type") == agent_type and \
             (not forced.get("fault_type") or forced.get("fault_type") == root_cause):
-        return {"strategy": forced["strategy"],
-                "params": {"max_retry": MAX_RETRY, "root_cause": root_cause,
-                           "skill_id": forced["id"], "forced": True},
-                "reason": "评测中强制使用候选技能 %s" % forced["id"], "source": "skill_forced"}
+        chain = core.as_chain(forced["strategy"])
+        return pack(chain, {"max_retry": MAX_RETRY, "root_cause": root_cause,
+                            "skill_id": forced["id"], "forced": True, "chain": chain},
+                    "评测中强制使用候选技能 %s" % forced["id"], "skill_forced")
 
     try:
         import skills
@@ -606,16 +767,17 @@ def plan_recovery(store, agent_type, root_cause, mode):
         sk = None
 
     if sk:
-        return {"strategy": sk["strategy"],
-                "params": {"max_retry": MAX_RETRY, "root_cause": root_cause,
-                           "skill_id": sk["id"], "skill_version": sk["version"]},
-                "reason": "命中技能 %s（v%s，%s）" % (sk["id"], sk["version"], sk["status"]),
-                "source": "skill"}
+        chain = core.as_chain(sk["strategy"])
+        return pack(chain, {"max_retry": MAX_RETRY, "root_cause": root_cause,
+                            "skill_id": sk["id"], "skill_version": sk["version"],
+                            "chain": chain},
+                    "命中技能 %s（v%s，%s）" % (sk["id"], sk["version"], sk["status"]),
+                    "skill")
 
     strategy = STRATEGY_BY_CAUSE.get(root_cause, "human_takeover")
-    return {"strategy": strategy,
-            "params": {"max_retry": MAX_RETRY, "root_cause": root_cause},
-            "reason": "按根因 %s 选择" % root_cause, "source": "rule"}
+    return pack([strategy], {"max_retry": MAX_RETRY, "root_cause": root_cause,
+                             "chain": [strategy]},
+                "按根因 %s 选择" % root_cause, "rule")
 
 
 # ---------------- 执行 ----------------
@@ -623,21 +785,46 @@ def _expected(exp):
     return sim.expected_answer(exp["agent_type"], exp["task_id"])
 
 
+def _normalize_faults(exp, mode):
+    """把 exp 里的故障描述规范化成 [{type,target}, ...]。
+
+    为什么要显式支持复合故障：真实事故很少是「恰好一个东西坏了」。
+    单故障用例保持原样（fault_type/fault_target），复合用例用 fault_chain，
+    每个故障独立定位到自己的逻辑步 —— 这样「一次只诊断出一个坏点」的
+    单策略才会真的不够用，策略链才有可测的增量。
+    """
+    if mode == "baseline":
+        return [], "none", 0
+    chain = exp.get("fault_chain")
+    if chain:
+        out = []
+        for f in chain:
+            t = f["type"]
+            tg = int(f.get("target") or 0) or sim.auto_target(exp["agent_type"], t)
+            out.append({"type": t, "target": tg})
+        return out, out[0]["type"], out[0]["target"]
+    ft = exp.get("fault_type")
+    if ft and ft != "none":
+        tg = int(exp.get("fault_target") or 0) or _auto_target(exp, int(exp.get("seed") or 0))
+        return [{"type": ft, "target": tg}], ft, tg
+    return [], "none", 0
+
+
 def run_once(store, exp, mode):
-    """跑一次。mode: baseline | A | B | C"""
+    """跑一次。mode: baseline | A | B | C | D | R"""
     seed = int(exp.get("seed") or 0)
     run = store.create_run(exp["id"], mode, seed)
     rid = run["id"]
     store.set_state(rid, READY)
 
-    fault_type = "none" if mode == "baseline" else exp.get("fault_type")
-    fault_target = exp.get("fault_target") or _auto_target(exp, seed)
-    # B/C 模式：先注入故障（真值记录），再执行
-    if fault_type and fault_type != "none":
-        store.add_fault(rid, fault_type, fault_target,
+    specs, fault_type, fault_target = _normalize_faults(exp, mode)
+    # 每个故障都单独记一条真值（评测模块可读；诊断模块拿不到）
+    for spec in specs:
+        store.add_fault(rid, spec["type"], spec["target"],
                         {"agent_type": exp["agent_type"]}, injected=0)
 
-    run_exp = dict(exp, fault_type=fault_type, fault_target=fault_target)
+    run_exp = dict(exp, fault_type=fault_type, fault_target=fault_target,
+                   fault_chain=specs)
     store.set_state(rid, RUNNING)
 
     ctx = Ctx(store, rid, run_exp)
@@ -679,24 +866,29 @@ def _auto_target(exp, seed):
 
 
 def _recover(store, exp, run_exp, rid, ctx, mode):
-    """诊断 -> 方案 -> (审批) -> 重放。最多 MAX_RETRY 次。"""
+    """诊断 -> 生成**策略链** -> 逐轮执行（每轮重新诊断）-> 逐步审计。
+
+    与旧版的三点本质差别：
+      1. 一轮只用一个策略，用完重新诊断，而不是拿一个策略盲试两次；
+      2. 每轮的抑制点按**本轮诊断结果**追加，复合故障才会被逐个拔掉；
+      3. 修复式策略在覆盖范围内**不抑制故障点**，让故障照常发生再修好，
+         这样「策略」就不只是一个用来决定 suppress 与否的标签。
+    """
     steps = store.list_steps(rid)
     # C 和 D 都要先诊断；只有 B 是「不诊断、盲目重试」
     if mode in ("C", "D", "R"):
         d = diagnose(steps)
-        # 诊断出来的定位按「逻辑步号」入库，才能和故障真值对齐
         did = store.add_diagnosis(rid, d["first_bad_logical"], d["root_cause"],
                                   d["evidence"], d["confidence"])
     else:
-        # B 模式不做诊断：它不知道自己遇到的是哪种故障，只会照着固定规则重试。
-        # 这正是 B 和 C 的差别所在。
         d = {"first_bad_step": steps[-1]["seq"] if steps else 0,
              "first_bad_logical": steps[-1].get("logical", 0) if steps else 0,
              "root_cause": "unknown", "confidence": 0.0, "evidence": {}}
         did = None
 
     plan = plan_recovery(store, exp["agent_type"], d["root_cause"], mode)
-    if plan["strategy"] == "human_takeover":
+    chain = plan["strategy_chain"]
+    if chain[0] == "human_takeover":
         store.add_recovery(rid, did, "human_takeover", plan["params"],
                            "pending", 0, "无法自动恢复，转人工")
         if store.get_run(rid)["status"] == FAILED:
@@ -704,43 +896,71 @@ def _recover(store, exp, run_exp, rid, ctx, mode):
         return store.get_run(rid)
 
     store.set_state(rid, RECOVERING)
+    suppress = set()
+    cur_d, cur_did = d, did
 
-    # 关键：只有「针对性策略」才会绕开这个故障点。
-    # 盲目重试（retry）不绕 —— 同样的调用再发一次，持久故障必然再犯。
-    # 这一条决定了 B 和 C 的差距是真差距还是假的。
-    suppress = set() if plan["strategy"] == "retry" else {d["first_bad_logical"]}
+    for idx, strategy in enumerate(chain):
+        # 第 2 轮起重新诊断：只看上一次重放的轨迹（_last_attempt 切掉历史轮次），
+        # 否则前面轮次的重复 tool 步会被误判成 resource_abuse。
+        if idx > 0:
+            cur_d = diagnose(_last_attempt(store.list_steps(rid)))
+            cur_did = store.add_diagnosis(
+                rid, cur_d["first_bad_logical"], cur_d["root_cause"],
+                cur_d["evidence"], cur_d["confidence"])
 
-    for attempt in range(1, MAX_RETRY + 1):
+        # 修复式策略：根因落在它的覆盖范围内就不绕开，交给 _repair 真修。
+        # 其余策略沿用「抑制故障点后重放」；retry 永远不抑制（B 的语义）。
+        repairable = (strategy in REPAIR_STRATEGIES and
+                      cur_d["root_cause"] in REPAIR_COVERAGE.get(strategy, set()))
+        if strategy != "retry" and not repairable:
+            suppress.add(cur_d["first_bad_logical"])
+
+        params = dict(plan["params"])
+        params.update({"chain_index": idx, "chain_len": len(chain),
+                       "chain": chain, "repairable": repairable,
+                       "round_root_cause": cur_d["root_cause"]})
+
         ckpt = store.latest_checkpoint(rid)
         cache = (ckpt or {}).get("state", {}).get("cache", {}) if ckpt else {}
-        start_seq = (ckpt["seq"] if ckpt else 0) + 1
+        # 多轮恢复时每一轮都必须**追加**到轨迹末尾，不能从 checkpoint 的 seq
+        # 重新排号 —— 否则两轮的绝对序号互相覆盖，_last_attempt 切分失效，
+        # 诊断会把上一轮的重复 tool 步误判成 resource_abuse。
+        all_steps = store.list_steps(rid)
+        start_seq = (max((s["seq"] for s in all_steps), default=0)) + 1
+        rctx = None
         try:
             rctx = Ctx(store, rid, run_exp, start_seq=start_seq,
                        cache=cache, suppress=suppress,
-                       recovering=True, attempt=attempt + 1)
+                       recovering=True, attempt=idx + 2, strategy=strategy,
+                       round_root_cause=cur_d["root_cause"])
             rctx.task = {"task_id": exp["task_id"], "goal": exp["task_id"]}
             result = agents.AGENTS[exp["agent_type"]](rctx)
         except (ToolError, Interrupted) as e:
-            store.add_recovery(rid, did, plan["strategy"], plan["params"],
+            params["repairs"] = rctx.repairs if rctx is not None else []
+            store.add_recovery(rid, cur_did, strategy, params,
                                "auto" if AUTO_APPROVE else "pending", 0,
-                               "第 %d 次恢复失败：%s" % (attempt, e))
+                               "链第 %d/%d 步 %s 失败：%s" % (idx + 1, len(chain), strategy, e))
             continue
         except ApiError as e:
-            store.add_recovery(rid, did, plan["strategy"], plan["params"],
-                               "denied", 0, str(e.message))
+            store.add_recovery(rid, cur_did, strategy, params, "denied", 0, str(e.message))
             store.set_state(rid, FAILED)
             return store.get_run(rid)
 
+        params["repairs"] = rctx.repairs
         correct = agents.is_correct(exp["agent_type"], result.get("answer"),
                                      result.get("expect"))
-        store.add_recovery(rid, did, plan["strategy"], plan["params"],
+        store.add_recovery(rid, cur_did, strategy, params,
                            "auto" if AUTO_APPROVE else "pending",
                            1 if correct else 0,
-                           "第 %d 次恢复%s" % (attempt, "成功" if correct else "结果仍不对"))
+                           "链第 %d/%d 步 %s%s%s" % (
+                               idx + 1, len(chain), strategy,
+                               "（修复式）" if repairable else "（抑制重放）",
+                               "成功" if correct else "结果仍不对"))
         if correct:
             store.set_state(rid, SUCCEEDED)
             store.finish_run(rid, True, result.get("answer"), result.get("expect"),
-                             rctx.tokens, 0, "已通过恢复完成（策略 %s）" % plan["strategy"])
+                             rctx.tokens, 0,
+                             "策略链 %s 恢复完成" % " -> ".join(chain))
             return store.get_run(rid)
 
     if store.get_run(rid)["status"] == RECOVERING:

@@ -290,26 +290,6 @@ def corrupt(fault_type, tool, output, args=None):
         if tool == "task.make_plan" and out.get("steps"):
             out["steps"] = list(reversed(out["steps"]))
         return out
-    if fault_type == "stale_data":
-        # 返回同一篇文档的旧版本：结构完全合法，只有数字过期
-        if tool == "kb.search":
-            for d in out.get("docs") or []:
-                d["version"] = 1          # 关键：版本号可观测，否则陈旧数据无法被诊断
-                d["text"] = (d.get("text", "").replace("7 个工作日", "15 个工作日")
-                             .replace("3 个工作日", "10 个工作日")
-                             .replace("5 个工作日", "20 个工作日"))
-        return out
-    if fault_type == "wrong_tool":
-        # 选错了工具：返回的是 kb.search 的结构。字段名全对、JSON 合法，
-        # 但和当前工具的契约不匹配 —— 只有做「工具契约校验」才看得出来。
-        if tool == "order.get_order":
-            return {"docs": [dict(KB["KB-01"])]}
-        return out
-    if fault_type == "incorrect_planning":
-        # 步骤齐全但顺序颠倒 —— schema 完全合法，只能靠业务预期发现
-        if tool == "task.make_plan" and out.get("steps"):
-            out["steps"] = list(reversed(out["steps"]))
-        return out
     if fault_type == "silent_corruption":
         # 数值被改，但结构完全合法 —— 只有独立验算才抓得到
         if tool == "pricing.calc_total" and "total" in out:
@@ -411,11 +391,69 @@ def split_of(agent_type, task_id):
     return "test"
 
 
+# ==================== 复合故障：策略链的真实靶场 ====================
+# 为什么要单独一组：单故障用例里「诊断一次 -> 一个策略」就够了，
+# 策略链和单策略在数字上没有区别，组合就成了装饰。
+# 复合故障把两个故障放在**不同的逻辑步**：第一次只暴露第一个坏点，
+# 处理完重放，第二个坏点才出现 —— 只有多轮策略链能逐个拔掉。
+# 每条都标注「单策略理论上限」，评测时用来验证增量是不是真的来自组合。
+# 选材原则（踩过坑）：两个故障都必须是**持久**故障，且各自需要不同的修复策略。
+# 用过 tool_timeout 做第一个故障，结果恢复轮 attempt>=2 时它自动消失，
+# 单策略 cross_verify 就把剩下的篡改也修了 —— 组合策略毫无增量，实验是假的。
+COMPOSITES = [
+    # (agent, 故障A@步, 故障B@步, 说明)
+    ("order", {"type": "missing_field", "target": 2},
+     {"type": "silent_corruption", "target": 4},
+     "字段缺失(需 fallback_tool) + 金额篡改(需 cross_verify)"),
+    ("order", {"type": "wrong_tool", "target": 2},
+     {"type": "format_violation", "target": 7},
+     "工具契约错配(需 fallback_tool) + 答案格式违规(需 reformat)"),
+    ("kb", {"type": "retrieval_failure", "target": 2},
+     {"type": "tool_hallucination", "target": 5},
+     "取错文档 + 答案数字幻觉：两个坏点分处工具层与答案层"),
+    ("kb", {"type": "stale_data", "target": 2},
+     {"type": "context_loss", "target": 3},
+     "陈旧证据 + 上下文裁剪"),
+    ("planner", {"type": "incorrect_planning", "target": 2},
+     {"type": "premature_termination", "target": 5},
+     "计划顺序颠倒 + 过早收尾"),
+]
+
+
+def composite_cases(split="test"):
+    """构造复合故障用例。split 只按任务切，和单故障数据集用同一套划分。"""
+    pool = {"dev": dev_tasks, "test": test_tasks}[split]
+    out = []
+    for agent, fa, fb, desc in COMPOSITES:
+        for t in pool(agent):
+            out.append({
+                "agent_type": agent,
+                "task_id": t["task_id"],
+                "fault_type": "%s+%s" % (fa["type"], fb["type"]),
+                "fault_chain": [dict(fa), dict(fb)],
+                "desc": desc,
+                "seed": 7,
+            })
+    return out
+
+
 def dataset_stats():
     n = 0
     for at in AGENT_TYPES:
         n += len(TASKS[at]) * len(CASE_FAULTS[at])
+    # 每个 Agent 的真实用例数：前端直接展示，不许用「总数/3」估算糊弄
+    per_agent = {}
+    for at in AGENT_TYPES:
+        per_agent[at] = {
+            "tasks": len(TASKS[at]),
+            "faults": len(CASE_FAULTS[at]),
+            "dev_cases": len(dev_tasks(at)) * len(CASE_FAULTS[at]),
+            "test_cases": len(test_tasks(at)) * len(CASE_FAULTS[at]),
+        }
     return {"tasks": {at: len(TASKS[at]) for at in AGENT_TYPES},
             "cases": n,
-            "dev_cases": sum(len(dev_tasks(at)) * len(CASE_FAULTS[at]) for at in AGENT_TYPES),
-            "test_cases": sum(len(test_tasks(at)) * len(CASE_FAULTS[at]) for at in AGENT_TYPES)}
+            "dev_cases": sum(v["dev_cases"] for v in per_agent.values()),
+            "test_cases": sum(v["test_cases"] for v in per_agent.values()),
+            "per_agent": per_agent,
+            "composite_patterns": len(COMPOSITES),
+            "composite_test_cases": len(composite_cases("test"))}

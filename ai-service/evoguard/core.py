@@ -76,6 +76,41 @@ def loads(text, default=None):
         return default
 
 
+def as_chain(value):
+    """把「策略」统一成 list[str]。
+
+    兼容四种历史形态：
+      - ["retry", "cross_verify"]   组合技能（内存里）
+      - '["retry","cross_verify"]'  组合技能落库后的 JSON 字符串
+      - "cross_verify"              旧版单策略
+      - '"cross_verify"'           被 dumps 过的单策略
+    为什么需要它：策略从单值升级成序列后，DB 里既有旧数据也有新数据，
+    读取侧不做归一化，链就会变成逐字符迭代，恢复直接跑飞。
+    """
+    if isinstance(value, (list, tuple)):
+        return [str(x) for x in value if str(x).strip()]
+    if not isinstance(value, str):
+        return []
+    t = value.strip()
+    if not t:
+        return []
+    if t.startswith("["):
+        try:
+            v = json.loads(t)
+            if isinstance(v, list):
+                return [str(x) for x in v if str(x).strip()]
+        except Exception:
+            pass
+    if t.startswith('"') and t.endswith('"'):
+        try:
+            v = json.loads(t)
+            if isinstance(v, str):
+                return [v] if v.strip() else []
+        except Exception:
+            pass
+    return [t]
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS experiments(
   id TEXT PRIMARY KEY, name TEXT, agent_type TEXT, task_id TEXT,
@@ -123,10 +158,15 @@ CREATE INDEX IF NOT EXISTS idx_faults_run ON faults(run_id);
 class Store:
     """所有持久化入口。每个方法自己开连接，避免多线程共享连接的问题。"""
 
-    def __init__(self, path=None):
+    def __init__(self, path=None, fast=False):
         self.path = path or DB_PATH or os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "agentlab.db")
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        # fast=True 只用于**离线评测**：数据是跑完就丢的实验库，
+        # 关掉 fsync 能把上千次 run 的耗时压下来一个数量级。
+        # 生产库必须保持默认（崩溃不丢事务），这个开关不能默认打开。
+        self.fast = fast
+        self._fast_conn = None
         self.init()
 
     @contextlib.contextmanager
@@ -135,14 +175,39 @@ class Store:
 
         注意：sqlite3 的 `with conn:` 只负责提交事务，**不会关连接**。
         之前直接用它会漏一堆文件句柄（测试里刷满了 ResourceWarning）。
+
+        fast 模式下复用一条连接：离线评测是单线程、数据可丢，
+        上千次 run × 每 run 十几次写，开/关连接本身就是主要开销。
         """
+        if self.fast and self._fast_conn is not None:
+            yield self._fast_conn
+            self._fast_conn.commit()
+            return
         c = sqlite3.connect(self.path, timeout=10)
         c.row_factory = sqlite3.Row
+        if self.fast:
+            c.execute("PRAGMA synchronous=OFF")
+            c.execute("PRAGMA journal_mode=MEMORY")
+            self._fast_conn = c
+            try:
+                yield c
+                c.commit()
+            finally:
+                pass                # 评测结束由 close() 统一关
+            return
         try:
             yield c
             c.commit()
         finally:
             c.close()
+
+    def close(self):
+        if self._fast_conn is not None:
+            try:
+                self._fast_conn.commit()
+            finally:
+                self._fast_conn.close()
+                self._fast_conn = None
 
     def init(self):
         with self.conn() as c:
@@ -317,6 +382,23 @@ class Store:
         d["evidence"] = loads(d["evidence"], {})
         return d
 
+    def list_diagnoses(self, run_id):
+        """策略链每轮会写一条诊断，按时间顺序全取出来。
+
+        经验索引必须用**第一条**：复合故障运行时第一次查技能用的就是首轮根因，
+        若拿最后一轮根因当键，学到的组合技能永远匹配不上。
+        """
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT * FROM diagnoses WHERE run_id=? ORDER BY created_at, rowid", (run_id,)
+            ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["evidence"] = loads(d["evidence"], {})
+            out.append(d)
+        return out
+
     def add_recovery(self, run_id, diagnosis_id, strategy, params, approval, ok, detail):
         with self.conn() as c:
             c.execute("INSERT INTO recoveries(id,run_id,diagnosis_id,strategy,params,approval,"
@@ -325,10 +407,27 @@ class Store:
                        approval, 1 if ok else 0, detail, now()))
 
     def get_recovery(self, run_id):
+        # rowid 兜底：策略链几步可能落在同一毫秒，只按 created_at 排序
+        # 会随机取到链中间的失败步，把成功的经验误判成 fail。
         with self.conn() as c:
-            r = c.execute("SELECT * FROM recoveries WHERE run_id=? ORDER BY created_at DESC LIMIT 1",
-                          (run_id,)).fetchone()
+            r = c.execute(
+                "SELECT * FROM recoveries WHERE run_id=? "
+                "ORDER BY created_at DESC, rowid DESC LIMIT 1", (run_id,)
+            ).fetchone()
         return dict(r) if r else None
+
+    def list_recoveries(self, run_id):
+        """策略链会写多条恢复记录，经验提炼要能读到**整条链**，不能只看最后一条。"""
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT * FROM recoveries WHERE run_id=? ORDER BY created_at, rowid", (run_id,)
+            ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["params"] = loads(d["params"], {})
+            out.append(d)
+        return out
 
     # ---------- 评测 ----------
     def save_eval(self, experiment_id, metrics):

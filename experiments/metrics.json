@@ -1,0 +1,1803 @@
+{
+  "generated_at": 1794038932.301,
+  "dataset": {
+    "tasks": {
+      "order": 8,
+      "kb": 8,
+      "planner": 8
+    },
+    "cases": 272,
+    "dev_cases": 68,
+    "test_cases": 204,
+    "per_agent": {
+      "order": {
+        "tasks": 8,
+        "faults": 12,
+        "dev_cases": 24,
+        "test_cases": 72
+      },
+      "kb": {
+        "tasks": 8,
+        "faults": 11,
+        "dev_cases": 22,
+        "test_cases": 66
+      },
+      "planner": {
+        "tasks": 8,
+        "faults": 11,
+        "dev_cases": 22,
+        "test_cases": 66
+      }
+    },
+    "composite_patterns": 5,
+    "composite_test_cases": 30
+  },
+  "closed_loop": {
+    "训练集用例": 78,
+    "其中复合故障用例": 10,
+    "探索恢复成功": 14,
+    "其中靠策略链救回": 10,
+    "成功提炼的经验": 77
+  },
+  "candidates": 77,
+  "promoted": 7,
+  "chain_skills": 10,
+  "four_groups": {
+    "n": 204,
+    "rates": {
+      "A": 0.0,
+      "B": 26.5,
+      "C": 100.0,
+      "D": 100.0
+    },
+    "neg_transfer_rate": 0.0
+  },
+  "composite": {
+    "n": 30,
+    "rates": {
+      "A": 0.0,
+      "single": 0.0,
+      "chain": 100.0,
+      "D": 100.0
+    },
+    "counts": {
+      "A": 0,
+      "single": 0,
+      "chain": 30,
+      "D": 30
+    },
+    "best_chain": [
+      "fallback_tool",
+      "cross_verify"
+    ],
+    "single_pool": [
+      "retry",
+      "cross_verify",
+      "fallback_tool",
+      "reformat",
+      "replay_checkpoint"
+    ]
+  },
+  "verdicts": [
+    {
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "agent": "order",
+      "fault": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "agent": "order",
+      "fault": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "agent": "order",
+      "fault": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "agent": "order",
+      "fault": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 silent_corruption 时按序执行 cross_verify",
+      "agent": "order",
+      "fault": "silent_corruption",
+      "chain": [
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "agent": "order",
+      "fault": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "agent": "order",
+      "fault": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "agent": "order",
+      "fault": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "agent": "order",
+      "fault": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 wrong_tool 时按序执行 fallback_tool",
+      "agent": "order",
+      "fault": "wrong_tool",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "agent": "order",
+      "fault": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "agent": "order",
+      "fault": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "agent": "order",
+      "fault": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "agent": "order",
+      "fault": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "agent": "order",
+      "fault": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "agent": "order",
+      "fault": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 silent_corruption 时按序执行 cross_verify",
+      "agent": "order",
+      "fault": "silent_corruption",
+      "chain": [
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "agent": "order",
+      "fault": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "agent": "order",
+      "fault": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "agent": "order",
+      "fault": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "agent": "order",
+      "fault": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 wrong_tool 时按序执行 fallback_tool",
+      "agent": "order",
+      "fault": "wrong_tool",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "agent": "order",
+      "fault": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "agent": "order",
+      "fault": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "agent": "kb",
+      "fault": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "agent": "kb",
+      "fault": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "agent": "kb",
+      "fault": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "agent": "kb",
+      "fault": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "agent": "kb",
+      "fault": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "agent": "kb",
+      "fault": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "agent": "kb",
+      "fault": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 stale_data 时按序执行 cross_verify",
+      "agent": "kb",
+      "fault": "stale_data",
+      "chain": [
+        "cross_verify"
+      ],
+      "gain_pp": 100.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "PROMOTE"
+    },
+    {
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "agent": "kb",
+      "fault": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "agent": "kb",
+      "fault": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "agent": "kb",
+      "fault": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "agent": "kb",
+      "fault": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "agent": "kb",
+      "fault": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "agent": "kb",
+      "fault": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "agent": "kb",
+      "fault": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "agent": "kb",
+      "fault": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "agent": "kb",
+      "fault": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "agent": "kb",
+      "fault": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 stale_data 时按序执行 cross_verify",
+      "agent": "kb",
+      "fault": "stale_data",
+      "chain": [
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "agent": "kb",
+      "fault": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "agent": "kb",
+      "fault": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "agent": "kb",
+      "fault": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "agent": "planner",
+      "fault": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "agent": "planner",
+      "fault": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "agent": "planner",
+      "fault": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "agent": "planner",
+      "fault": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "agent": "planner",
+      "fault": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "agent": "planner",
+      "fault": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "agent": "planner",
+      "fault": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 incorrect_planning 时按序执行 cross_verify",
+      "agent": "planner",
+      "fault": "incorrect_planning",
+      "chain": [
+        "cross_verify"
+      ],
+      "gain_pp": 100.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "PROMOTE"
+    },
+    {
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "agent": "planner",
+      "fault": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "agent": "planner",
+      "fault": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "agent": "planner",
+      "fault": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "agent": "planner",
+      "fault": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "agent": "planner",
+      "fault": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "agent": "planner",
+      "fault": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "agent": "planner",
+      "fault": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "agent": "planner",
+      "fault": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "agent": "planner",
+      "fault": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "agent": "planner",
+      "fault": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "agent": "planner",
+      "fault": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "agent": "planner",
+      "fault": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "agent": "planner",
+      "fault": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 missing_field 时按序执行 fallback_tool -> cross_verify",
+      "agent": "order",
+      "fault": "missing_field+silent_corruption",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "gain_pp": 100.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "PROMOTE"
+    },
+    {
+      "name": "遇到 missing_field 时按序执行 fallback_tool -> cross_verify",
+      "agent": "order",
+      "fault": "missing_field+silent_corruption",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 wrong_tool 时按序执行 fallback_tool -> cross_verify",
+      "agent": "order",
+      "fault": "wrong_tool+format_violation",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "gain_pp": 100.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "PROMOTE"
+    },
+    {
+      "name": "遇到 wrong_tool 时按序执行 fallback_tool -> cross_verify",
+      "agent": "order",
+      "fault": "wrong_tool+format_violation",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool -> cross_verify",
+      "agent": "kb",
+      "fault": "retrieval_failure+tool_hallucination",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "gain_pp": 100.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "PROMOTE"
+    },
+    {
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool -> cross_verify",
+      "agent": "kb",
+      "fault": "retrieval_failure+tool_hallucination",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 context_loss 时按序执行 fallback_tool -> cross_verify",
+      "agent": "kb",
+      "fault": "stale_data+context_loss",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "gain_pp": 100.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "PROMOTE"
+    },
+    {
+      "name": "遇到 context_loss 时按序执行 fallback_tool -> cross_verify",
+      "agent": "kb",
+      "fault": "stale_data+context_loss",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    },
+    {
+      "name": "遇到 premature_termination 时按序执行 fallback_tool -> cross_verify",
+      "agent": "planner",
+      "fault": "incorrect_planning+premature_termination",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "gain_pp": 100.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "PROMOTE"
+    },
+    {
+      "name": "遇到 premature_termination 时按序执行 fallback_tool -> cross_verify",
+      "agent": "planner",
+      "fault": "incorrect_planning+premature_termination",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "gain_pp": 0.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "REJECT"
+    }
+  ],
+  "skills": [
+    {
+      "id": "sk_197089d986",
+      "name": "遇到 premature_termination 时按序执行 fallback_tool -> cross_verify",
+      "task_type": "planner",
+      "fault_type": "premature_termination",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_48984aa8ce",
+      "name": "遇到 premature_termination 时按序执行 fallback_tool -> cross_verify",
+      "task_type": "planner",
+      "fault_type": "premature_termination",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "status": "active",
+      "version": 2
+    },
+    {
+      "id": "sk_63dd1fff0d",
+      "name": "遇到 context_loss 时按序执行 fallback_tool -> cross_verify",
+      "task_type": "kb",
+      "fault_type": "context_loss",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_37b2ecabd0",
+      "name": "遇到 context_loss 时按序执行 fallback_tool -> cross_verify",
+      "task_type": "kb",
+      "fault_type": "context_loss",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "status": "active",
+      "version": 2
+    },
+    {
+      "id": "sk_5bf8710a3b",
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool -> cross_verify",
+      "task_type": "kb",
+      "fault_type": "retrieval_failure",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_085cda83bc",
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool -> cross_verify",
+      "task_type": "kb",
+      "fault_type": "retrieval_failure",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "status": "active",
+      "version": 2
+    },
+    {
+      "id": "sk_3fe311f0cd",
+      "name": "遇到 wrong_tool 时按序执行 fallback_tool -> cross_verify",
+      "task_type": "order",
+      "fault_type": "wrong_tool",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_ebcf162f7e",
+      "name": "遇到 wrong_tool 时按序执行 fallback_tool -> cross_verify",
+      "task_type": "order",
+      "fault_type": "wrong_tool",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "status": "active",
+      "version": 2
+    },
+    {
+      "id": "sk_daa6433b4e",
+      "name": "遇到 missing_field 时按序执行 fallback_tool -> cross_verify",
+      "task_type": "order",
+      "fault_type": "missing_field",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_f685024466",
+      "name": "遇到 missing_field 时按序执行 fallback_tool -> cross_verify",
+      "task_type": "order",
+      "fault_type": "missing_field",
+      "chain": [
+        "fallback_tool",
+        "cross_verify"
+      ],
+      "status": "active",
+      "version": 2
+    },
+    {
+      "id": "sk_65dc5bc754",
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "task_type": "planner",
+      "fault_type": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_cccb56639e",
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "task_type": "planner",
+      "fault_type": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_7bb98cec09",
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "task_type": "planner",
+      "fault_type": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_a28688d566",
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "task_type": "planner",
+      "fault_type": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_c8d044b466",
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "task_type": "planner",
+      "fault_type": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_666381092c",
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "task_type": "planner",
+      "fault_type": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_9c180abdf5",
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "task_type": "planner",
+      "fault_type": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_5e800addcf",
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "task_type": "planner",
+      "fault_type": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_37f58aa10b",
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "task_type": "planner",
+      "fault_type": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_03e23e028c",
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "task_type": "planner",
+      "fault_type": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_af1aaba1c2",
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "task_type": "planner",
+      "fault_type": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_9685bfe263",
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "task_type": "planner",
+      "fault_type": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_5e0ef8c4dd",
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "task_type": "planner",
+      "fault_type": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_026bb19fdc",
+      "name": "遇到 incorrect_planning 时按序执行 cross_verify",
+      "task_type": "planner",
+      "fault_type": "incorrect_planning",
+      "chain": [
+        "cross_verify"
+      ],
+      "status": "active",
+      "version": 2
+    },
+    {
+      "id": "sk_3ab6386874",
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "task_type": "planner",
+      "fault_type": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_9936b4e107",
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "task_type": "planner",
+      "fault_type": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_ef1464989a",
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "task_type": "planner",
+      "fault_type": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_d8e33007cb",
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "task_type": "planner",
+      "fault_type": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_1d2ffdc090",
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "task_type": "planner",
+      "fault_type": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_918d76e33d",
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "task_type": "planner",
+      "fault_type": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_b9bd6493b8",
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "task_type": "planner",
+      "fault_type": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_099b15ba3f",
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "task_type": "kb",
+      "fault_type": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_3de41c7300",
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "task_type": "kb",
+      "fault_type": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_7ea228ef7b",
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "task_type": "kb",
+      "fault_type": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_2de88d8fc9",
+      "name": "遇到 stale_data 时按序执行 cross_verify",
+      "task_type": "kb",
+      "fault_type": "stale_data",
+      "chain": [
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_7a1272bcaa",
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "task_type": "kb",
+      "fault_type": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_b92cab3b6e",
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "task_type": "kb",
+      "fault_type": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_93459e1870",
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "task_type": "kb",
+      "fault_type": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_1e6e95c157",
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "task_type": "kb",
+      "fault_type": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_2c95bcd0f7",
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "task_type": "kb",
+      "fault_type": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_5e33d41092",
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "task_type": "kb",
+      "fault_type": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_d0393ad820",
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "task_type": "kb",
+      "fault_type": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_30a4edfe0a",
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "task_type": "kb",
+      "fault_type": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_3f7a84c92f",
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "task_type": "kb",
+      "fault_type": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_6d36520ca2",
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "task_type": "kb",
+      "fault_type": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_c7ac9ad897",
+      "name": "遇到 stale_data 时按序执行 cross_verify",
+      "task_type": "kb",
+      "fault_type": "stale_data",
+      "chain": [
+        "cross_verify"
+      ],
+      "status": "active",
+      "version": 2
+    },
+    {
+      "id": "sk_bb6cb45ccc",
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "task_type": "kb",
+      "fault_type": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_7efcf84a8f",
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "task_type": "kb",
+      "fault_type": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_67f4b3640c",
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "task_type": "kb",
+      "fault_type": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_e4e5de9ec2",
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "task_type": "kb",
+      "fault_type": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_f5383bf8a1",
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "task_type": "kb",
+      "fault_type": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_2565509aab",
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "task_type": "kb",
+      "fault_type": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_62037df2e3",
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "task_type": "kb",
+      "fault_type": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_fcc60f8a3b",
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "task_type": "order",
+      "fault_type": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_817bcf6ad0",
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "task_type": "order",
+      "fault_type": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_531910e8a3",
+      "name": "遇到 wrong_tool 时按序执行 fallback_tool",
+      "task_type": "order",
+      "fault_type": "wrong_tool",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_d9cfad6256",
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "task_type": "order",
+      "fault_type": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_a061f79401",
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "task_type": "order",
+      "fault_type": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_99591ff43e",
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "task_type": "order",
+      "fault_type": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_d0197ab154",
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "task_type": "order",
+      "fault_type": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_fa1d05f53b",
+      "name": "遇到 silent_corruption 时按序执行 cross_verify",
+      "task_type": "order",
+      "fault_type": "silent_corruption",
+      "chain": [
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_6c78e1ffa6",
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "task_type": "order",
+      "fault_type": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_3ba71f6b96",
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "task_type": "order",
+      "fault_type": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_903c832868",
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "task_type": "order",
+      "fault_type": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_bdb04e3616",
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "task_type": "order",
+      "fault_type": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_fa3311788d",
+      "name": "遇到 premature_termination 时按序执行 replay_checkpoint",
+      "task_type": "order",
+      "fault_type": "premature_termination",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_7b0d367c11",
+      "name": "遇到 tool_hallucination 时按序执行 cross_verify",
+      "task_type": "order",
+      "fault_type": "tool_hallucination",
+      "chain": [
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_c7f7a2544d",
+      "name": "遇到 wrong_tool 时按序执行 fallback_tool",
+      "task_type": "order",
+      "fault_type": "wrong_tool",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_9c59e3dcdc",
+      "name": "遇到 format_violation 时按序执行 reformat",
+      "task_type": "order",
+      "fault_type": "format_violation",
+      "chain": [
+        "reformat"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_1535c47fab",
+      "name": "遇到 process_interruption 时按序执行 replay_checkpoint",
+      "task_type": "order",
+      "fault_type": "process_interruption",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_139141e17f",
+      "name": "遇到 context_loss 时按序执行 replay_checkpoint",
+      "task_type": "order",
+      "fault_type": "context_loss",
+      "chain": [
+        "replay_checkpoint"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_e3344dc7af",
+      "name": "遇到 retrieval_failure 时按序执行 fallback_tool",
+      "task_type": "order",
+      "fault_type": "retrieval_failure",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_608f1ee9ce",
+      "name": "遇到 silent_corruption 时按序执行 cross_verify",
+      "task_type": "order",
+      "fault_type": "silent_corruption",
+      "chain": [
+        "cross_verify"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_1fd1f4f64c",
+      "name": "遇到 missing_field 时按序执行 fallback_tool",
+      "task_type": "order",
+      "fault_type": "missing_field",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_170adb1d04",
+      "name": "遇到 invalid_json 时按序执行 fallback_tool",
+      "task_type": "order",
+      "fault_type": "invalid_json",
+      "chain": [
+        "fallback_tool"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_d189e85885",
+      "name": "遇到 tool_exception 时按序执行 retry",
+      "task_type": "order",
+      "fault_type": "tool_exception",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    },
+    {
+      "id": "sk_ab06d221e3",
+      "name": "遇到 tool_timeout 时按序执行 retry",
+      "task_type": "order",
+      "fault_type": "tool_timeout",
+      "chain": [
+        "retry"
+      ],
+      "status": "candidate",
+      "version": 1
+    }
+  ],
+  "experiences": {
+    "rejected": 1,
+    "validated": 77
+  }
+}
