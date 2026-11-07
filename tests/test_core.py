@@ -170,7 +170,7 @@ class TestFourGroups(unittest.TestCase):
 
     def test_gap(self):
         s = fresh()
-        cases = evaluate.build_cases()
+        cases = evaluate.build_cases(limit=48)
         res = [evaluate.run_case(s, c) for c in cases]
         m = evaluate.aggregate(s, res)
         self.assertEqual(m["rate_A"], 0.0, "A 组必须基本全错，否则故障没注入")

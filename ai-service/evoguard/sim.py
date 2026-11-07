@@ -8,6 +8,7 @@
 """
 import copy
 import json
+import re
 import time
 
 # ---------------- 模拟数据 ----------------
@@ -245,23 +246,15 @@ def corrupt(fault_type, tool, output, args=None):
             del out["steps"]
         return out
     if fault_type == "stale_data":
-        # 返回同一篇文档的旧版本：结构完全合法，只有版本号和数字过期。
-        #
-        # 两个坑都踩过：
-        #   1. 版本号必须写进去，否则「陈旧」根本不可观测，诊断只能靠猜
-        #   2. 数字替换必须**一次性**做，不能链式 replace ——
-        #      7->15 之后，"15 个工作日"里的 "5 个工作日" 又被 5->20 命中，变成 120
+        # 返回同一篇文档的旧版本：结构合法，只有版本号和数字过期。
+        # 用「所有数字 +3」做通用变形 —— 写死短语替换会漏掉新加的文档，
+        # 而且链式 replace 会把 7→15 的 15 再被 5→20 命中，改成 120。
         if tool == "kb.search":
+            def bump(m):
+                return str(int(m.group(0)) + 3)
             for d in out.get("docs") or []:
                 d["version"] = 1
-                text = d.get("text", "")
-                for old, new_val in (("7 个工作日", "15 个工作日"),
-                                     ("3 个工作日", "10 个工作日"),
-                                     ("5 个工作日", "20 个工作日")):
-                    if old in text:
-                        text = text.replace(old, new_val)
-                        break
-                d["text"] = text
+                d["text"] = re.sub(r"\d+", bump, d.get("text", ""))
         return out
     if fault_type == "incorrect_planning":
         # 步骤齐全但顺序颠倒 —— schema 完全合法，只能靠业务预期发现
@@ -320,3 +313,74 @@ def kb_answer_extract(docs):
     if not docs:
         return ""
     return " ".join(d.get("text", "") for d in docs)
+
+
+# ==================== 数据集扩充（目标 >=180 个可复现实例） ====================
+# 为什么要扩：48 个样本上的「提升 X 个百分点」在统计上毫无意义。
+# 扩充方式保持「真值可独立计算」，不引入任何人工标注。
+
+_EXTRA_ORDERS = [
+    ([("P-7", 66.0, 4), ("P-8", 210.0, 1)], {"threshold": 400.0, "rate": 0.06}),
+    ([("P-9", 15.0, 20)], {"threshold": 300.0, "rate": 0.03}),
+    ([("P-10", 1280.0, 2)], {"threshold": 2000.0, "rate": 0.12}),
+    ([("P-11", 88.0, 6), ("P-12", 9.5, 10)], {"threshold": 500.0, "rate": 0.07}),
+    ([("P-13", 520.0, 3)], {"threshold": 1500.0, "rate": 0.09}),
+]
+for _i, (_items, _pol) in enumerate(_EXTRA_ORDERS, start=4):
+    _oid = "A100%d" % _i
+    ORDERS[_oid] = {"order_id": _oid, "customer": "客户%d" % _i, "status": "待结算",
+                    "items": [{"sku": s_, "name": "商品" + s_, "price": p_, "qty": q_}
+                              for s_, p_, q_ in _items],
+                    "discount_policy": _pol}
+    TASKS["order"].append({"task_id": _oid, "goal": "结算订单 %s" % _oid})
+
+_EXTRA_KB = [
+    ("KB-04", "保修政策", "整机保修 12 个月，主要部件保修 24 个月。", "保修多久", "12 个月"),
+    ("KB-05", "包邮规则", "单笔订单满 99 元包邮，偏远地区加收 8 元。", "包邮门槛", "99 元"),
+    ("KB-06", "专票申请", "默认开具电子普通发票，专票需在 3 个工作日内申请。", "专票怎么开", "3 个工作日"),
+    ("KB-07", "换货条件", "收到货 15 天内可换货，需保留原包装。", "换货期限", "15 天"),
+    ("KB-08", "会员权益", "银卡会员每月 2 张免运费券，金卡每月 5 张。", "免运费券几张", "2 张"),
+]
+for _doc, _title, _text, _q, _must in _EXTRA_KB:
+    KB[_doc] = {"doc_id": _doc, "title": _title, "text": _text, "version": 2}
+    KB_QUESTIONS[_q] = {"query": _q, "must": _must, "doc": _doc}
+    TASKS["kb"].append({"task_id": _q, "goal": _q})
+
+_EXTRA_PLANS = [
+    ("refund", ["核对订单", "确认退货原因", "生成退货单", "财务退款"]),
+    ("procurement", ["汇总需求", "三家比价", "提交审批", "下单验收"]),
+    ("incident", ["确认故障范围", "止血", "定位根因", "复盘归档"]),
+    ("audit", ["准备资料", "抽样检查", "出具报告", "整改跟踪"]),
+    ("training", ["确定课表", "邀请讲师", "组织考核", "归档成绩"]),
+]
+for _key, _steps in _EXTRA_PLANS:
+    PLAN_LIBRARY[_key] = _steps
+    TASKS["planner"].append({"task_id": _key, "goal": "制定%s流程" % _key})
+
+# dev / test 划分：按任务切，**同一个任务模板绝不跨集合**，避免样本泄漏
+DEV_TASKS_PER_AGENT = 2
+
+
+def dev_tasks(agent_type):
+    return TASKS[agent_type][:DEV_TASKS_PER_AGENT]
+
+
+def test_tasks(agent_type):
+    return TASKS[agent_type][DEV_TASKS_PER_AGENT:]
+
+
+def split_of(agent_type, task_id):
+    for t in dev_tasks(agent_type):
+        if t["task_id"] == task_id:
+            return "dev"
+    return "test"
+
+
+def dataset_stats():
+    n = 0
+    for at in AGENT_TYPES:
+        n += len(TASKS[at]) * len(CASE_FAULTS[at])
+    return {"tasks": {at: len(TASKS[at]) for at in AGENT_TYPES},
+            "cases": n,
+            "dev_cases": sum(len(dev_tasks(at)) * len(CASE_FAULTS[at]) for at in AGENT_TYPES),
+            "test_cases": sum(len(test_tasks(at)) * len(CASE_FAULTS[at]) for at in AGENT_TYPES)}

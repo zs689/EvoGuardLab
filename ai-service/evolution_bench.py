@@ -63,9 +63,10 @@ def main():
     # ---------- 1. 学：从训练集的一次故障里提炼经验 ----------
     train = []
     for at in sim.AGENT_TYPES:
-        task = sim.TASKS[at][0]["task_id"]
-        for ft in sim.CASE_FAULTS[at]:
-            train.append({"agent_type": at, "task_id": task, "fault_type": ft, "seed": 7})
+        for t in sim.dev_tasks(at):
+            for ft in sim.CASE_FAULTS[at]:
+                train.append({"agent_type": at, "task_id": t["task_id"],
+                              "fault_type": ft, "seed": 7})
 
     # 探索候选策略：规则表没有对应策略时，逐个试，成功的那条才配当经验
     EXPLORE = ("cross_verify", "fallback_tool", "replay_checkpoint")
@@ -102,12 +103,12 @@ def main():
         # target：同 agent 同故障，但换任务（独立）
         target = [{"agent_type": c["agent_type"], "task_id": t["task_id"],
                    "fault_type": c["fault_type"], "seed": 7}
-                  for t in sim.TASKS[c["agent_type"]][1:]]
+                  for t in sim.test_tasks(c["agent_type"])][:3]
         # guard：同 agent，**不同故障** —— 不该被这个技能影响
         # guard 只取前 4 个：测负迁移不需要全量，全量会让评测跑成几分钟
         guard = [{"agent_type": c["agent_type"], "task_id": t["task_id"],
                   "fault_type": ft, "seed": 7}
-                 for t in sim.TASKS[c["agent_type"]][1:]
+                 for t in sim.test_tasks(c["agent_type"])
                  for ft in sim.CASE_FAULTS[c["agent_type"]] if ft != c["fault_type"]][:4]
 
         def runner(case, skill):
@@ -122,7 +123,7 @@ def main():
     # ---------- 3. 测：测试集上四组对照 ----------
     test = []
     for at in sim.AGENT_TYPES:
-        for t in sim.TASKS[at][1:]:
+        for t in sim.test_tasks(at):
             for ft in sim.CASE_FAULTS[at]:
                 test.append({"agent_type": at, "task_id": t["task_id"],
                              "fault_type": ft, "seed": 7})

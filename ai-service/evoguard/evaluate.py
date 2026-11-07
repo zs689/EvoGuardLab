@@ -28,6 +28,7 @@ def build_cases(limit=None):
                     "fault_type": ft,
                     "fault_target": 0,     # 0 = 按 seed 自动选一步
                     "seed": 7,
+                    "split": sim.split_of(at, task["task_id"]),
                 })
     if limit:
         cases = cases[:limit]
