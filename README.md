@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（149 个：28 核心 + 9 评测口径 + 19 难度组 + 34 检查器 + 23 静态 + 36 技能验证/晋升）
+# 2) 回归测试（162 个：41 核心 + 9 评测口径 + 19 难度组 + 34 检查器 + 23 静态 + 36 技能验证/晋升）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -312,7 +312,7 @@ EvoGuardLab/
 │   └── api/app.py           REST API（标准库 http.server）
 ├── frontend/index.html      BoardUI 风格看板（双主题，零依赖）
 ├── tests/
-│   ├── test_core.py         28 个测试（对抗性投毒 / 策略链 / 不变量 / 完整回滚验收）
+│   ├── test_core.py         41 个测试（对抗性投毒 / 策略链 / 完整回滚 / 经验溯源）
 │   ├── test_judgeability.py 9 个测试（可评口径：业务失败 vs 服务抖动）
 │   ├── test_hard_tasks.py   19 个测试（真值可独立算 / 判定不误杀 / 训练集与评测集不相交）
 │   ├── test_inspect.py      34 个测试（规则全命中 / 零误报 / 配置适配 / 事故模式）

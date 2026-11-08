@@ -112,6 +112,7 @@ class TestInvariants(unittest.TestCase):
 
 class TestExperience(unittest.TestCase):
     def _exp(self, **kw):
+        """纯内存经验：只适合测结构条件，没有可核实的轨迹。"""
         base = {"id": "e1", "source_run_id": "r1", "task_type": "order", "environment": "mock",
                 "failure_type": "silent_corruption", "root_cause": "silent_corruption",
                 "recovery_action": "cross_verify", "recovery_result": "success",
@@ -120,10 +121,38 @@ class TestExperience(unittest.TestCase):
         base.update(kw)
         return base
 
+    def _real(self, s, **kw):
+        """构造一次真实的故障→诊断→成功恢复轨迹，再从中提炼经验。
+
+        P0 05 之前测试直接用内存假 step_id；溯源开关一开这些「证据」
+        就都该被拒。这里换成真轨迹，被测的治理语义不变。
+        """
+        e = s.create_experiment("t", "order", "A1001", "silent_corruption", 0, 7, "D")
+        run = s.create_run(e["id"], "D", 7)
+        s.set_state(run["id"], core.READY)
+        s.set_state(run["id"], core.RUNNING)
+        sid = s.add_step(run["id"], 1, "tool", "order.get_order", {},
+                         {"total": 100}, status="mismatch", logical=1)
+        did = s.add_diagnosis(run["id"], 1, "silent_corruption", {"step": sid}, 0.9)
+        s.add_recovery(run["id"], did, "cross_verify", {"chain": ["cross_verify"]},
+                       "auto", 1, "ok")
+        exp = experience.extract(s, run["id"])
+        exp.update(kw)
+        return exp, run["id"], sid
+
     def test_ok(self):
-        status, why = experience.validate(self._exp())
+        s = fresh()
+        self.addCleanup(s.close)
+        exp, _, _ = self._real(s)
+        status, why = experience.validate(exp, s)
         self.assertEqual(status, experience.VALIDATED)
         self.assertEqual(why, [])
+
+    def test_validate_without_store_cannot_claim_validated(self):
+        status, why = experience.validate(self._exp())
+        self.assertEqual(status, experience.PENDING,
+                         "没核实来源就不能发可信资格")
+        self.assertTrue(any("来源核实" in w for w in why))
 
     def test_no_evidence_rejected(self):
         status, why = experience.validate(self._exp(evidence_refs=[]))
@@ -140,9 +169,10 @@ class TestExperience(unittest.TestCase):
 
     def test_governance_filters_pending(self):
         s = fresh()
+        self.addCleanup(s.close)
         experience.ensure_schema(s)
-        good = self._exp(id="e_good")
-        bad = self._exp(id="e_bad", recovery_result="fail")   # 会被判 rejected
+        good, _, _ = self._real(s, id="e_good")
+        bad, _, _ = self._real(s, id="e_bad", recovery_result="fail")
         experience.save(s, good)
         experience.save(s, bad)
         trusted = experience.retrieve(s, "order")
@@ -151,6 +181,159 @@ class TestExperience(unittest.TestCase):
         loose = experience.retrieve(s, "order", include_pending=True)
         self.assertEqual([e["id"] for e in loose], ["e_good"],
                          "rejected 的经验任何时候都不该被检索到")
+        with s.conn() as c:
+            n = c.execute("SELECT COUNT(*) FROM experiences WHERE validation_status='rejected'").fetchone()[0]
+        self.assertEqual(n, 1, "失败经验要保留作分析资料，只是不能进入可信检索")
+
+
+class TestExperienceProvenance(unittest.TestCase):
+    """P0 05：证据必须能溯源，环境元数据必须从真实运行复制。
+
+    以前的 experience 把 environment 写死 "mock"，evidence_refs 只要非空
+    就放行 —— 填个假 ID、抄别的运行的 step_id 都能拿到 validated。
+    """
+
+    def setUp(self):
+        self.s = fresh()
+        self.addCleanup(self.s.close)
+        experience.ensure_schema(self.s)
+
+    def _build(self, provider="ollama", model_id="qwen3:4b", backend=None,
+               n_diagnoses=1):
+        if backend:
+            os.environ["AGENTLAB_TOOL_BACKEND"] = backend
+            self.addCleanup(lambda: os.environ.pop("AGENTLAB_TOOL_BACKEND", None))
+        e = self.s.create_experiment("t", "order", "A1001", "silent_corruption", 0, 7, "D")
+        run = self.s.create_run(e["id"], "D", 7)
+        self.s.set_state(run["id"], core.READY)
+        self.s.set_state(run["id"], core.RUNNING)
+        sid = self.s.add_step(run["id"], 1, "model", "answer",
+                              {"prompt": "算一下 A1001 的总额", "provider": provider},
+                              {"text": "{}", "parsed": {}}, status="ok",
+                              model_id=model_id, logical=1)
+        did = None
+        for _ in range(n_diagnoses):
+            did = self.s.add_diagnosis(run["id"], 1, "silent_corruption",
+                                       {"step": sid}, 0.9)
+        self.s.add_recovery(run["id"], did, "cross_verify",
+                            {"chain": ["cross_verify"]}, "auto", 1, "ok")
+        return experience.extract(self.s, run["id"]), run["id"], sid
+
+    def test_environment_is_copied_from_run_not_hardcoded(self):
+        exp, _, _ = self._build()
+        self.assertNotEqual(exp["environment"], "mock")
+        self.assertEqual(exp["environment"], "local_model_simulated_tools")
+        self.assertEqual(exp["provider"], "ollama")
+        self.assertEqual(exp["model_id"], "qwen3:4b")
+        for k in ("model_fingerprint", "prompt_fingerprint", "dataset_version",
+                  "experiment_protocol", "tool_backend"):
+            self.assertTrue(exp[k], "%s 不能为空" % k)
+        meta = core.loads(exp["env_meta"], {})
+        self.assertEqual(meta["env_protocol"], experience.ENV_PROTOCOL)
+        self.assertEqual(meta["source_run_id"], exp["source_run_id"])
+        self.assertEqual(meta["step_count"], 1)
+        self.assertEqual(meta["model_step_count"], 1)
+        self.assertEqual(meta["tool_backend"], "simulated")
+        self.assertIn("validation_protocol", meta["experiment_protocol"])
+        self.assertIn("不是模型权重哈希", meta["model_fingerprint_note"])
+
+    def test_real_toolchain_is_distinguished_from_simulated_tools(self):
+        exp, _, _ = self._build(backend="real")
+        self.assertEqual(exp["environment"], "real_toolchain")
+        self.assertEqual(exp["tool_backend"], "real")
+        meta = core.loads(exp["env_meta"], {})
+        self.assertEqual(meta["tool_backend_source"], "AGENTLAB_TOOL_BACKEND")
+
+    def test_mock_provider_is_classified_as_mock(self):
+        exp, _, _ = self._build(provider="mock", model_id="mock")
+        self.assertEqual(exp["environment"], "mock_simulated_tools")
+
+    def test_fingerprints_change_with_model_and_prompt(self):
+        a, _, _ = self._build(model_id="qwen3:4b")
+        b, _, _ = self._build(model_id="qwen3:8b")
+        self.assertNotEqual(a["model_fingerprint"], b["model_fingerprint"])
+
+    def test_fault_scope_survives_roundtrip_and_reaches_skill(self):
+        exp, _, _ = self._build(n_diagnoses=2)
+        exp["id"] = "e_multi"
+        experience.save(self.s, exp)
+        got = experience.retrieve(self.s, "order")[0]
+        self.assertEqual(got["fault_scope"], "multi",
+                         "fault_scope 必须持久化，不能读回就丢")
+        self.assertEqual(got["env_meta"]["fault_scope"], "multi")
+        self.assertEqual(skills.propose(got)["scope"], skills.MULTI,
+                         "作用域必须能一路传到技能层")
+
+    def test_env_meta_survives_roundtrip(self):
+        exp, _, _ = self._build()
+        exp["id"] = "e_env"
+        experience.save(self.s, exp)
+        got = experience.retrieve(self.s, "order")[0]
+        self.assertEqual(got["provider"], "ollama")
+        self.assertEqual(got["model_id"], "qwen3:4b")
+        self.assertEqual(got["env_meta"]["dataset_version"], exp["dataset_version"])
+
+    def test_fabricated_step_id_is_rejected(self):
+        exp, _, _ = self._build()
+        exp["evidence_refs"] = ["st_does_not_exist"]
+        status, why = experience.validate(exp, self.s)
+        self.assertEqual(status, experience.REJECTED)
+        self.assertTrue(any("不存在" in w for w in why))
+
+    def test_cross_run_reference_is_rejected(self):
+        exp, _, _ = self._build()
+        e2 = self.s.create_experiment("t2", "order", "A1002", "silent_corruption", 0, 7, "D")
+        r2 = self.s.create_run(e2["id"], "D", 7)
+        self.s.set_state(r2["id"], core.READY)
+        self.s.set_state(r2["id"], core.RUNNING)
+        other = self.s.add_step(r2["id"], 1, "tool", "order.get_order", {}, {},
+                                logical=1)
+        exp["evidence_refs"] = [other]
+        status, why = experience.validate(exp, self.s)
+        self.assertEqual(status, experience.REJECTED)
+        self.assertTrue(any("跨运行伪造" in w for w in why),
+                        "抄别的运行的 step_id 不能算证据")
+
+    def test_diagnosis_evidence_must_be_linked(self):
+        exp, rid, _ = self._build()
+        unrelated = self.s.add_step(rid, 2, "tool", "order.calc_total", {},
+                                    {}, logical=2)
+        exp["evidence_refs"] = [unrelated]
+        status, why = experience.validate(exp, self.s)
+        self.assertEqual(status, experience.REJECTED)
+        self.assertTrue(any("诊断" in w for w in why))
+
+    def test_recovery_action_must_link_to_successful_recovery(self):
+        exp, _, _ = self._build()
+        exp["recovery_action"] = "unrelated_strategy"
+        status, why = experience.validate(exp, self.s)
+        self.assertEqual(status, experience.REJECTED)
+        self.assertTrue(any("恢复动作" in w for w in why))
+
+    def test_missing_success_recovery_is_rejected(self):
+        exp, rid, _ = self._build()
+        with self.s.conn() as c:
+            c.execute("DELETE FROM recoveries WHERE run_id=?", (rid,))
+        status, why = experience.validate(exp, self.s)
+        self.assertEqual(status, experience.REJECTED)
+        self.assertTrue(any("成功" in w for w in why))
+
+    def test_legacy_rows_keep_null_env_columns(self):
+        s2 = fresh()
+        self.addCleanup(s2.close)
+        with s2.conn() as c:
+            c.execute("CREATE TABLE experiences(id TEXT PRIMARY KEY, source_run_id TEXT, "
+                      "task_type TEXT, environment TEXT, failure_type TEXT, root_cause TEXT, "
+                      "recovery_action TEXT, recovery_result TEXT, evidence_refs TEXT, "
+                      "confidence REAL, validation_status TEXT, created_at REAL, version INTEGER)")
+            c.execute("INSERT INTO experiences VALUES('old','r1','order','mock',"
+                      "'silent_corruption','silent_corruption','cross_verify','success',"
+                      "'[\"st_1\"]',0.9,'validated',0,1)")
+        experience.ensure_schema(s2)
+        got = experience.retrieve(s2, "order")[0]
+        self.assertIsNone(got["provider"], "老库不能凭空补出新协议元数据")
+        self.assertIsNone(got["fault_scope"])
+        self.assertIsNone(got["env_meta"])
 
 
 class TestSkills(unittest.TestCase):

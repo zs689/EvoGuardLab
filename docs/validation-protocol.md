@@ -118,6 +118,49 @@ skill_id 归属、评估协议、paired-v2 明细存在、判决 PROMOTE、评�
 
 `CONTENT_FIELDS` 自 P0 04 起增加 `decision_params`。P0 03 报告 `promotion_gate_report.json` 里的 content_fields 是当时的 7 字段版本，属于冻结历史证据，不回填；其哈希不能与 P0 04 之后的评估横向比较。
 
+## P0 05 经验证据溯源与环境元数据
+
+### 两层准入校验
+
+`validate(exp, store=None)`：
+
+- **结构层**：evidence_refs 非空、根因已知、恢复成功、置信度 ≥ 0.5。任一不过直接 REJECTED。
+- **溯源层**（传 store 时）：`source_run_id` 存在；每条 ref 指向真实的 `steps` 行且该行 `run_id` 等于 source_run_id；诊断定位的坏步被 refs 引用；存在成功恢复记录且其策略链与 `recovery_action` 可关联；恢复产生的 replay 步被引用。
+
+**不传 store 最高只能到 PENDING** —— 没核实来源就不能发「可信执行指导」资格。`save(store, exp)` 一律走带库校验。rejected / pending 照样落库保留作分析资料，但 `retrieve` 默认与 `include_pending=True` 都不会返回 rejected。
+
+以前 evidence_refs 只要「非空」就放行：填个假 ID、抄别的运行的 step_id、或把恢复动作换成一个从没执行过的策略，都能拿到 validated。
+
+### 环境元数据从真实运行复制
+
+`extract` 不再把 `environment` 写死 `"mock"`：
+
+| 字段 | 来源 |
+|---|---|
+| `provider` / `model_id` | model 步骤的 `input.provider` 与 `steps.model_id` |
+| `model_fingerprint` | provider + model_id + 配置模型 + base 的 SHA-256 |
+| `prompt_fingerprint` | 系统 prompt + 本次轨迹里的 user prompt |
+| `dataset_version` | 从实际加载的 `sim` 任务/故障表算出的稳定指纹 |
+| `tool_backend` | `AGENTLAB_TOOL_BACKEND`，缺省 `simulated` |
+| `experiment_protocol` | run.mode / seed / validation_protocol / promotion_protocol |
+| `fault_scope` | 本次运行诊断出的坏点数 |
+
+`environment` 由轨迹 provider 与 tool_backend 共同分类：`mock_simulated_tools`、`local_model_simulated_tools`、`real_toolchain`。
+
+实现中修掉一个真问题：当前进程 `gateway.get_provider()` 的默认常常是 mock，最初会**覆盖轨迹里记录的真实 provider**，把真实模型跑出来的经验误标成 mock。现在轨迹优先，进程配置只在 provider 一致时用于补 base / configured_model。
+
+`fault_scope` 落库并经 `retrieve` 读回，一路传到 `skills.propose` 决定技能作用域。老库通过增列迁移，9 个新列保持 NULL —— 来源不明就是来源不明，不能补一个 `mock` 让老数据看起来像新协议核实过。`env_meta` 保存完整字典含来源说明。
+
+### 已知边界
+
+- 模型指纹是**可观测标识组合**，不是模型权重哈希；不能用来断言两个模型权重相同。
+- `tool_backend=real` 目前只是显式声明，本代码库的工具仍全部是 `sim` 的模拟实现；真实工具链尚未接通。
+- 系统 prompt 通过 `sys.modules` 软引用读取（避免 experience ↔ runtime 循环导入），未加载时 prompt 指纹只覆盖轨迹里的 user prompt，并在 `prompt_source` 标注。
+
+### 反例
+
+`tests/test_core.py::TestExperienceProvenance` 覆盖：伪造 step_id、跨运行引用、诊断坏步未被引用、恢复动作与成功恢复记录无法关联、删除成功恢复记录、环境字段不硬编码、真实工具链分类、模型指纹随模型变化、fault_scope 与 env_meta 读回、老库新列为 NULL。`TestExperience` 另验证无 store 不得 validated、失败经验保留但不可检索。
+
 ## 后续边界
 
-本轮完成 P0 01/02/03/04：验证指标、样本充分性、晋升门禁、完整回滚均已落地。经验引用溯源、环境元数据与 `fault_scope` 持久化（P0 05）、冻结基线 manifest 与报告统一（P0 06）仍未完成。24 小时有效期与 3 个独立任务只是工程下限；运行时尚未消费 safety 审批声明；历史评测入口的技能库选择仍未接通。不得把本轮结果描述为「实验已可完整复现」或「审批执行层已验证」。
+本轮完成 P0 01/02/03/04/05：验证指标、样本充分性、晋升门禁、完整回滚、经验溯源与环境元数据均已落地。冻结基线 manifest、报告统一、旧评测入口的显式技能库选择（P0 06）与计划文档三个分叉点仍未完成。24 小时有效期与 3 个独立任务只是工程下限；运行时尚未消费 safety 审批声明；工具链仍为模拟实现。不得把本轮结果描述为「实验已可完整复现」或「审批执行层已验证」。

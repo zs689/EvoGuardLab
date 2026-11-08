@@ -1,0 +1,137 @@
+{
+  "task": "P0 05 经验证据溯源与环境元数据",
+  "plan_document": "EvoGuardLab_下一阶段详细推进计划_2026-11-08.docx",
+  "plan_sections": [
+    "5 任务 P0 05 经验证据与来源"
+  ],
+  "validation": {
+    "structural_checks": [
+      "evidence_refs 非空",
+      "根因已知",
+      "恢复成功",
+      "置信度 >= 0.5"
+    ],
+    "provenance_checks": [
+      "source_run_id 存在",
+      "每条 ref 是真实步骤且属于该 run",
+      "诊断坏步被引用",
+      "成功恢复记录与 recovery_action 可关联",
+      "replay 步被引用"
+    ],
+    "without_store_status": "pending",
+    "rejected_records": "保留作分析资料，retrieve 任何模式都不返回"
+  },
+  "environment": {
+    "protocol": "evoguard-env-v1",
+    "columns": [
+      "fault_scope",
+      "provider",
+      "model_id",
+      "model_fingerprint",
+      "prompt_fingerprint",
+      "dataset_version",
+      "tool_backend",
+      "experiment_protocol"
+    ],
+    "classifications": [
+      "mock_simulated_tools",
+      "local_model_simulated_tools",
+      "real_toolchain"
+    ],
+    "sources": {
+      "provider/model_id": "model 步骤 input.provider / steps.model_id",
+      "model_fingerprint": "provider+model_id+configured_model+base 的 SHA-256",
+      "prompt_fingerprint": "系统 prompt + 轨迹 user prompt",
+      "dataset_version": "实际加载的 sim 任务/故障表指纹",
+      "tool_backend": "AGENTLAB_TOOL_BACKEND，缺省 simulated",
+      "experiment_protocol": "run.mode / seed / paired-v2 / promotion-gate-v1",
+      "fault_scope": "本次运行诊断坏点数，落库并传到 skills.propose"
+    },
+    "known_limits": [
+      "模型指纹不是权重哈希",
+      "tool_backend=real 目前只是显式声明，工具仍是模拟实现",
+      "系统 prompt 未加载时只覆盖轨迹里的 user prompt"
+    ],
+    "real_run_sample": {
+      "dataset_protocol": "evoguard-sim-v1",
+      "dataset_version": "d9b76a454d5822d61cf8f4b5cb2cceca34a0d898cc26ea2f416db18c56fae23f",
+      "env_protocol": "evoguard-env-v1",
+      "environment": "mock_simulated_tools",
+      "experiment_protocol": "{\"mode\": \"R\", \"promotion_protocol\": \"promotion-gate-v1\", \"seed\": 7, \"validation_protocol\": \"paired-v2\"}",
+      "fault_scope": "single",
+      "model_fingerprint": "7ea2bf4788e42d2bb150d6fb31be2186cfab7851d49ef9c697f53dca548ac37f",
+      "model_fingerprint_note": "可观测标识组合，不是模型权重哈希",
+      "model_id": "mock",
+      "model_step_count": 1,
+      "prompt_fingerprint": "3bae38c9fdf220be094a96059a012f3837f9a2c8735776f34e846bfc60cf7cca",
+      "prompt_source": "system_prompt+steps",
+      "provider": "mock",
+      "source_run_id": "run_0f55c5f1ed2e",
+      "step_count": 9,
+      "tool_backend": "simulated",
+      "tool_backend_source": "default:simulated"
+    }
+  },
+  "counterexample_tests": {
+    "TestExperienceProvenance": [
+      "test_cross_run_reference_is_rejected",
+      "test_diagnosis_evidence_must_be_linked",
+      "test_env_meta_survives_roundtrip",
+      "test_environment_is_copied_from_run_not_hardcoded",
+      "test_fabricated_step_id_is_rejected",
+      "test_fault_scope_survives_roundtrip_and_reaches_skill",
+      "test_fingerprints_change_with_model_and_prompt",
+      "test_legacy_rows_keep_null_env_columns",
+      "test_missing_success_recovery_is_rejected",
+      "test_mock_provider_is_classified_as_mock",
+      "test_real_toolchain_is_distinguished_from_simulated_tools",
+      "test_recovery_action_must_link_to_successful_recovery"
+    ],
+    "count": 12
+  },
+  "regression": {
+    "total_tests": 162,
+    "breakdown": {
+      "test_core": 41,
+      "test_judgeability": 9,
+      "test_hard_tasks": 19,
+      "test_inspect": 34,
+      "test_static": 23,
+      "test_skill_validation": 36
+    }
+  },
+  "isolated_runs": {
+    "train_smoke": {
+      "dir": "experiments/p0_05_20261108/train_smoke",
+      "backend": "mock",
+      "experiences": 6,
+      "status_counts": {
+        "validated": 6
+      },
+      "environment": "mock_simulated_tools"
+    },
+    "evolution_smoke": {
+      "dir": "experiments/p0_05_20261108/evolution_smoke",
+      "metrics_keys": [
+        "candidates",
+        "chain_skills",
+        "closed_loop",
+        "composite",
+        "dataset",
+        "evaluations",
+        "experiences",
+        "four_groups",
+        "generated_at",
+        "promoted",
+        "protocol_version",
+        "skills",
+        "verdicts"
+      ],
+      "note": "49 用例 / 39 条经验全部 validated；四组 0 / 26.5 / 100 / 94.1% 与历史基线一致"
+    }
+  },
+  "still_not_done": [
+    "P0 06 冻结基线与报告统一",
+    "计划文档三个分叉点在 docs/ 落地"
+  ]
+}

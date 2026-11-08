@@ -96,6 +96,36 @@ P0 04 完整回滚：v1 是单步策略，v2 是两步策略且 scope 不同。�
 - 冻结基线 manifest、报告统一、旧评测入口的显式技能库选择（P0 06）。
 - 计划文档三个分叉点（第 3/15/17 章指针、P1 第 9 章导出状态、P2 验收链）仍待在 `docs/` 落地。
 
-### 下一项验收
+### 当时的下一项验收（P0 05，已完成，见下节）
 
 P0 05 经验证据溯源与环境元数据：`validate` 拒绝跨运行伪造引用，`extract` 从实际运行复制 provider / model_id / 指纹 / 数据集版本 / tool_backend / 实验协议，`fault_scope` 持久化。
+
+## 2026-11-08：P0 05 经验证据溯源与环境元数据
+
+依据推进计划第 5 章「任务 P0 05 经验证据与来源」。
+
+### 已完成
+
+- `validate(exp, store=None)` 分两层：原结构条件 + 数据库级溯源（source_run_id 存在、每条 ref 是真实步骤且属于该 run、诊断坏步被引用、成功恢复记录与 recovery_action 可关联、replay 步被引用）。**不传 store 最高 PENDING**，`save` 一律带库校验。
+- rejected / pending 经验仍落库保留作分析资料，`retrieve` 默认与 `include_pending=True` 都不返回 rejected。
+- `extract` 不再把 environment 写死 `"mock"`：从 model 步骤复制 provider / model_id，算模型与 prompt 指纹，从实际加载的 sim 数据算 dataset_version，读 tool_backend 与实验协议，按 provider + tool_backend 分类为 `mock_simulated_tools` / `local_model_simulated_tools` / `real_toolchain`。
+- 修掉实测 bug：当前进程 gateway 默认 provider 常为 mock，最初会覆盖轨迹里记录的真实 provider；改为轨迹优先，进程配置只在一致时补 base / configured_model。
+- `fault_scope` 与 8 个环境字段落库，`env_meta` 保存完整字典与来源说明；`retrieve` 读回后 `fault_scope` 能一路传到 `skills.propose` 的作用域决策。老库增列保持 NULL，不冒充新协议。
+
+### 验证证据
+
+- 全量 **162 个测试**通过（41 核心 + 9 评测口径 + 19 难度组 + 34 检查器 + 23 静态 + 36 技能验证）。
+- 新增 `TestExperienceProvenance` 12 项反例；`TestExperience` 升级为真实轨迹构造（假 step_id 不再能拿到 validated），并新增「无 store 不得 validated」「失败经验保留但不可检索」。
+- 真实训练入口 `experiments/p0_05_20261108/train_smoke/`：6 条经验全部 validated，环境分类 `mock_simulated_tools`，provider/model_id/各类指纹/tool_backend/fault_scope 均非空；`env_meta` 含 `prompt_source=system_prompt+steps`。
+- mock 闭环 `experiments/p0_05_20261108/evolution_smoke/`：49 用例提炼 **39 条经验全部 validated**，四组对照 0 / 26.5 / 100 / 94.1%、复合两步链 100%，与 P0 01/02 的历史基线一致 —— 溯源没有误拒、没有改变既有结论。
+- `docs/validation-protocol.md` 增加 P0 05 章节与已知边界。
+
+### 仍未完成
+
+- `tool_backend=real` 只是显式声明，工具链仍全部是模拟实现；模型指纹不是权重哈希。
+- 冻结基线 manifest、报告统一、旧评测入口的显式技能库选择（P0 06）。
+- 计划文档三个分叉点（第 3/15/17 章指针、P1 第 9 章导出状态、P2 验收链）仍待在 `docs/` 落地。
+
+### 下一项验收
+
+P0 06 冻结可复现基线：把报告 / metrics.json / runs.jsonl / C 与 D 技能库哈希及关键代码指纹写进同一 manifest，重跑用新目录不覆盖历史，按 case_id / seed / mode / 配置哈希 / 技能库哈希恢复且指纹不一致拒绝混跑；报告自动生成同一组数字。
