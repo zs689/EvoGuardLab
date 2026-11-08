@@ -58,6 +58,35 @@ def pct(a, b):
     return round(100.0 * a / b, 1) if b else 0.0
 
 
+# ---------------- 裁决：这一条 run 该不该进成功率分母 ----------------
+# 为什么单独做这件事：把「模型答错」和「模型服务根本没给出答案」混在一个成功率里，
+# 会让基础设施抖动看起来像 Agent 质量下降。实测踩过：Ollama 挂掉那一次，
+# grammar 对照 6 次调用全是 E_LLM_UNREACHABLE，却被写成「0/6 严格 JSON」。
+# 治理体系里对这个的标准做法是「证据不足 → 标不可评，出分母」，
+# 而不是判失败（淘宝 CNT 那套的 CTX 门控层就是这个意思）。
+PASSED, FAILED, UNJUDGEABLE = "passed", "failed", "unjudgeable"
+
+
+def judge_run(r):
+    """给 run 定性：passed / failed / unjudgeable。
+
+    failed      = 业务失败：评测条件完好，产出就是不对，必须计入分母。
+    unjudgeable = 评测条件受损：
+                  a) 框架抛异常（err 非空）——评测没跑完；
+                  b) 模型服务报错（E_LLM_*）——答案根本没产出。
+
+    刻意**不**把 bad_model_output 算成 unjudgeable：模型输出了非 JSON 是模型质量问题，
+    必须计分，否则「格式违规」这个故障类型会被自动洗白。
+    """
+    if r.get("success"):
+        return PASSED
+    if r.get("error"):
+        return UNJUDGEABLE
+    if r.get("llm_errors"):
+        return UNJUDGEABLE
+    return FAILED
+
+
 def _read_json(path, default):
     try:
         with open(path, encoding="utf-8") as f:
@@ -268,6 +297,14 @@ def grammar_control(args):
         out["samples"].append({"strict": ok, "latency_ms": lat, "head": head})
     out["strict_rate"] = pct(out["strict_ok"], out["n"])
     out["avg_latency_ms"] = round(out["latency_ms_total"] / max(1, out["n"]), 1)
+    # 调用失败 ≠ 输出不严格。服务挂掉时「0/6 严格 JSON」是个假结论，
+    # 必须先扣掉不可评的次数，剩下的才是「模型真的没按格式输出」。
+    call_err = sum(out["errors"].values())
+    out["call_errors"] = call_err
+    out["judgeable"] = out["n"] - call_err
+    out["strict_rate"] = pct(out["strict_ok"], out["judgeable"])
+    out["strict_rate_all"] = pct(out["strict_ok"], out["n"])
+    out["error_rate"] = pct(call_err, out["n"])
     return out
 
 
@@ -276,10 +313,20 @@ def aggregate(done, cases, suite):
     for m in MODES:
         rows = [done[case_key(c, m)] for c in cases if case_key(c, m) in done]
         n = len(rows)
+        ok = sum(1 for r in rows if r["success"])
+        verdicts = [judge_run(r) for r in rows]
+        unj = sum(1 for v in verdicts if v == UNJUDGEABLE)
+        fail = sum(1 for v in verdicts if v == FAILED)
         res[m] = {
             "n": n,
-            "ok": sum(1 for r in rows if r["success"]),
-            "rate": pct(sum(1 for r in rows if r["success"]), n),
+            "ok": ok,
+            "failed": fail,
+            "unjudgeable": unj,
+            # 主口径：只在「可评」的样本上算成功率。
+            # rate_raw 是老口径（ok/n），保留下来做对比，让读者自己看到差异有多大。
+            "rate": pct(ok, ok + fail),
+            "rate_raw": pct(ok, n),
+            "judgeable_rate": pct(ok + fail, n),
         }
     # 错误分类
     all_rows = [done[case_key(c, m)] for c in cases for m in MODES
@@ -294,23 +341,34 @@ def aggregate(done, cases, suite):
         lat.append(r.get("latency_ms") or 0)
         tok.append(r.get("tokens") or 0)
         calls += r.get("n_model_calls") or 0
-    # 按故障类型统计 D 的失败（不隐藏）
+    # 按故障类型统计 D 的失败（不隐藏）；同样用可评口径，否则某一类故障的
+    # 服务抖动会被算成「这类故障治不好」。
     by_fault = {}
     for c in cases:
         k = case_key(c, "D")
         if k not in done:
             continue
         f = c["fault_type"]
-        b = by_fault.setdefault(f, {"n": 0, "ok": 0})
+        b = by_fault.setdefault(f, {"n": 0, "ok": 0, "failed": 0, "unjudgeable": 0})
+        r = done[k]
         b["n"] += 1
-        b["ok"] += 1 if done[k]["success"] else 0
+        b["ok"] += 1 if r["success"] else 0
+        v = judge_run(r)
+        if v == UNJUDGEABLE:
+            b["unjudgeable"] += 1
+        elif v == FAILED:
+            b["failed"] += 1
     fails = [{"agent": c["agent_type"], "task": c["task_id"], "fault": c["fault_type"],
+              "verdict": judge_run(done[case_key(c, "D")]),
               "root_causes": done[case_key(c, "D")].get("root_causes"),
               "chain": done[case_key(c, "D")].get("recovery_chain"),
               "answer": str(done[case_key(c, "D")].get("answer"))[:90]}
              for c in cases if case_key(c, "D") in done
              and not done[case_key(c, "D")]["success"]]
+    n_unj = sum(1 for r in all_rows if judge_run(r) == UNJUDGEABLE)
     return {"suite": suite, "cases": len(cases), "modes": res,
+            "judgeable_rate": pct(len(all_rows) - n_unj, len(all_rows)),
+            "unjudgeable": n_unj,
             "errors": errs, "llm_errors": llm,
             "bad_model_output": bad, "model_calls": calls,
             "avg_latency_ms": round(sum(lat) / max(1, len(lat)), 1),
@@ -368,21 +426,32 @@ def write_outputs(meta, single, composite, control, done, elapsed):
     L.append("")
     L.append("## 二、四组对照（单故障，%d 用例）" % single["cases"])
     L.append("")
-    L.append("| 模式 | 成功 | 成功率 | mock 基线 | 差 |")
-    L.append("|---|---|---|---|---|")
+    L.append("| 模式 | 成功/可评 | 不可评 | 成功率 | 老口径(成功/总数) | mock 基线 | 差 |")
+    L.append("|---|---|---|---|---|---|---|")
     mk = metrics["mock_baseline"]["four_groups"]
     for m in MODES:
         r = single["modes"][m]
-        L.append("| %s | %d/%d | **%s%%** | %s%% | %+s pp |" % (
-            m, r["ok"], r["n"], r["rate"], mk[m], round(r["rate"] - mk[m], 1)))
+        L.append("| %s | %d/%d | %d | **%s%%** | %s%% | %s%% | %+s pp |" % (
+            m, r["ok"], r["ok"] + r["failed"], r["unjudgeable"], r["rate"],
+            r["rate_raw"], mk[m], round(r["rate"] - mk[m], 1)))
+    L.append("")
+    L.append("> **口径**：成功率的分母只算「可评」的 run，"
+             "即剔掉**框架异常**与**模型服务报错（E_LLM_*）导致答案根本没产出**的样本。")
+    L.append("> 这类 run 说明的是「评测条件受损」，不是「Agent 质量下降」；"
+             "混进分母会把服务抖动写成模型退化（本项目真踩过："
+             "Ollama 挂掉时 grammar 对照被算成「0/6 严格 JSON」）。")
+    L.append("> `bad_model_output`（模型吐出非 JSON）**不**算不可评 —— 那是模型质量问题，必须计分。")
+    L.append("> 全量可评率：单故障 **%s%%**、复合 **%s%%**。" % (
+        single.get("judgeable_rate"), composite.get("judgeable_rate")))
     L.append("")
     L.append("## 三、复合故障（%d 用例）" % composite["cases"])
     L.append("")
-    L.append("| 模式 | 成功 | 成功率 |")
-    L.append("|---|---|---|")
+    L.append("| 模式 | 成功/可评 | 不可评 | 成功率 | 老口径 |")
+    L.append("|---|---|---|---|---|")
     for m in MODES:
         r = composite["modes"][m]
-        L.append("| %s | %d/%d | **%s%%** |" % (m, r["ok"], r["n"], r["rate"]))
+        L.append("| %s | %d/%d | %d | **%s%%** | %s%% |" % (
+            m, r["ok"], r["ok"] + r["failed"], r["unjudgeable"], r["rate"], r["rate_raw"]))
     L.append("")
     L.append("> mock 闭环在复合故障上只测过 **A / 最优单策略 / 两步链 / D** 四组")
     L.append("> （0% / 0% / 100% / 100%，见 `experiments/evolution_report.md`），")
@@ -403,10 +472,14 @@ def write_outputs(meta, single, composite, control, done, elapsed):
         L.append("")
         L.append("| 指标 | 值 |")
         L.append("|---|---|")
-        L.append("| 严格 JSON 成功率 | **%s%%**（%d/%d） |" % (
-            control["strict_rate"], control["strict_ok"], control["n"]))
+        L.append("| 严格 JSON 成功率（可评口径） | **%s%%**（%d/%d） |" % (
+            control["strict_rate"], control["strict_ok"],
+            control.get("judgeable", control["n"])))
+        L.append("| 调用失败（不计入分母） | %d 次 %s |" % (
+            control.get("call_errors", 0), control["errors"] or ""))
+        L.append("| 老口径（成功/总调用） | %s%% |" % control.get("strict_rate_all",
+                                                                control["strict_rate"]))
         L.append("| 平均延迟 | %s ms |" % control["avg_latency_ms"])
-        L.append("| 错误分类 | %s |" % (control["errors"] or "无"))
         L.append("")
         L.append("> 这一组是必需的：`format=json` 的 grammar 约束**从模型侧消除了自然格式违规**，")
         L.append("> 所以主实验里 `format_violation` 只能靠注入产生，不能声称测到了模型真实犯错率。")
@@ -415,11 +488,11 @@ def write_outputs(meta, single, composite, control, done, elapsed):
     L.append("")
     fails = single["D_failures"] + composite["D_failures"]
     if fails:
-        L.append("| Agent | 任务 | 故障 | 诊断链 | 恢复链 | 答案 |")
-        L.append("|---|---|---|---|---|---|")
+        L.append("| Agent | 任务 | 故障 | 定性 | 诊断链 | 恢复链 | 答案 |")
+        L.append("|---|---|---|---|---|---|---|")
         for f in fails[:40]:
-            L.append("| %s | %s | %s | %s | %s | %s |" % (
-                f["agent"], f["task"], f["fault"],
+            L.append("| %s | %s | %s | %s | %s | %s | %s |" % (
+                f["agent"], f["task"], f["fault"], f.get("verdict", "-"),
                 " → ".join(f["root_causes"] or []) or "-",
                 " → ".join(f["chain"] or []) or "-",
                 str(f["answer"]).replace("|", "/")[:60]))
@@ -429,12 +502,14 @@ def write_outputs(meta, single, composite, control, done, elapsed):
     else:
         L.append("无。")
     L.append("")
-    L.append("## 六、按故障类型看 D 成功率")
+    L.append("## 六、按故障类型看 D 成功率（可评口径）")
     L.append("")
-    L.append("| 故障 | 成功/总 | 成功率 |")
-    L.append("|---|---|---|")
+    L.append("| 故障 | 成功/可评 | 不可评 | 成功率 |")
+    L.append("|---|---|---|---|")
     for f, b in sorted(single["by_fault"].items()):
-        L.append("| %s | %d/%d | %s%% |" % (f, b["ok"], b["n"], pct(b["ok"], b["n"])))
+        judgeable = b["ok"] + b.get("failed", 0)
+        L.append("| %s | %d/%d | %d | %s%% |" % (
+            f, b["ok"], judgeable, b.get("unjudgeable", 0), pct(b["ok"], judgeable)))
     L.append("")
     L.append("## 七、必须讲清楚的取舍与局限")
     L.append("")
@@ -452,6 +527,10 @@ def write_outputs(meta, single, composite, control, done, elapsed):
     L.append("3. **故障仍是注入的**：不是真实事故里自然共现的错误。")
     L.append("4. **只有一次运行**：没有多次 seed 取均值，模型随机性未量化。")
     L.append("5. `format_violation` 类故障由代码注入，不能当作模型真实犯错率。")
+    L.append("6. **「不可评」的边界是人为定的**：只认框架异常和 `E_LLM_*` 导致的空答案。"
+             "这条规则可以被滥用成洗白（把失败说成服务问题就能剔出分母），"
+             "所以报告同时给出 `unjudgeable` 绝对数与 `judgeable_rate`，"
+             "不允许只看成功率；`bad_model_output` 一律计分。")
     L.append("")
     with open(REPORT, "w", encoding="utf-8") as f:
         f.write("\n".join(L))

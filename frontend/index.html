@@ -418,7 +418,7 @@ select:focus, input.fld:focus { border-color: var(--primary); }
             <div class="card-desc">真实模型下的失败归因，不隐藏</div></div>
             <span class="chip" id="real-fails-chip">–</span></div>
           <div class="table-wrap" style="max-height:420px"><table><thead><tr>
-            <th>集合</th><th>Agent</th><th>任务</th><th>故障</th><th>诊断链</th><th>恢复链</th><th>答案</th>
+            <th>集合</th><th>Agent</th><th>任务</th><th>故障</th><th>定性</th><th>诊断链</th><th>恢复链</th><th>答案</th>
           </tr></thead><tbody id="real-fails"></tbody></table></div>
         </div>
         <div class="card" style="margin-top:14px">
@@ -830,12 +830,16 @@ async function loadReal() {
       fmt(m.elapsed_s) + 's</b> · grammar 约束 <b>' +
       (meta.json_grammar ? '开启' : '关闭') + '</b></div>';
     const sr = sg.modes || {}, cr = cp.modes || {};
-    $('#real-single-desc').textContent = sg.cases + ' 个单故障用例 × 4 模式（真实模型）';
+    $('#real-single-desc').textContent = sg.cases + ' 个单故障用例 × 4 模式（真实模型，可评率 '
+      + fmt(sg.judgeable_rate) + '%，不可评 ' + (sg.unjudgeable||0) + ' 条不计入成功率分母）';
     $('#real-kpis').innerHTML = ['A','B','C','D'].map(k => {
       const r = sr[k] || {rate:0,ok:0,n:0}; const mk = (m.mock_baseline||{}).four_groups||{};
+      const judgeable = (r.ok||0)+(r.failed||0);
       return '<div class="card"><div class="kpi-label">' + k + ' · 真实模型</div>' +
         '<div class="kpi-value">' + fmt(r.rate) + '<span style="font-size:14px;color:var(--text-3)">%</span></div>' +
-        '<div class="kpi-foot">mock ' + fmt(mk[k]) + '% ｜ 差 ' +
+        '<div class="kpi-foot">可评 ' + judgeable + '/' + r.n +
+        (r.unjudgeable ? '（不可评 <b>' + r.unjudgeable + '</b>）' : '') +
+        ' ｜ mock ' + fmt(mk[k]) + '% ｜ 差 ' +
         '<span class="trend ' + (r.rate - (mk[k]||0) >= 0 ? 'up':'down') + '">' +
         ((r.rate-(mk[k]||0))>=0?'+':'') + (r.rate-(mk[k]||0)).toFixed(1) + ' pp</span></div>' +
         '<div class="kpi-bar"><i style="width:' + r.rate + '%;background:' + COLORS[k] + '"></i></div></div>';
@@ -849,8 +853,11 @@ async function loadReal() {
     if (ctl) crs.push({label:'<b>RAW</b> 无约束严格 JSON 率', value:ctl.strict_rate, color:'var(--warn)'});
     bars($('#real-comp-bars'), crs);
     $('#real-control').innerHTML = ctl ?
-      ('<b>无 grammar 对照</b>：' + ctl.strict_ok + '/' + ctl.n + ' 次输出严格 JSON（<b>' +
-       fmt(ctl.strict_rate) + '%</b>），平均 ' + fmt(ctl.avg_latency_ms) + ' ms。' +
+      ('<b>无 grammar 对照</b>：' + ctl.strict_ok + '/' +
+       (ctl.judgeable != null ? ctl.judgeable : ctl.n) + ' 次可评调用里输出严格 JSON（<b>' +
+       fmt(ctl.strict_rate) + '%</b>）' +
+       (ctl.call_errors ? '，另有 <b>' + ctl.call_errors + '</b> 次调用失败不计入分母' : '') +
+       '，平均 ' + fmt(ctl.avg_latency_ms) + ' ms。' +
        '主实验用 grammar 约束后单次约 0.5s，但<b>从模型侧消除了自然格式违规</b>，' +
        '所以 format_violation 只能靠注入产生，不能当作模型真实犯错率。') : '未跑无约束对照。';
     const fails = [].concat((sg.D_failures||[]).map(x=>Object.assign({suite:'单故障'},x)),
@@ -859,10 +866,13 @@ async function loadReal() {
     $('#real-fails').innerHTML = fails.slice(0,40).map(f =>
       '<tr><td>'+esc(f.suite)+'</td><td>'+esc(f.agent)+'</td><td class="mono">'+esc(f.task)+
       '</td><td class="mono">'+esc(f.fault)+'</td><td>'+
+      (f.verdict === 'unjudgeable'
+        ? '<span class="chip" style="color:var(--warn)">不可评</span>'
+        : '<span class="chip">业务失败</span>')+'</td><td>'+
       esc((f.root_causes||[]).join(' → ')||'–')+'</td><td>'+
       esc((f.chain||[]).join(' → ')||'–')+'</td><td class="mono">'+
       esc(String(f.answer||'').slice(0,40))+'</td></tr>').join('') ||
-      '<tr><td colspan="7" class="empty">D 模式全部成功</td></tr>';
+      '<tr><td colspan="8" class="empty">D 模式全部成功</td></tr>';
     $('#real-meta').innerHTML = '<div class="table-wrap"><table><tbody>' +
       [['模型',meta.model],['服务',meta.base],['Ollama',meta.ollama_version],
        ['后端',meta.backend],['关闭思考',String(meta.think_disabled)],

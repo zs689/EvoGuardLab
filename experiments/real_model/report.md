@@ -23,21 +23,26 @@
 
 ## 二、四组对照（单故障，204 用例）
 
-| 模式 | 成功 | 成功率 | mock 基线 | 差 |
-|---|---|---|---|---|
-| A | 0/204 | **0.0%** | 0.0% | 0.0 pp |
-| B | 54/204 | **26.5%** | 26.5% | 0.0 pp |
-| C | 204/204 | **100.0%** | 100.0% | 0.0 pp |
-| D | 198/204 | **97.1%** | 100.0% | -2.9 pp |
+| 模式 | 成功/可评 | 不可评 | 成功率 | 老口径(成功/总数) | mock 基线 | 差 |
+|---|---|---|---|---|---|---|
+| A | 0/200 | 4 | **0.0%** | 0.0% | 0.0% | 0.0 pp |
+| B | 54/201 | 3 | **26.9%** | 26.5% | 26.5% | 0.4 pp |
+| C | 204/204 | 0 | **100.0%** | 100.0% | 100.0% | 0.0 pp |
+| D | 198/201 | 3 | **98.5%** | 97.1% | 100.0% | -1.5 pp |
+
+> **口径**：成功率的分母只算「可评」的 run，即剔掉**框架异常**与**模型服务报错（E_LLM_*）导致答案根本没产出**的样本。
+> 这类 run 说明的是「评测条件受损」，不是「Agent 质量下降」；混进分母会把服务抖动写成模型退化（本项目真踩过：Ollama 挂掉时 grammar 对照被算成「0/6 严格 JSON」）。
+> `bad_model_output`（模型吐出非 JSON）**不**算不可评 —— 那是模型质量问题，必须计分。
+> 全量可评率：单故障 **98.8%**、复合 **95.8%**。
 
 ## 三、复合故障（30 用例）
 
-| 模式 | 成功 | 成功率 |
-|---|---|---|
-| A | 0/30 | **0.0%** |
-| B | 0/30 | **0.0%** |
-| C | 0/30 | **0.0%** |
-| D | 30/30 | **100.0%** |
+| 模式 | 成功/可评 | 不可评 | 成功率 | 老口径 |
+|---|---|---|---|---|
+| A | 0/30 | 0 | **0.0%** | 0.0% |
+| B | 0/30 | 0 | **0.0%** | 0.0% |
+| C | 0/25 | 5 | **0.0%** | 0.0% |
+| D | 30/30 | 0 | **100.0%** | 100.0% |
 
 > mock 闭环在复合故障上只测过 **A / 最优单策略 / 两步链 / D** 四组
 > （0% / 0% / 100% / 100%，见 `experiments/evolution_report.md`），
@@ -54,42 +59,43 @@
 
 | 指标 | 值 |
 |---|---|
-| 严格 JSON 成功率 | **0.0%**（0/6） |
+| 严格 JSON 成功率（可评口径） | **0.0%**（0/6） |
+| 调用失败（不计入分母） | 0 次  |
+| 老口径（成功/总调用） | 0.0% |
 | 平均延迟 | 10504.5 ms |
-| 错误分类 | 无 |
 
 > 这一组是必需的：`format=json` 的 grammar 约束**从模型侧消除了自然格式违规**，
 > 所以主实验里 `format_violation` 只能靠注入产生，不能声称测到了模型真实犯错率。
 
 ## 五、D 模式仍然失败的用例（不隐藏）
 
-| Agent | 任务 | 故障 | 诊断链 | 恢复链 | 答案 |
-|---|---|---|---|---|---|
-| planner | release | incorrect_planning | incorrect_planning | human_takeover | {'steps': ['灰度发布', '生成变更说明', '跑回归测试', '冻结代码']} |
-| planner | refund | incorrect_planning | incorrect_planning | human_takeover | {'steps': ['财务退款', '生成退货单', '确认退货原因', '核对订单']} |
-| planner | procurement | incorrect_planning | incorrect_planning | human_takeover | {'steps': ['下单验收', '提交审批', '三家比价', '汇总需求']} |
-| planner | incident | incorrect_planning | incorrect_planning | human_takeover | {'steps': ['复盘归档', '定位根因', '止血', '确认故障范围']} |
-| planner | audit | incorrect_planning | incorrect_planning | human_takeover | {'steps': ['整改跟踪', '出具报告', '抽样检查', '准备资料']} |
-| planner | training | incorrect_planning | incorrect_planning | human_takeover | {'steps': ['归档成绩', '组织考核', '邀请讲师', '确定课表']} |
+| Agent | 任务 | 故障 | 定性 | 诊断链 | 恢复链 | 答案 |
+|---|---|---|---|---|---|---|
+| planner | release | incorrect_planning | failed | incorrect_planning | human_takeover | {'steps': ['灰度发布', '生成变更说明', '跑回归测试', '冻结代码']} |
+| planner | refund | incorrect_planning | unjudgeable | incorrect_planning | human_takeover | {'steps': ['财务退款', '生成退货单', '确认退货原因', '核对订单']} |
+| planner | procurement | incorrect_planning | unjudgeable | incorrect_planning | human_takeover | {'steps': ['下单验收', '提交审批', '三家比价', '汇总需求']} |
+| planner | incident | incorrect_planning | failed | incorrect_planning | human_takeover | {'steps': ['复盘归档', '定位根因', '止血', '确认故障范围']} |
+| planner | audit | incorrect_planning | failed | incorrect_planning | human_takeover | {'steps': ['整改跟踪', '出具报告', '抽样检查', '准备资料']} |
+| planner | training | incorrect_planning | unjudgeable | incorrect_planning | human_takeover | {'steps': ['归档成绩', '组织考核', '邀请讲师', '确定课表']} |
 
-## 六、按故障类型看 D 成功率
+## 六、按故障类型看 D 成功率（可评口径）
 
-| 故障 | 成功/总 | 成功率 |
-|---|---|---|
-| context_loss | 18/18 | 100.0% |
-| format_violation | 18/18 | 100.0% |
-| incorrect_planning | 0/6 | 0.0% |
-| invalid_json | 18/18 | 100.0% |
-| missing_field | 18/18 | 100.0% |
-| premature_termination | 18/18 | 100.0% |
-| process_interruption | 18/18 | 100.0% |
-| retrieval_failure | 18/18 | 100.0% |
-| silent_corruption | 6/6 | 100.0% |
-| stale_data | 6/6 | 100.0% |
-| tool_exception | 18/18 | 100.0% |
-| tool_hallucination | 18/18 | 100.0% |
-| tool_timeout | 18/18 | 100.0% |
-| wrong_tool | 6/6 | 100.0% |
+| 故障 | 成功/可评 | 不可评 | 成功率 |
+|---|---|---|---|
+| context_loss | 18/18 | 0 | 100.0% |
+| format_violation | 18/18 | 0 | 100.0% |
+| incorrect_planning | 0/3 | 3 | 0.0% |
+| invalid_json | 18/18 | 0 | 100.0% |
+| missing_field | 18/18 | 0 | 100.0% |
+| premature_termination | 18/18 | 0 | 100.0% |
+| process_interruption | 18/18 | 0 | 100.0% |
+| retrieval_failure | 18/18 | 0 | 100.0% |
+| silent_corruption | 6/6 | 0 | 100.0% |
+| stale_data | 6/6 | 0 | 100.0% |
+| tool_exception | 18/18 | 0 | 100.0% |
+| tool_hallucination | 18/18 | 0 | 100.0% |
+| tool_timeout | 18/18 | 0 | 100.0% |
+| wrong_tool | 6/6 | 0 | 100.0% |
 
 ## 七、必须讲清楚的取舍与局限
 
@@ -100,3 +106,4 @@
 3. **故障仍是注入的**：不是真实事故里自然共现的错误。
 4. **只有一次运行**：没有多次 seed 取均值，模型随机性未量化。
 5. `format_violation` 类故障由代码注入，不能当作模型真实犯错率。
+6. **「不可评」的边界是人为定的**：只认框架异常和 `E_LLM_*` 导致的空答案。这条规则可以被滥用成洗白（把失败说成服务问题就能剔出分母），所以报告同时给出 `unjudgeable` 绝对数与 `judgeable_rate`，不允许只看成功率；`bad_model_output` 一律计分。

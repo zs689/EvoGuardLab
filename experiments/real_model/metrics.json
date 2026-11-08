@@ -57,7 +57,7 @@
       "c_path": "library_c.db"
     }
   },
-  "finished_at": 1794048982.203,
+  "finished_at": 1794098733.862,
   "elapsed_s": 654.6,
   "runs_completed": 936,
   "single": {
@@ -67,24 +67,42 @@
       "A": {
         "n": 204,
         "ok": 0,
-        "rate": 0.0
+        "failed": 200,
+        "unjudgeable": 4,
+        "rate": 0.0,
+        "rate_raw": 0.0,
+        "judgeable_rate": 98.0
       },
       "B": {
         "n": 204,
         "ok": 54,
-        "rate": 26.5
+        "failed": 147,
+        "unjudgeable": 3,
+        "rate": 26.9,
+        "rate_raw": 26.5,
+        "judgeable_rate": 98.5
       },
       "C": {
         "n": 204,
         "ok": 204,
-        "rate": 100.0
+        "failed": 0,
+        "unjudgeable": 0,
+        "rate": 100.0,
+        "rate_raw": 100.0,
+        "judgeable_rate": 100.0
       },
       "D": {
         "n": 204,
         "ok": 198,
-        "rate": 97.1
+        "failed": 3,
+        "unjudgeable": 3,
+        "rate": 98.5,
+        "rate_raw": 97.1,
+        "judgeable_rate": 98.5
       }
     },
+    "judgeable_rate": 98.8,
+    "unjudgeable": 10,
     "errors": {},
     "llm_errors": {
       "E_LLM_HTTP": 16
@@ -97,59 +115,87 @@
     "by_fault": {
       "tool_timeout": {
         "n": 18,
-        "ok": 18
+        "ok": 18,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "tool_exception": {
         "n": 18,
-        "ok": 18
+        "ok": 18,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "invalid_json": {
         "n": 18,
-        "ok": 18
+        "ok": 18,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "missing_field": {
         "n": 18,
-        "ok": 18
+        "ok": 18,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "silent_corruption": {
         "n": 6,
-        "ok": 6
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "retrieval_failure": {
         "n": 18,
-        "ok": 18
+        "ok": 18,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "context_loss": {
         "n": 18,
-        "ok": 18
+        "ok": 18,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "process_interruption": {
         "n": 18,
-        "ok": 18
+        "ok": 18,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "format_violation": {
         "n": 18,
-        "ok": 18
+        "ok": 18,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "wrong_tool": {
         "n": 6,
-        "ok": 6
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "tool_hallucination": {
         "n": 18,
-        "ok": 18
+        "ok": 18,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "premature_termination": {
         "n": 18,
-        "ok": 18
+        "ok": 18,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "stale_data": {
         "n": 6,
-        "ok": 6
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "incorrect_planning": {
         "n": 6,
-        "ok": 0
+        "ok": 0,
+        "failed": 3,
+        "unjudgeable": 3
       }
     },
     "D_failures": [
@@ -157,6 +203,7 @@
         "agent": "planner",
         "task": "release",
         "fault": "incorrect_planning",
+        "verdict": "failed",
         "root_causes": [
           "incorrect_planning"
         ],
@@ -169,6 +216,7 @@
         "agent": "planner",
         "task": "refund",
         "fault": "incorrect_planning",
+        "verdict": "unjudgeable",
         "root_causes": [
           "incorrect_planning"
         ],
@@ -181,6 +229,7 @@
         "agent": "planner",
         "task": "procurement",
         "fault": "incorrect_planning",
+        "verdict": "unjudgeable",
         "root_causes": [
           "incorrect_planning"
         ],
@@ -193,6 +242,7 @@
         "agent": "planner",
         "task": "incident",
         "fault": "incorrect_planning",
+        "verdict": "failed",
         "root_causes": [
           "incorrect_planning"
         ],
@@ -205,6 +255,7 @@
         "agent": "planner",
         "task": "audit",
         "fault": "incorrect_planning",
+        "verdict": "failed",
         "root_causes": [
           "incorrect_planning"
         ],
@@ -217,6 +268,7 @@
         "agent": "planner",
         "task": "training",
         "fault": "incorrect_planning",
+        "verdict": "unjudgeable",
         "root_causes": [
           "incorrect_planning"
         ],
@@ -234,24 +286,42 @@
       "A": {
         "n": 30,
         "ok": 0,
-        "rate": 0.0
+        "failed": 30,
+        "unjudgeable": 0,
+        "rate": 0.0,
+        "rate_raw": 0.0,
+        "judgeable_rate": 100.0
       },
       "B": {
         "n": 30,
         "ok": 0,
-        "rate": 0.0
+        "failed": 30,
+        "unjudgeable": 0,
+        "rate": 0.0,
+        "rate_raw": 0.0,
+        "judgeable_rate": 100.0
       },
       "C": {
         "n": 30,
         "ok": 0,
-        "rate": 0.0
+        "failed": 25,
+        "unjudgeable": 5,
+        "rate": 0.0,
+        "rate_raw": 0.0,
+        "judgeable_rate": 83.3
       },
       "D": {
         "n": 30,
         "ok": 30,
-        "rate": 100.0
+        "failed": 0,
+        "unjudgeable": 0,
+        "rate": 100.0,
+        "rate_raw": 100.0,
+        "judgeable_rate": 100.0
       }
     },
+    "judgeable_rate": 95.8,
+    "unjudgeable": 5,
     "errors": {},
     "llm_errors": {
       "E_LLM_DOWN": 4,
@@ -265,23 +335,33 @@
     "by_fault": {
       "missing_field+silent_corruption": {
         "n": 6,
-        "ok": 6
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "wrong_tool+format_violation": {
         "n": 6,
-        "ok": 6
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "retrieval_failure+tool_hallucination": {
         "n": 6,
-        "ok": 6
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "stale_data+context_loss": {
         "n": 6,
-        "ok": 6
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
       },
       "incorrect_planning+premature_termination": {
         "n": 6,
-        "ok": 6
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
       }
     },
     "D_failures": []
@@ -324,7 +404,10 @@
       }
     ],
     "strict_rate": 0.0,
-    "avg_latency_ms": 10504.5
+    "avg_latency_ms": 10504.5,
+    "call_errors": 0,
+    "judgeable": 6,
+    "strict_rate_all": 0.0
   },
   "mock_baseline": {
     "source": "experiments/metrics.json（mock 闭环）",

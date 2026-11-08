@@ -15,8 +15,8 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（24 个）
-python -m unittest tests.test_core -v
+# 2) 回归测试（32 个：24 个核心 + 8 个评测口径）
+python -m unittest tests.test_core tests.test_judgeability -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
 python ai-service/api/app.py           # http://127.0.0.1:8770
@@ -64,17 +64,23 @@ Web 看板是**原生 HTML/CSS/JS 单文件**，不引 CDN、不需要 Node 构�
 
 | 测试集 | A 无恢复 | B 固定规则 | C 用经验不严格验证 | D 完整闭环 |
 |---|---|---|---|---|
-| 单故障 204 例 | 0.0% | 26.5% | 100.0% | **97.1%** |
+| 单故障 204 例 | 0.0% | 26.9% | 100.0% | **98.5%** |
 | 复合故障 30 例 | 0.0% | 0.0% | **0.0%** | **100.0%** |
+
+> **成功率口径**：分母只算「可评」的 run，剔掉**框架异常**和**模型服务报错（`E_LLM_*`）导致答案没产出**的样本
+> —— 那说明评测条件受损，不是 Agent 质量下降。实测这批数据可评率：单故障 98.8%、复合 95.8%
+> （15 条 run 是服务抖动）。`bad_model_output` 一律计分，不剔。老口径（成功/总数）保留在
+> `metrics.json` 的 `rate_raw` 字段里，便于对照。
 
 三条读法（完整解读见 `experiments/real_model/analysis.md`）：
 
 - **治理第一次在四组对照里显形，而且是方向相反的两组差距**：复合故障上 D 100% / C 0%，
-  单故障上 C 100% / D 97.1%。C 的 0% 不是模型不行 —— 它库里 38 条垃圾技能把两条有效的链
+  单故障上 C 100% / D 98.5%。C 的 0% 不是模型不行 —— 它库里 38 条垃圾技能把两条有效的链
   挤到了永远轮不到的位置（第 1 轮恢复优先用单步技能，链长 1 就结束，第二个坏点没机会处理）。
-- **D 的 97.1% 是诚实的能力缺口**：6 个失败全是 `planner/incorrect_planning`，
-  真实模型下 `cross_verify` 在验证集上 `before=0 / after=0`，严格验证拒了它，规则表也没有这条策略，
-  只能转人工。mock 库里这条是有的 —— 说明 mock 的成功有虚高。
+- **D 少的那 1.5pp 是能力缺口，不是治理出错**：6 条失败全在 `planner/incorrect_planning`，
+  其中 3 条是真业务失败、3 条是服务抖动（记为不可评）。真实模型下 `cross_verify` 在验证集上
+  `before=0 / after=0`，严格验证拒了它，规则表也没有这条策略，只能转人工。
+  mock 库里这条是有的 —— 说明 mock 的成功有虚高。
 - **技能必须有作用域**：复合学到的链不能挂到单故障的键上，否则单故障用例会被套上多出来的一步
   （实测打挂 6 个用例）。现在技能带 `scope`，第 1 轮优先单故障技能、第 2 轮起优先多故障技能。
 
@@ -130,7 +136,9 @@ EvoGuardLab/
 │   ├── real_model_attribution.py  归因：C/D 命中的是哪条技能
 │   └── api/app.py           REST API（标准库 http.server）
 ├── frontend/index.html      BoardUI 风格看板（双主题，零依赖）
-├── tests/test_core.py       24 个测试（含对抗性投毒 / 策略链 / 不变量 / 技能定序与作用域）
+├── tests/
+│   ├── test_core.py         24 个测试（对抗性投毒 / 策略链 / 不变量 / 技能定序与作用域）
+│   └── test_judgeability.py 8 个测试（可评口径：业务失败 vs 服务抖动）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
@@ -229,7 +237,7 @@ python ai-service/real_model_attribution.py
 ## 已知限制（别当成能力）
 
 1. **验证集太小**：每格只有 1 条用例，一次 before/after 就决定晋升与否 —— 等于抛硬币，
-   容易误杀（`planner/incorrect_planning` 就是这么被拒的）。这条限制比任何算法细节都更能解释 97.1%。
+   容易误杀（`planner/incorrect_planning` 就是这么被拒的）。这条限制比任何算法细节都更能解释 98.5%。
 2. **模型层没被测到**：任务是抽取式的，grammar 约束清掉格式错误，真实模型 936 次调用 0 次错答。
    要测模型的推理可靠性，得把任务难度提上去。
 3. **故障是构造出来的**，不是真实事故里自然共现的错误；复合故障证明的是「机制上限」，
