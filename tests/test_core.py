@@ -15,6 +15,7 @@
   8. 流程不变量：首尾颠倒能检出、正常流程不误报
   9. 对抗性验证：有害候选技能会伤到 C，但挡在 D 之外
 """
+import json
 import os
 import sys
 import tempfile
@@ -24,6 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "ai-service", "evoguard"))
 
+import baseline    # noqa: E402
 import core        # noqa: E402
 import evaluate    # noqa: E402
 import experience  # noqa: E402
@@ -740,6 +742,221 @@ class TestFullRollback(unittest.TestCase):
         with self.assertRaises(KeyError):
             skills.rollback(self.s, self.v1["id"], to_version=99)
         self.assertEqual(skills.active_snapshot(self.s, self.v1["id"])["version"], 2)
+
+
+class TestBaseline(unittest.TestCase):
+    """P0 06：manifest 冻结、稳定技能库指纹、防混跑与分母自洽。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = os.path.join(self.tmp.name, "project")
+        self.run = os.path.join(self.root, "experiments", "run_001")
+        os.makedirs(self.run)
+        code = os.path.join(self.root, "ai-service", "evoguard")
+        os.makedirs(code)
+        with open(os.path.join(code, "core.py"), "w", encoding="utf-8") as f:
+            f.write("x = 1\n")
+        self._write_metrics()
+        self._write_libraries()
+
+    def _write_metrics(self, metrics=None):
+        def suite(name, n, ok):
+            return {"suite": name, "cases": n,
+                    "modes": {"A": {"n": n, "ok": ok, "failed": n - ok,
+                                    "unjudgeable": 0,
+                                    "rate": round(100.0 * ok / n, 1)}}}
+        self.metrics = metrics or {
+            "meta": {"backend": "mock", "model": "mock",
+                     "skillset": {"d": 1, "c": 1, "d_path": "library_d.db",
+                                  "c_path": "library_c.db"}},
+            "single": suite("single", 204, 40),
+            "composite": suite("composite", 30, 0),
+            "hard": suite("hard", 36, 8)}
+        with open(os.path.join(self.run, "metrics.json"), "w", encoding="utf-8") as f:
+            json.dump(self.metrics, f, ensure_ascii=False)
+        with open(os.path.join(self.run, "report.md"), "w", encoding="utf-8") as f:
+            f.write("# report\n")
+
+    def _write_libraries(self):
+        for name, sid in (("library_c.db", "sk_c"), ("library_d.db", "sk_d")):
+            s = core.Store(os.path.join(self.run, name), fast=True)
+            skills.ensure_schema(s)
+            skills.save(s, {"id": sid, "name": "n", "task_type": "order",
+                            "fault_type": "missing_field", "strategy": "retry",
+                            "required_tools": [], "safety": {"max_retry": 2},
+                            "status": skills.CANDIDATE, "version": 1,
+                            "created_at": 0, "scope": "single"})
+            s.close()
+
+    def _freeze(self, out=None, **kw):
+        path = out or os.path.join(self.root, "manifests", "m1.json")
+        return baseline.freeze(self.root, self.run, manifest_path=path, **kw), path
+
+    def test_freeze_and_verify_roundtrip(self):
+        m, path = self._freeze()
+        self.assertEqual(m["protocol"], baseline.PROTOCOL)
+        self.assertEqual(set(m["libraries"]), {"C", "D"})
+        self.assertTrue(m["config_hash"] and m["library_hash"] and m["fingerprint"])
+        kinds = {f["kind"] for f in m["files"]}
+        self.assertTrue({"metrics", "report", "database", "code"} <= kinds)
+        self.assertTrue(baseline.verify(self.root, path)["ok"])
+
+    def test_changed_report_is_detected(self):
+        m, path = self._freeze()
+        with open(os.path.join(self.run, "report.md"), "a", encoding="utf-8") as f:
+            f.write("手改一行\n")
+        res = baseline.verify(self.root, path)
+        self.assertFalse(res["ok"])
+        self.assertTrue(any("report.md" in d for d in res["diffs"]))
+
+    def test_changed_code_is_reported_as_drift_not_tampering(self):
+        _, path = self._freeze()
+        with open(os.path.join(self.root, "ai-service", "evoguard", "core.py"),
+                  "w", encoding="utf-8") as f:
+            f.write("x = 2\n")
+        res = baseline.verify(self.root, path)
+        self.assertTrue(res["ok"], "代码往前走一步不等于产物被篡改")
+        self.assertTrue(any("core.py" in d for d in res["code_drift"]),
+                        "但必须说清这份报告不是当前代码产出的")
+        self.assertEqual(res["diffs"], [])
+
+    def test_library_content_change_is_detected(self):
+        _, path = self._freeze()
+        s = core.Store(os.path.join(self.run, "library_d.db"), fast=True)
+        skills.ensure_schema(s)
+        with s.conn() as c:
+            c.execute("UPDATE skills SET strategy='cross_verify' WHERE id='sk_d'")
+        s.close()
+        res = baseline.verify(self.root, path)
+        self.assertFalse(res["ok"])
+        self.assertTrue(any("技能库 D" in d for d in res["diffs"]))
+
+    def test_library_hash_is_stable_across_reopen(self):
+        p = os.path.join(self.run, "library_c.db")
+        h1, n1 = baseline.library_content_hash(p)
+        s = core.Store(p, fast=True)
+        s.close()
+        h2, n2 = baseline.library_content_hash(p)
+        self.assertEqual((h1, n1), (h2, n2))
+
+    def test_freeze_refuses_to_overwrite_history(self):
+        _, path = self._freeze()
+        with self.assertRaises(FileExistsError):
+            baseline.freeze(self.root, self.run, manifest_path=path)
+        self.assertTrue(baseline.verify(self.root, path)["ok"])
+
+    def test_run_key_changes_with_every_dimension(self):
+        case = {"case_id": "c1", "seed": 7, "mode": "D"}
+        base = baseline.run_key(case, cfg_hash="cfg", lib_hash="lib")
+        for changed in (dict(case, seed=8), dict(case, mode="C"),
+                        dict(case, case_id="c2")):
+            self.assertNotEqual(
+                base, baseline.run_key(changed, cfg_hash="cfg", lib_hash="lib"))
+        self.assertNotEqual(base, baseline.run_key(case, cfg_hash="cfg2", lib_hash="lib"))
+        self.assertNotEqual(base, baseline.run_key(case, cfg_hash="cfg", lib_hash="lib2"))
+
+    def test_no_mixing_rejects_foreign_and_unmarked_records(self):
+        m, _ = self._freeze()
+        good = [{"case_id": "c1", "protocol": m["protocol"],
+                 "config_hash": m["config_hash"], "library_hash": m["library_hash"]}]
+        self.assertTrue(baseline.assert_no_mixing(
+            good, cfg_hash=m["config_hash"], lib_hash=m["library_hash"]))
+        foreign = dict(good[0], config_hash="other")
+        with self.assertRaisesRegex(baseline.BaselineMismatch, "config_hash"):
+            baseline.assert_no_mixing(
+                [foreign], cfg_hash=m["config_hash"], lib_hash=m["library_hash"])
+        with self.assertRaisesRegex(baseline.BaselineMismatch, "缺少"):
+            baseline.assert_no_mixing(
+                [{"case_id": "legacy"}], cfg_hash=m["config_hash"],
+                lib_hash=m["library_hash"], strict=True)
+        self.assertTrue(baseline.assert_no_mixing(
+            [{"case_id": "legacy"}], cfg_hash=m["config_hash"],
+            lib_hash=m["library_hash"], strict=False))
+
+    def test_load_runs_validates_against_manifest(self):
+        m, _ = self._freeze()
+        path = os.path.join(self.run, "runs.jsonl")
+        rec = {"key": "c1", "success": True, "protocol": m["protocol"],
+               "config_hash": m["config_hash"], "library_hash": m["library_hash"]}
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+        self.assertEqual(len(baseline.load_runs(path, m)), 1)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(dict(rec, key="c2", library_hash="other")) + "\n")
+        with self.assertRaises(baseline.BaselineMismatch):
+            baseline.load_runs(path, m)
+
+    def test_denominator_checks_catch_inconsistent_reports(self):
+        self.assertTrue(baseline.check_denominators(self.metrics)["ok"])
+        bad = json.loads(json.dumps(self.metrics))
+        bad["single"]["modes"]["A"]["rate"] = 99.9
+        self.assertFalse(baseline.check_denominators(bad)["ok"])
+        bad2 = json.loads(json.dumps(self.metrics))
+        bad2["composite"]["cases"] = 31
+        self.assertFalse(baseline.check_denominators(bad2)["ok"])
+
+    def test_summarize_and_mode_section_use_one_source(self):
+        summary = baseline.summarize(self.metrics)
+        self.assertTrue(summary["denominators"]["ok"])
+        self.assertEqual(summary["suites"]["single"]["rates"]["A"], 19.6)
+        lines = baseline.render_mode_section(self.metrics, summary)
+        text = "\n".join(lines)
+        self.assertIn("library_d.db", text)
+        self.assertIn("固定规则表", text)
+        self.assertIn("分母自洽检查：通过", text)
+
+    def test_resume_gate_blocks_foreign_and_unmarked(self):
+        m, _ = self._freeze()
+        same = [{"case_id": "c1", "config_hash": m["config_hash"],
+                 "library_hash": m["library_hash"]}]
+        gate = baseline.check_resume(same, cfg_hash=m["config_hash"],
+                                     lib_hash=m["library_hash"])
+        self.assertTrue(gate["ok"])
+        self.assertFalse(gate["mixed"])
+
+        foreign = [{"case_id": "c1", "config_hash": "other",
+                    "library_hash": m["library_hash"]}]
+        gate = baseline.check_resume(foreign, cfg_hash=m["config_hash"],
+                                     lib_hash=m["library_hash"], allow_legacy=True)
+        self.assertEqual((gate["ok"], gate["reason"]), (False, "foreign"),
+                         "别的配置指纹即使允许续跑也不能放行")
+
+        other_lib = [{"case_id": "c1", "config_hash": m["config_hash"],
+                      "library_hash": "other"}]
+        gate = baseline.check_resume(other_lib, cfg_hash=m["config_hash"],
+                                     lib_hash=m["library_hash"])
+        self.assertEqual(gate["reason"], "foreign", "换了技能库同样算混基线")
+
+        legacy = [{"case_id": "old"}]
+        self.assertEqual(baseline.check_resume(
+            legacy, cfg_hash=m["config_hash"])["reason"], "unmarked")
+        gate = baseline.check_resume(legacy, cfg_hash=m["config_hash"],
+                                     allow_legacy=True)
+        self.assertTrue(gate["ok"])
+        self.assertTrue(gate["mixed"], "无指纹记录续跑必须标成混合基线")
+
+    def test_four_groups_rates_must_match_counts(self):
+        metrics = {"four_groups": {"n": 204, "rates": {"A": 0.0, "B": 26.5},
+                                   "counts": {"A": 0, "B": 54}}}
+        self.assertTrue(baseline.check_denominators(metrics)["ok"])
+        bad = {"four_groups": {"n": 204, "rates": {"A": 0.0, "B": 30.0},
+                               "counts": {"A": 0, "B": 54}}}
+        res = baseline.check_denominators(bad)
+        self.assertFalse(res["ok"])
+        self.assertTrue(any("B" in p for p in res["problems"]))
+
+    def test_freeze_rejects_library_changed_after_hashing(self):
+        cfg = {"protocol": baseline.PROTOCOL}
+        h = baseline.hashes(cfg, {"D": os.path.join(self.run, "library_d.db")})
+        s = core.Store(os.path.join(self.run, "library_d.db"), fast=True)
+        skills.ensure_schema(s)
+        with s.conn() as c:
+            c.execute("UPDATE skills SET strategy='cross_verify' WHERE id='sk_d'")
+        s.close()
+        with self.assertRaisesRegex(baseline.BaselineMismatch, "内容已变化"):
+            baseline.freeze(self.root, self.run, config=cfg, libraries=h["libraries"],
+                            manifest_path=os.path.join(self.root, "m", "drift.json"))
 
 
 if __name__ == "__main__":

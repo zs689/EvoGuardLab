@@ -129,3 +129,60 @@ P0 05 经验证据溯源与环境元数据：`validate` 拒绝跨运行伪造引
 ### 下一项验收
 
 P0 06 冻结可复现基线：把报告 / metrics.json / runs.jsonl / C 与 D 技能库哈希及关键代码指纹写进同一 manifest，重跑用新目录不覆盖历史，按 case_id / seed / mode / 配置哈希 / 技能库哈希恢复且指纹不一致拒绝混跑；报告自动生成同一组数字。
+
+## 2026-11-08：P0 06 冻结可复现基线与数字统一
+
+依据推进计划第 4 章「任务 P0 06」与第 3.6 点的报告分叉。
+
+### 已完成
+
+- 新增 `ai-service/evoguard/baseline.py`（协议 `evoguard-baseline-v1`）：`freeze / verify / check` 三个动作 + `run_key / assert_no_mixing / check_resume / check_denominators / summarize / render_mode_section`。
+- manifest 一次登记：运行目录里 metrics.json / runs.jsonl / report.md / *.db / 其它 json 的哈希，11 个关键代码文件哈希，配置（含 paired-v2 与晋升门禁门槛、检查器配置）及其哈希，C/D 技能库**内容**哈希与条数，git HEAD，最后是覆盖前三者的总指纹。
+- **技能库指纹按内容算，不哈希 SQLite 字节**：同一库关掉重开后页与 journal 会变，字节哈希会飘；改为按 id 排序哈希正文（含 status / version / active_version，因为「候选」和「已晋升」是两种实验条件）。回归测试 `test_library_hash_is_stable_across_reopen` 守住这条。
+- **产物篡改与代码漂移分开报**：产物哈希变了 → `ok=False`（证据被改）；代码在冻结之后改了 → 只进 `code_drift`，并明说「这份报告属于历史版本，不能声称由当前代码产生」。混在一起报，用户分不清是数据坏了还是代码往前走了一步。
+- **防混跑接进真实入口**：`real_model_bench` 每条 run 记录写入 protocol / config_hash / library_hash；续跑前用 `check_resume` 核对，别的配置或技能库直接拒绝（退出码 3），旧版无指纹记录默认也拒绝，`--allow-legacy-resume` 才放行并在 metrics 标 `mixed_baseline`。
+- **冻结时对账**：传入运行前算好的技能库指纹时，`freeze` 会重算一遍并比对；运行期间库内容变了（中途晋升技能）直接抛 `BaselineMismatch`，不允许把「跑前快照」当成「跑后事实」。
+- **报告数字单一来源**：`evolution_bench` 与 `real_model_bench` 都在写完后追加「模式实际使用的策略与技能」一节，内容全部由 metrics 生成（哪个库、多少条、协议、配置指纹、分母自洽结果），不再手抄第二套数字。
+- 重跑守卫：输出目录已存在直接 `FileExistsError`；manifest 已存在默认拒绝覆盖（`test_freeze_refuses_to_overwrite_history`）。
+
+### 验证证据
+
+- 全量 **176 个测试**通过（55 核心 + 9 评测口径 + 19 难度组 + 34 检查器 + 23 静态 + 36 技能验证）。
+- 新增 `TestBaseline` 14 项：冻结/校验往返、改报告被发现、代码改动归类为漂移、技能库内容变化被发现、指纹跨重开稳定、拒绝覆盖历史、恢复键随五个维度变化、混跑拒绝外来与未标记记录、`check_resume` 三分支、four_groups 的 rates 与 counts 对账、冻结前库已变的拒绝。
+- `experiments/p0_06_20261108/evolution_smoke/`：mock 闭环重跑，**产物差异 0 处、代码漂移 0 个、分母自洽通过**；四组数字仍为 0 / 26.5 / 100 / 94.1%，39 条经验全部 validated。
+- `experiments/p0_06_20261108/baseline_manifest.json`：冻结历史 `experiments/real_model/` 产物，现在校验结果为「产物差异 0 处 + 代码漂移 3 个文件」，即历史报告未被改动、但由更早的代码产出 —— 这正是该有的结论。
+- README 残留的 `单故障 D 98.5%` 已改回 `97.1%`（与表格、报告一致）。
+
+### 仍未完成
+
+- 真实模型报告（`experiments/real_model/`）是在本模块之前跑的：结构里没有 `config_hash` / `library_hash`，只能以「历史基线 + 代码漂移」的形式登记，不能与新的冻结产物混算。
+- 运行时仍不消费 `safety` 审批声明；工具链仍全部为模拟实现。
+- 计划文档三个分叉点（第 3/15/17 章指针、P1 第 9 章导出状态、P2 验收链）仍待在 `docs/` 落地。
+
+### 下一项验收
+
+计划文档分叉点收口：把第 3/15/17 章的交接指针从 P0 01/02 挪到 P0 03 之后再挪到 P0 06 之后、把第 9 章已交付的 CLI/JSON/Markdown 导出标为已完成、补 P2 里「历史评测入口技能库怎么选」的断点。随后再评估是否值得重跑一次真实模型全量评测。
+
+## 2026-11-08：计划文档分叉点收口
+
+依据推进计划第 3 / 9 / 15 / 17 章与第 3.6 点。Word 原件未改，结论落在 `docs/plan-alignment.md`。
+
+### 已完成
+
+- 逐条对照计划原文与当前代码，标出两处**已经过时**的表述：第 3/15/17 章仍把 P0 01/02 列为待办（实际已推进到 P0 06）；第 9 章把「单命令 CLI + JSON/Markdown 导出」写成未来工作（实际已交付，含导出文件名 `inspect.json` / `inspect.md` / `static.json` / `static.md`）。
+- 补出第 9 章**真正没做**的三块：阈值退出码（现在只有 0 / 2，没有 `--fail-on`）、≥30 条人工标注轨迹与准确率、规则适用性统计（零命中但多数规则未执行时必须写「覆盖有限」）。
+- P2 断点收口：`real_model_bench.py --library-dir` 显式选择评测用哪一份 C/D 库，训练产物目录可直接接评测入口；库哈希进 runs.jsonl 与 metrics，结束冻结 manifest，续跑用 `check_resume` 防混跑。
+- 如实记录仍未做的：`experiments/real_model/` 的历史报告产生在指纹机制之前，只能登记为「历史基线 + 代码漂移」；P2 让技能表达条件决策没有任何进展。
+
+### 验证证据
+
+- 全量 **176 个测试**通过；`ai-service/real_model_bench.py` 可编译，`--library-dir` 指向不存在目录时直接报错。
+- 实测 CLI 静态分支：`cd ai-service && python -m evoguard_inspect.cli --agent ../tests/fixtures/mini_repo --split-dir --out ...` 输出 `static.md` + `static.json`，20/20 条静态规则生效。
+
+### 下一项验收
+
+剩余真实缺口，按价值排序：
+1. 重跑一次真实模型全量评测（约 936 run），让 `experiments/real_model/` 拥有可混算的指纹，而不是只登记历史基线；
+2. 检查器阈值退出码 + 规则适用性统计（第 9 章硬要求，缺它无法进 CI）；
+3. ≥30 条人工标注轨迹集，才有资格谈误报率与漏报率。
+

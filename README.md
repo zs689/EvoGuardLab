@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（162 个：41 核心 + 9 评测口径 + 19 难度组 + 34 检查器 + 23 静态 + 36 技能验证/晋升）
+# 2) 回归测试（176 个：55 核心 + 9 评测口径 + 19 难度组 + 34 检查器 + 23 静态 + 36 技能验证/晋升）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -27,6 +27,9 @@ python scripts/check_model.py --base http://127.0.0.1:11434/v1
 # 5) 真实模型全量评测（936 run，约 13 分钟，可断点续跑）
 python ai-service/real_model_bench.py
 python ai-service/real_model_attribution.py   # 归因：C/D 命中了哪条技能
+
+# 6) 冻结 / 校验实验基线（产物哈希 + 技能库内容指纹 + 配置指纹 + 分母自洽）
+python ai-service/evoguard/baseline.py check --manifest experiments/p0_06_20261108/evolution_smoke/manifest.json
 ```
 
 不需要 pip 安装任何东西，Python 3.9+ 标准库即可跑（接本地模型才需要 Ollama）。
@@ -304,6 +307,7 @@ EvoGuardLab/
 │   │   ├── invariants.py    业务不变量（含流程首尾阶段约束）
 │   │   ├── experience.py    经验提取 + 准入校验 + 记忆治理
 │   │   ├── skills.py        候选技能 / 独立验证 / 晋升 / 回滚 / 负迁移
+│   │   ├── baseline.py      冻结可复现基线：manifest / 库内容指纹 / 防混跑 / 分母自洽
 │   │   └── evaluate.py      A/B/C/D 四组对照 + 指标
 │   ├── evolution_bench.py   闭环入口（产出 report.md + metrics.json）
 │   ├── real_model_train.py  真实模型自举训练（严格库 / 放宽库，test 不参与）
@@ -312,7 +316,7 @@ EvoGuardLab/
 │   └── api/app.py           REST API（标准库 http.server）
 ├── frontend/index.html      BoardUI 风格看板（双主题，零依赖）
 ├── tests/
-│   ├── test_core.py         41 个测试（对抗性投毒 / 策略链 / 完整回滚 / 经验溯源）
+│   ├── test_core.py         55 个测试（对抗性投毒 / 策略链 / 完整回滚 / 经验溯源 / 基线冻结）
 │   ├── test_judgeability.py 9 个测试（可评口径：业务失败 vs 服务抖动）
 │   ├── test_hard_tasks.py   19 个测试（真值可独立算 / 判定不误杀 / 训练集与评测集不相交）
 │   ├── test_inspect.py      34 个测试（规则全命中 / 零误报 / 配置适配 / 事故模式）

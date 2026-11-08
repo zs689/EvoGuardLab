@@ -18,6 +18,7 @@ import uuid
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "evoguard"))
 
+import baseline    # noqa: E402
 import core        # noqa: E402
 import evaluate    # noqa: E402
 import experience  # noqa: E402
@@ -318,6 +319,13 @@ def main():
     L.append("   但也意味着策略空间仍是**固定词表**，不是开放式规划。")
     L.append("")
 
+    # P0 06：先算配置与技能库指纹，metrics 里要带上它们，
+    # 事后才能回答「这组数字是哪一份库、哪一套门槛跑出来的」。
+    cfg = baseline.default_config(ROOT)
+    cfg.update({"backend": "mock", "dataset": sim.dataset_stats(),
+                "split": {"train": len(train), "test": len(test)}})
+    h = baseline.hashes(cfg, {"SKILLS": DB})
+
     os.makedirs(os.path.dirname(REPORT), exist_ok=True)
     with open(REPORT, "w", encoding="utf-8") as f:
         f.write("\n".join(L))
@@ -326,6 +334,12 @@ def main():
     import json
     metrics = {
         "protocol_version": skills.VALIDATION_PROTOCOL,
+        "baseline_protocol": baseline.PROTOCOL,
+        "config_hash": h["config_hash"],
+        "library_hash": h["library_hash"],
+        "libraries": {k: {"content_sha256": v["content_sha256"], "skills": v["skills"]}
+                      for k, v in h["libraries"].items()},
+        "config": cfg,
         "generated_at": core.now(),
         "dataset": sim.dataset_stats(),
         "closed_loop": {k: v for k, v in log},
@@ -361,6 +375,13 @@ def main():
     with open(METRICS, "w", encoding="utf-8") as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
 
+    # 报告里这段数字来自 metrics，不另手抄一份；分母不自洽会就地标出来。
+    summary = baseline.summarize(metrics)
+    if not summary["denominators"]["ok"]:
+        print("[!] 分母自洽检查未通过：%s" % summary["denominators"]["problems"])
+    with open(REPORT, "a", encoding="utf-8") as f:
+        f.write("\n" + "\n".join(baseline.render_mode_section(metrics, summary)) + "\n")
+
     print("== 闭环 ==")
     print("  训练 %d（复合 %d）｜ 探索 %d（靠链 %d）｜ 经验 %d ｜ 候选 %d ｜ 晋升 %d"
           % (len(train), len(comp_train), explored, explored_chain,
@@ -378,6 +399,18 @@ def main():
     print("== 经验库 ==")
     print("  " + str(experience.stats(store)))
     store.close()
+
+    # 冻结放在 close 之后：SQLite 关闭时可能改写页与 journal，
+    # 先哈希再关闭会得到一个「刚生成就已经不匹配」的 manifest。
+    man = baseline.freeze(ROOT, out, config=cfg, libraries=h["libraries"],
+                          note="mock 闭环（P0 06 冻结基线）")
+    print("== 基线 ==")
+    print("  manifest：%s" % man["manifest_path"])
+    print("  总指纹 %s ｜ 配置 %s ｜ 技能库 %s"
+          % (man["fingerprint"][:16], man["config_hash"][:16],
+             man["library_hash"][:16]))
+    if man["config_hash"] != h["config_hash"] or man["library_hash"] != h["library_hash"]:
+        print("[×] manifest 指纹与 metrics 记录的不一致，报告不可引用")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,193 @@
+{
+  "baseline_commit": "a97765d18209c4076208be950f0125aeeaea08c3",
+  "config": {
+    "backend": "mock",
+    "dataset": {
+      "cases": 272,
+      "composite_patterns": 5,
+      "composite_test_cases": 30,
+      "dev_cases": 68,
+      "hard": {
+        "cases": 36,
+        "per_agent": {
+          "calc": 18,
+          "xref": 18
+        }
+      },
+      "per_agent": {
+        "kb": {
+          "dev_cases": 22,
+          "faults": 11,
+          "tasks": 8,
+          "test_cases": 66
+        },
+        "order": {
+          "dev_cases": 24,
+          "faults": 12,
+          "tasks": 8,
+          "test_cases": 72
+        },
+        "planner": {
+          "dev_cases": 22,
+          "faults": 11,
+          "tasks": 8,
+          "test_cases": 66
+        }
+      },
+      "tasks": {
+        "kb": 8,
+        "order": 8,
+        "planner": 8
+      },
+      "test_cases": 204
+    },
+    "env_protocol": "evoguard-env-v1",
+    "inspect_config": {
+      "allowed_tools": [
+        "kb.search",
+        "order.get_order",
+        "order.settle",
+        "task.make_plan"
+      ],
+      "check_pii": true,
+      "expect_keys": [],
+      "max_repeat": 3,
+      "read_only_tools": [
+        "kb.search",
+        "order.get_order",
+        "task.make_plan"
+      ],
+      "slow_step_ms": 30000,
+      "token_budget": 2000,
+      "write_hints": [
+        "settle",
+        "write",
+        "delete",
+        "update",
+        "create",
+        "refund",
+        "submit",
+        "send",
+        "pay",
+        "transfer"
+      ],
+      "write_tools": [
+        "order.settle",
+        "refund.create"
+      ]
+    },
+    "max_evaluation_age_s": 86400,
+    "max_neg_transfer": 0.05,
+    "min_gain_pp": 15.0,
+    "min_validation_tasks": 3,
+    "promotion_protocol": "promotion-gate-v1",
+    "protocol": "evoguard-baseline-v1",
+    "split": {
+      "test": 204,
+      "train": 49
+    },
+    "validation_protocol": "paired-v2"
+  },
+  "config_hash": "c95af7f9b6d0f7830aa699b09553dc462a4d5451bfb831498bfffe685cc5557b",
+  "created_at": "2026-11-08T14:51:48.739160+00:00",
+  "files": [
+    {
+      "bytes": 25127,
+      "kind": "code",
+      "path": "ai-service/evoguard/baseline.py",
+      "sha256": "c8c8e70faa5a8feea6d4e785bc47a03ac580c42d587aaca41b26c66e7d53df53"
+    },
+    {
+      "bytes": 17873,
+      "kind": "code",
+      "path": "ai-service/evoguard/core.py",
+      "sha256": "c69175975611d65cdd98330d1f9b2c9c51f6691a62e1e8f7c0df256dd80ebf66"
+    },
+    {
+      "bytes": 9587,
+      "kind": "code",
+      "path": "ai-service/evoguard/evaluate.py",
+      "sha256": "b7547629ccc64fab11bada34af61edcbfedb4f7a8ac0aa4154fda28ffc797bb9"
+    },
+    {
+      "bytes": 18651,
+      "kind": "code",
+      "path": "ai-service/evoguard/experience.py",
+      "sha256": "f919cd1d05e4830bc324f2dedc9a9d688fea24aa675046c75a2a5775acfd62e4"
+    },
+    {
+      "bytes": 14355,
+      "kind": "code",
+      "path": "ai-service/evoguard/gateway.py",
+      "sha256": "c8795eac6185f6f9254d41caaf8c79c203cf256ce450f1e2f09c975c44834445"
+    },
+    {
+      "bytes": 48857,
+      "kind": "code",
+      "path": "ai-service/evoguard/runtime.py",
+      "sha256": "000c16aa33b01d660e05c4a7b28b73d5ae0b98e92e4e7a189bee804f58bfd342"
+    },
+    {
+      "bytes": 38551,
+      "kind": "code",
+      "path": "ai-service/evoguard/sim.py",
+      "sha256": "2f9ceb943da3515bcd8b4e636ad1ec61c015f2d30ae8afeeae42de9cb7141d1a"
+    },
+    {
+      "bytes": 42548,
+      "kind": "code",
+      "path": "ai-service/evoguard/skills.py",
+      "sha256": "969b730a85445c3ddeec36e403e085b57e00a6e6e94e3569e0f6a7301abb4b31"
+    },
+    {
+      "bytes": 20856,
+      "kind": "code",
+      "path": "ai-service/evolution_bench.py",
+      "sha256": "8a0ed1977162d4f0b79baded7b47b89d31ba097c886c676bda89f8cf9aec6794"
+    },
+    {
+      "bytes": 46337,
+      "kind": "code",
+      "path": "ai-service/real_model_bench.py",
+      "sha256": "6dac274fbb2b77de49ac823cd9d9f72bd84ce234be6a7c4f81b88ec58ab0c027"
+    },
+    {
+      "bytes": 20094,
+      "kind": "code",
+      "path": "ai-service/real_model_train.py",
+      "sha256": "4d423c84b50f1826c089d2bbcbab75b33611e22c9d4b9b974812c7d76faa78ed"
+    },
+    {
+      "bytes": 10223616,
+      "kind": "database",
+      "path": "experiments/p0_06_20261108/evolution_smoke/evolution.db",
+      "sha256": "e2d66d3e84ce44c45d1181f83da0a1c9f104f66cd86a0a0f7bb3bc8faa564516"
+    },
+    {
+      "bytes": 9070,
+      "kind": "report",
+      "path": "experiments/p0_06_20261108/evolution_smoke/evolution_report.md",
+      "sha256": "d9cc7cf7315af25ae510585355b97559a27ec74dd2935cfc1a09253bfa3a1ebd"
+    },
+    {
+      "bytes": 558957,
+      "kind": "metrics",
+      "path": "experiments/p0_06_20261108/evolution_smoke/metrics.json",
+      "sha256": "6bcb0a5c971493416f94b5c9908474908a99b0880a88de63b19d67daa6753390"
+    }
+  ],
+  "fingerprint": "014983b789b667d5708abd3ee310be59d7953e4c2b4e4704501def24802e46dd",
+  "libraries": {
+    "SKILLS": {
+      "content_sha256": "44e96eb91e318ab5f30699fa9e12bbf562f4e4e592848b255959571845daadb4",
+      "file_sha256": "e2d66d3e84ce44c45d1181f83da0a1c9f104f66cd86a0a0f7bb3bc8faa564516",
+      "path": "experiments/p0_06_20261108/evolution_smoke/evolution.db",
+      "skills": 39
+    }
+  },
+  "library_hash": "8dd4da859c4f592aaec64347e87e2f45b3ac0dab483c6f50ac313914e8bbc2c5",
+  "manifest_path": "experiments/p0_06_20261108/evolution_smoke/manifest.json",
+  "note": "mock 闭环（P0 06 冻结基线）",
+  "protocol": "evoguard-baseline-v1",
+  "run_dir": "experiments/p0_06_20261108/evolution_smoke"
+}

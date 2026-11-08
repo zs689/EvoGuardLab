@@ -35,6 +35,7 @@ import traceback
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "evoguard"))
 
+import baseline    # noqa: E402
 import core        # noqa: E402
 import gateway     # noqa: E402
 import runtime     # noqa: E402
@@ -693,6 +694,11 @@ def main():
                     choices=["single", "composite", "hard", "all"])
     ap.add_argument("--fresh", action="store_true")
     ap.add_argument("--skip-control", action="store_true")
+    ap.add_argument("--allow-legacy-resume", action="store_true",
+                    help="允许续跑不含配置/技能库指纹的历史检查点（会混基线，默认拒绝）")
+    ap.add_argument("--library-dir",
+                    help="技能库目录（含 library_c.db / library_d.db）。"
+                         "默认 data/；要评测某次训练产物就指向它的输出目录")
     args = ap.parse_args()
 
     try:
@@ -700,6 +706,16 @@ def main():
     except Exception:
         pass
     os.makedirs(OUT, exist_ok=True)
+
+    # 显式技能库选择：训练产物在各自输出目录里，不指过来就永远只能跑到 data/ 那一份。
+    if args.library_dir:
+        global LIB_D, LIB_C
+        ldir = os.path.abspath(args.library_dir)
+        if not os.path.isdir(ldir):
+            print("[×] 技能库目录不存在：%s" % ldir, flush=True)
+            return 1
+        LIB_D, LIB_C = os.path.join(ldir, "library_d.db"), os.path.join(ldir, "library_c.db")
+        print("[√] 技能库目录：%s" % ldir, flush=True)
 
     # 难度组单独落盘、单独建库。
     # 为什么必须隔离：write_outputs 会把 metrics.json 整个重写，跑子集 suite 时
@@ -759,7 +775,40 @@ def main():
     cases = build_cases(args.suite)
     if args.limit:
         cases = cases[:args.limit]
+
+    # P0 06：本次运行的基线指纹。cfg 只放「会改变结论」的项，
+    # 时间戳、耗时之类不进哈希，否则同一设置永远算不出同一个指纹。
+    cfg = baseline.default_config(ROOT)
+    cfg.update({
+        "backend": args.backend, "model": meta.get("model"),
+        "system_prompt_sha256": meta.get("system_prompt_sha256"),
+        "json_grammar": meta.get("json_grammar"),
+        "suite": args.suite, "limit": args.limit, "modes": list(MODES),
+        "skillset_kind": skillset["kind"],
+    })
+    lib_paths = ({"C": skillset["c_path"], "D": skillset["d_path"]}
+                 if skillset["kind"] == "two_libs" else {"SKILLS": db_path})
+    bl = baseline.hashes(cfg, {k: v for k, v in lib_paths.items() if v and os.path.exists(v)})
+
     done = load_checkpoint(args.fresh)
+    if done:
+        # 续跑最容易静默混基线：旧检查点可能是别的配置/别的技能库跑出来的。
+        gate = baseline.check_resume(list(done.values()), cfg_hash=bl["config_hash"],
+                                     lib_hash=bl["library_hash"],
+                                     allow_legacy=args.allow_legacy_resume)
+        if not gate["ok"]:
+            if gate["reason"] == "foreign":
+                print("[×] 检查点里有 %d 条属于别的配置/技能库指纹，拒绝混跑。"
+                      % gate["foreign"], flush=True)
+                print("    重新跑请加 --fresh；要先保住旧数据就先归档目录。", flush=True)
+            else:
+                print("[×] 检查点里有 %d 条没有基线指纹（旧版本产物），"
+                      "续跑会混基线。确认要续请加 --allow-legacy-resume。"
+                      % gate["unmarked"], flush=True)
+            return 3
+        if gate["mixed"]:
+            print("[!] 续跑包含 %d 条无指纹的历史记录，metrics 会标 mixed_baseline"
+                  % gate["unmarked"], flush=True)
     todo = [(c, m) for c in cases for m in MODES if case_key(c, m) not in done]
     print("[√] 用例 %d × 4 模式 = %d 个 run；已完成 %d，待跑 %d"
           % (len(cases), len(cases) * 4, len(done), len(todo)), flush=True)
@@ -787,7 +836,10 @@ def main():
                 traceback.print_exc()
             rec = {"key": case_key(c, m), "suite": c["suite"],
                    "agent": c["agent_type"], "task": c["task_id"],
-                   "fault": c["fault_type"], "mode": m, "ts": core.now()}
+                   "fault": c["fault_type"], "mode": m, "ts": core.now(),
+                   "protocol": baseline.PROTOCOL,
+                   "config_hash": bl["config_hash"],
+                   "library_hash": bl["library_hash"]}
             rec.update(r)
             fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
             fout.flush()
@@ -819,6 +871,33 @@ def main():
     elapsed = time.time() - t_start
     m = write_outputs(meta, single, composite, control, done, elapsed, hard,
                       hard_only=hard_only)
+
+    # P0 06：同一组数字只有一个来源 —— metrics；报告那一段由它生成，
+    # 分母不自洽就地写进报告，不靠人肉核对。manifest 最后写，冻结前一步。
+    m["baseline_protocol"] = baseline.PROTOCOL
+    m["config_hash"] = bl["config_hash"]
+    m["library_hash"] = bl["library_hash"]
+    m["libraries"] = {k: {"content_sha256": v["content_sha256"],
+                          "skills": v["skills"], "path": v["path"]}
+                      for k, v in bl["libraries"].items()}
+    m["mixed_baseline"] = bool(any(not r.get("config_hash") for r in done.values()))
+    with open(METRICS, "w", encoding="utf-8") as f:
+        json.dump(m, f, ensure_ascii=False, indent=2)
+    summary = baseline.summarize(m)
+    if not summary["denominators"]["ok"]:
+        print("[!] 分母自洽检查未通过：%s" % summary["denominators"]["problems"],
+              flush=True)
+    with open(REPORT, "a", encoding="utf-8") as f:
+        f.write("\n" + "\n".join(baseline.render_mode_section(m, summary)) + "\n")
+    man = baseline.freeze(ROOT, os.path.dirname(REPORT), config=cfg,
+                          libraries=bl["libraries"],
+                          note="真实模型全量评测（P0 06 冻结基线）")
+    print("== 基线 ==", flush=True)
+    print("  manifest：%s" % man["manifest_path"], flush=True)
+    print("  总指纹 %s ｜ 配置 %s ｜ 技能库 %s"
+          % (man["fingerprint"][:16], man["config_hash"][:16],
+             man["library_hash"][:16]), flush=True)
+
     print("== 真实模型全量评测完成 ==", flush=True)
     rows = [("单故障", single), ("复合故障", composite)]
     if hard:

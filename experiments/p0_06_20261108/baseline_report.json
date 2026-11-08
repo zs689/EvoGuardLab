@@ -1,0 +1,135 @@
+{
+  "task": "P0 06 冻结可复现基线",
+  "plan_document": "EvoGuardLab_下一阶段详细推进计划_2026-11-08.docx",
+  "plan_sections": [
+    "3.6 报告数字与表格冲突",
+    "4 任务 P0 06",
+    "4 验收与交付"
+  ],
+  "module": "ai-service/evoguard/baseline.py",
+  "protocol": "evoguard-baseline-v1",
+  "manifest": {
+    "path": "experiments/p0_06_20261108/evolution_smoke/manifest.json",
+    "baseline_commit": "a97765d18209c4076208be950f0125aeeaea08c3",
+    "config_hash": "c95af7f9b6d0f7830aa699b09553dc462a4d5451bfb831498bfffe685cc5557b",
+    "library_hash": "8dd4da859c4f592aaec64347e87e2f45b3ac0dab483c6f50ac313914e8bbc2c5",
+    "fingerprint": "014983b789b667d5708abd3ee310be59d7953e4c2b4e4704501def24802e46dd",
+    "files": 14,
+    "kinds": [
+      "code",
+      "database",
+      "metrics",
+      "report"
+    ],
+    "code_files": 11,
+    "libraries": {
+      "SKILLS": {
+        "skills": 39,
+        "content_sha256": "44e96eb91e318ab5f30699fa9e12bbf562f4e4e592848b255959571845daadb4"
+      }
+    }
+  },
+  "verification": {
+    "smoke": {
+      "ok": true,
+      "artifact_diffs": [],
+      "code_drift": []
+    },
+    "historical_real_model": {
+      "ok": true,
+      "artifact_diffs": [],
+      "code_drift": [
+        "内容变化：ai-service/evoguard/baseline.py",
+        "内容变化：ai-service/evolution_bench.py",
+        "内容变化：ai-service/real_model_bench.py"
+      ],
+      "reading": "产物未被改动；代码在此之后前进，因此该报告属于历史版本，不可声称由当前代码产生"
+    }
+  },
+  "denominators": {
+    "ok": true,
+    "problems": [],
+    "suites": [
+      "composite"
+    ],
+    "numbers": {
+      "four_groups": {
+        "A": 0.0,
+        "B": 26.5,
+        "C": 100.0,
+        "D": 94.1
+      },
+      "n_single": 204,
+      "composite": {
+        "A": 0.0,
+        "single": 0.0,
+        "chain": 100.0,
+        "D": 0.0
+      },
+      "n_composite": 30
+    }
+  },
+  "mixing_guard": {
+    "run_record_fields": [
+      "protocol",
+      "config_hash",
+      "library_hash"
+    ],
+    "resume": "baseline.check_resume：别的配置/技能库 -> 拒绝(退出码 3)；无指纹历史记录 -> 默认拒绝，--allow-legacy-resume 放行并标 mixed_baseline",
+    "freeze_recheck": "传入运行前算好的库指纹时重算比对，运行期间库变了抛 BaselineMismatch",
+    "run_key": "case_id|seed|mode + config_hash + library_hash + protocol"
+  },
+  "report_single_source": {
+    "section": "模式实际使用的策略与技能",
+    "generated_by": "baseline.render_mode_section(metrics, summary)",
+    "appended_by": [
+      "ai-service/evolution_bench.py",
+      "ai-service/real_model_bench.py"
+    ],
+    "checks": "分母 = cases/n；分子之和 = n；报告 rate = ok/n；mock 结构对账 counts 与 rates"
+  },
+  "counterexample_tests": {
+    "class": "tests.test_core.TestBaseline",
+    "cases": [
+      "test_changed_code_is_reported_as_drift_not_tampering",
+      "test_changed_report_is_detected",
+      "test_denominator_checks_catch_inconsistent_reports",
+      "test_four_groups_rates_must_match_counts",
+      "test_freeze_and_verify_roundtrip",
+      "test_freeze_refuses_to_overwrite_history",
+      "test_freeze_rejects_library_changed_after_hashing",
+      "test_library_content_change_is_detected",
+      "test_library_hash_is_stable_across_reopen",
+      "test_load_runs_validates_against_manifest",
+      "test_no_mixing_rejects_foreign_and_unmarked_records",
+      "test_resume_gate_blocks_foreign_and_unmarked",
+      "test_run_key_changes_with_every_dimension",
+      "test_summarize_and_mode_section_use_one_source"
+    ],
+    "count": 14
+  },
+  "regression": {
+    "total_tests": 176,
+    "breakdown": {
+      "test_core": 55,
+      "test_judgeability": 9,
+      "test_hard_tasks": 19,
+      "test_inspect": 34,
+      "test_static": 23,
+      "test_skill_validation": 36
+    }
+  },
+  "deliverables": {
+    "manifest": "experiments/p0_06_20261108/evolution_smoke/manifest.json",
+    "metrics": "experiments/p0_06_20261108/evolution_smoke/metrics.json",
+    "report": "experiments/p0_06_20261108/evolution_smoke/evolution_report.md",
+    "historical_baseline": "experiments/p0_06_20261108/baseline_manifest.json",
+    "plan_alignment": "docs/plan-alignment.md"
+  },
+  "still_not_done": [
+    "experiments/real_model 的产物早于指纹机制，只能登记为历史基线 + 代码漂移",
+    "检查器阈值退出码（--fail-on）与规则适用性统计",
+    "≥30 条人工标注轨迹集（没有标签就没有误报率/漏报率）",
+    "P2：让技能表达条件决策，当前仍是固定策略词表"
+  ]
+}
