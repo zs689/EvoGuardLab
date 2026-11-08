@@ -46,6 +46,40 @@ python ai-service/evolution_bench.py
 
 `real_model_bench.py` 的历史库路径尚未迁移；新训练产物不会自动接到旧评测入口。需要后续完成显式库选择和实验 manifest，不能把旧评测结果当成本轮新结果。
 
+## P0 03 晋升门禁（promotion-gate-v1）
+
+`skills.promote` 不再接受裸调用。它在同一个事务内完成：核对评估 → 追加不可变版本快照 → 更新当前指针 → 标记评估已消费；任一检查失败则整体回滚，不留下半套状态。
+
+### 评估与候选的绑定
+
+`evaluate` 写库时同时记录：
+
+- `candidate_hash`：技能正文指纹，字段为 name / task_type / fault_type / strategy / required_tools / safety / scope。status、version、时间戳刻意排除，否则幂等重放会立刻失效。内存 dict 与 DB 行先把落库的 JSON 字符串还原成结构再哈希，保证两者算出同一个值。
+- `validation_hash` 与 `validation_cases`：target / guard / training 的规范化题目指纹。
+- `protocol_version=paired-v2` 与 `promotion_protocol=promotion-gate-v1`。
+- 完整 `pairs` 成对明细、阈值与判定理由。
+
+### 晋升时逐项核对
+
+skill_id 归属、评估协议、paired-v2 明细存在、判决 PROMOTE、评估有效期（24 小时）、旧版本状态非 rejected、当前版本已有不可变快照、评估未被其他版本消费、候选正文指纹、验证集指纹、成对明细自洽、样本充分性与门槛。
+
+独立任务数、负迁移率、增益都从 `pairs` **重算**再与记录比对，不是只读汇总列：改某一对的成功状态、把 SQL 的 verdict 列手工翻成 PROMOTE、或替换验证集题目，都会被拦下。每项失败有独立诊断码；`promotion_failure_text()` 输出可直接贴进报告的逐项核对与处理建议，`audit_promotion()` 是同一套逻辑的只读版本，不写库。
+
+### 幂等
+
+同一评估 + `consumed_by == 当前 version` + 状态 active → 判定为重放请求，直接返回已启用版本，不新增 `skill_versions` 行。评估过期后的重放也仍返回该版本；一次新的评估可以继续让技能升版本。
+
+### 正式入口
+
+- `evolution_bench.py`：`evaluate` 后显式传 `evaluation_id` 调 `promote`。
+- `real_model_train.py`：严格库（D）通过 `build_library(strict=True)` 先调 `promote` 再导出。此前这里直接 `UPDATE skills SET status='active', version=2` 伪造「验证通过」，是门禁的真实绕过点，已修。
+- 放宽库（C）是**故意不验证的对照组**，仍以 active/v2 写入且不改写源库证据；它不是晋升链路生效的证据。
+- 老库通过增列迁移；历史评估记录的 `protocol_version` / `details` 为 NULL，一律不得冒充新版验证。
+
+### 反例
+
+`tests/test_skill_validation.py` 的 `TestPromotionGate` / `TestStrictLibraryPipeline` 覆盖：无评估直接晋升被拒、候选正文或 scope 改动后旧评估失效、空 guard / 单验证任务即使手工翻 verdict 也不放行、过期评估、历史 NULL 协议、验证集或成对明细被篡改、评估属于别的技能、重复晋升不重复写版本、被拒后不留下任何写库痕迹、严格库必须由真实晋升产生。
+
 ## 后续边界
 
-本轮只完成 P0 01/02。`promote` 自身仍可被直接调用，尚未绑定本协议、评估记录与候选内容指纹；回滚、经验引用溯源和统一实验 manifest 也尚未完成。不得把本轮结果描述为晋升链路已经不可绕过。
+本轮完成 P0 01/02/03，晋升链路在 `promote` 与严格库构建两处均不可绕过。但 `rollback` 仍只改 status/version，尚未恢复技能正文（P0 04）；经验引用溯源、环境元数据（P0 05）与冻结基线、报告统一（P0 06）仍未完成。24 小时有效期与 3 个独立任务只是工程下限，不是统计安全保证。不得把本轮结果描述为「回滚可恢复实际行为」或「实验已可完整复现」。

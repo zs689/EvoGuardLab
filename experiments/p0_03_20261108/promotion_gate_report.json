@@ -1,0 +1,218 @@
+{
+  "task": "P0 03 晋升校验与幂等",
+  "plan_document": "EvoGuardLab_下一阶段详细推进计划_2026-11-08.docx",
+  "plan_sections": [
+    "3.3 晋升函数本身没有检查验证结果",
+    "4 任务 P0 03 晋升校验",
+    "4 验收与交付"
+  ],
+  "gate": {
+    "validation_protocol": "paired-v2",
+    "promotion_protocol": "promotion-gate-v1",
+    "min_gain_pp": 15.0,
+    "max_neg_transfer": 0.05,
+    "min_validation_tasks": 3,
+    "max_evaluation_age_s": 86400,
+    "content_fields": [
+      "name",
+      "task_type",
+      "fault_type",
+      "strategy",
+      "required_tools",
+      "safety",
+      "scope"
+    ],
+    "error_codes": {
+      "NO_EVALUATION": "该技能没有任何评估记录，必须先跑 paired-v2 独立验证",
+      "EVALUATION_NOT_FOUND": "指定的评估记录不存在",
+      "EVALUATION_SKILL_MISMATCH": "评估记录属于另一条技能",
+      "EVALUATION_PROTOCOL_MISMATCH": "评估协议与当前门槛不一致，历史 NULL 协议不得冒充新版",
+      "EVALUATION_DETAILS_MISSING": "评估记录缺少 paired-v2 明细，无法核对配对与样本",
+      "EVALUATION_VERDICT": "评估判决不是 PROMOTE",
+      "EVALUATION_EXPIRED": "评估已过期，需在当前数据集 / 模型 / 工具后端下重跑",
+      "EVALUATION_ALREADY_CONSUMED": "该评估已用于另一次晋升，且当前指针不在那个版本",
+      "EVALUATION_PAIR_MISMATCH": "成对明细与评估记录不一致，明细可能被改动",
+      "EVALUATION_HASH_MISMATCH": "验证集指纹与成对明细不一致",
+      "EVALUATION_SAMPLE_INSUFFICIENT": "独立任务、baseline 成功样本或门槛不满足",
+      "CANDIDATE_CONTENT_CHANGED": "评估之后候选技能正文被改动，旧评估失效",
+      "SKILL_STATUS_REJECTED": "已拒绝的技能不得晋升",
+      "MISSING_VERSION_SNAPSHOT": "当前版本缺不可变快照，不能追加新版本",
+      "SKILL_NOT_FOUND": "技能不存在"
+    }
+  },
+  "readable_example": {
+    "valid_evaluation": {
+      "id": "ske_e78c5bd791",
+      "verdict": "PROMOTE",
+      "gain_pp": 100.0,
+      "neg_transfer_rate": 0.0,
+      "candidate_hash": "b4c50a080a42b6dbea8bbd79960ad02e92ddf935d50768ac3c0a9f952ae48f49",
+      "validation_hash": "338226b5886d2f687eeb0142a686bc323e1a3e3079f8d44721a804a1a6fb2d97",
+      "pairs": 6,
+      "audit_ok": true,
+      "audit_checks": [
+        {
+          "code": "EVALUATION_SKILL_MISMATCH",
+          "name": "skill_id 归属",
+          "ok": true,
+          "expected": "sk_gate_demo",
+          "actual": "sk_gate_demo"
+        },
+        {
+          "code": "EVALUATION_PROTOCOL_MISMATCH",
+          "name": "评估协议",
+          "ok": true,
+          "expected": "paired-v2 / promotion-gate-v1",
+          "actual": "paired-v2 / promotion-gate-v1"
+        },
+        {
+          "code": "EVALUATION_DETAILS_MISSING",
+          "name": "paired-v2 明细",
+          "ok": true,
+          "expected": "非空 details.pairs",
+          "actual": "6 对"
+        },
+        {
+          "code": "EVALUATION_VERDICT",
+          "name": "评估判决",
+          "ok": true,
+          "expected": "PROMOTE",
+          "actual": "PROMOTE"
+        },
+        {
+          "code": "EVALUATION_EXPIRED",
+          "name": "评估有效期",
+          "ok": true,
+          "expected": "0 ~ 86400 秒",
+          "actual": "0 秒"
+        },
+        {
+          "code": "SKILL_STATUS_REJECTED",
+          "name": "旧版本状态",
+          "ok": true,
+          "expected": "非 rejected",
+          "actual": "candidate"
+        },
+        {
+          "code": "MISSING_VERSION_SNAPSHOT",
+          "name": "当前版本不可变快照",
+          "ok": true,
+          "expected": "v1 快照存在",
+          "actual": "[1]"
+        },
+        {
+          "code": "EVALUATION_ALREADY_CONSUMED",
+          "name": "评估未被其他版本消费",
+          "ok": true,
+          "expected": "未消费",
+          "actual": "未消费"
+        },
+        {
+          "code": "CANDIDATE_CONTENT_CHANGED",
+          "name": "候选正文指纹",
+          "ok": true,
+          "expected": "b4c50a080a42b6dbea8bbd79960ad02e92ddf935d50768ac3c0a9f952ae48f49",
+          "actual": "b4c50a080a42b6dbea8bbd79960ad02e92ddf935d50768ac3c0a9f952ae48f49"
+        },
+        {
+          "code": "EVALUATION_HASH_MISMATCH",
+          "name": "验证集指纹",
+          "ok": true,
+          "expected": "338226b5886d2f687eeb0142a686bc323e1a3e3079f8d44721a804a1a6fb2d97",
+          "actual": "338226b5886d2f687eeb0142a686bc323e1a3e3079f8d44721a804a1a6fb2d97"
+        },
+        {
+          "code": "EVALUATION_PAIR_MISMATCH",
+          "name": "成对明细自洽",
+          "ok": true,
+          "expected": "target/guard 题目、数量与两侧布尔结果和记录一致",
+          "actual": "3 target + 3 guard"
+        },
+        {
+          "code": "EVALUATION_SAMPLE_INSUFFICIENT",
+          "name": "样本充分性与门槛",
+          "ok": true,
+          "expected": "target/guard/成功 guard 各 ≥ 3 独立任务，neg ≤ 0.05，gain ≥ 15.0pp，训练验证重叠已检查",
+          "actual": "{'target_tasks': 3, 'guard_tasks': 3, 'guard_baseline_success_tasks': 3, 'neg_transfer_rate': 0.0, 'gain_pp': 100.0, 'pairs_intact': True}"
+        }
+      ],
+      "measured": {
+        "target_tasks": 3,
+        "guard_tasks": 3,
+        "guard_baseline_success_tasks": 3,
+        "neg_transfer_rate": 0.0,
+        "gain_pp": 100.0,
+        "pairs_intact": true
+      }
+    },
+    "failure_no_evaluation": {
+      "code": "NO_EVALUATION",
+      "message": "[NO_EVALUATION] 晋升被拒绝：该技能没有任何评估记录，必须先跑 paired-v2 独立验证\n诊断码 NO_EVALUATION ｜ 技能 sk_never_evaluated ｜ 评估 None ｜ 当前 v1\n逐项核对：\n  补充：[NO_EVALUATION] 技能 sk_never_evaluated 从未经过独立验证\n处理建议：确认候选正文、验证集与训练/验证划分未改动，重新运行 paired-v2 验证后再晋升；不要手工改 verdict 放行。"
+    },
+    "failure_candidate_changed": {
+      "code": "CANDIDATE_CONTENT_CHANGED",
+      "message": "[CANDIDATE_CONTENT_CHANGED] 晋升被拒绝：评估之后候选技能正文被改动，旧评估失效\n诊断码 CANDIDATE_CONTENT_CHANGED ｜ 技能 sk_gate_demo ｜ 评估 ske_e78c5bd791 ｜ 当前 v1\n逐项核对：\n  通过 skill_id 归属          期望 sk_gate_demo ｜ 实际 sk_gate_demo\n  通过 评估协议                 期望 paired-v2 / promotion-gate-v1 ｜ 实际 paired-v2 / promotion-gate-v1\n  通过 paired-v2 明细         期望 非空 details.pairs ｜ 实际 6 对\n  通过 评估判决                 期望 PROMOTE ｜ 实际 PROMOTE\n  通过 评估有效期                期望 0 ~ 86400 秒 ｜ 实际 0 秒\n  通过 旧版本状态                期望 非 rejected ｜ 实际 candidate\n  通过 当前版本不可变快照            期望 v1 快照存在 ｜ 实际 [1]\n  通过 评估未被其他版本消费           期望 未消费 ｜ 实际 未消费\n  失败 候选正文指纹               期望 4cdef74cd205d774e71250d62ee51d9f6403a25cf02a0b8b8141a748e1cdcacc ｜ 实际 b4c50a080a42b6dbea8bbd79960ad02e92ddf935d50768ac3c0a9f952ae48f49\n  通过 验证集指纹                期望 338226b5886d2f687eeb0142a686bc323e1a3e3079f8d44721a804a1a6fb2d97 ｜ 实际 338226b5886d2f687eeb0142a686bc323e1a3e3079f8d44721a804a1a6fb2d97\n  通过 成对明细自洽               期望 target/guard 题目、数量与两侧布尔结果和记录一致 ｜ 实际 3 target + 3 guard\n  通过 样本充分性与门槛             期望 target/guard/成功 guard 各 ≥ 3 独立任务，neg ≤ 0.05，gain ≥ 15.0pp，训练验证重叠已检查 ｜ 实际 {'target_tasks': 3, 'guard_tasks': 3, 'guard_baseline_success_tasks': 3, 'neg_transfer_rate': 0.0, 'gain_pp': 100.0, 'pairs_intact': True}\n处理建议：确认候选正文、验证集与训练/验证划分未改动，重新运行 paired-v2 验证后再晋升；不要手工改 verdict 放行。"
+    }
+  },
+  "counterexample_tests": {
+    "TestPromotionGate": [
+      "test_audit_is_read_only",
+      "test_candidate_changed_after_evaluation_invalidates_it",
+      "test_empty_guard_cannot_promote_even_if_verdict_is_flipped",
+      "test_evaluation_of_another_skill_is_rejected",
+      "test_expired_evaluation_is_rejected",
+      "test_legacy_evaluation_without_paired_details_is_rejected",
+      "test_missing_evaluation_id_is_rejected",
+      "test_no_evaluation_is_rejected",
+      "test_repeated_promote_is_idempotent",
+      "test_replay_stays_idempotent_after_evaluation_expires",
+      "test_scope_change_also_invalidates_evaluation",
+      "test_tampered_pairs_are_detected_even_when_hash_is_recomputed",
+      "test_tampered_validation_cases_are_detected",
+      "test_tiny_validation_set_cannot_promote_even_if_verdict_is_flipped",
+      "test_valid_evaluation_promotes_with_immutable_snapshot"
+    ],
+    "TestStrictLibraryPipeline": [
+      "test_loose_control_library_does_not_rewrite_source_evidence",
+      "test_strict_library_is_produced_by_a_real_promotion",
+      "test_strict_library_rejects_unvalidated_skill"
+    ],
+    "count": 18
+  },
+  "regression": {
+    "test_files": 6,
+    "total_tests": 145,
+    "passed": 145,
+    "breakdown": {
+      "test_core": 24,
+      "test_judgeability": 9,
+      "test_hard_tasks": 19,
+      "test_inspect": 34,
+      "test_static": 23,
+      "test_skill_validation": 36
+    }
+  },
+  "isolated_smoke": {
+    "output_dir": "experiments/p0_03_20261108/train_smoke",
+    "backend": "mock",
+    "protocol_version": "paired-v2",
+    "evaluations": 6,
+    "verdicts": {
+      "NEEDS_REVIEW": 6
+    },
+    "strict_library": 0,
+    "loose_control_library": 6,
+    "note": "6 个候选全部 NEEDS_REVIEW，严格库为空是预期结果；strict=True 的晋升路径由集成测试覆盖。"
+  },
+  "deliverables": {
+    "paired_detail_json": "experiments/p0_03_20261108/train_smoke/validation_results.json",
+    "metric_definition_doc": "docs/validation-protocol.md",
+    "readable_failure_text": "skills.promotion_failure_text() / 本报告 readable_example",
+    "gate_report": "experiments/p0_03_20261108/promotion_gate_report.json"
+  },
+  "still_not_done": [
+    "P0 04 完整回滚",
+    "P0 05 经验证据溯源与环境元数据",
+    "P0 06 冻结基线与报告统一"
+  ]
+}

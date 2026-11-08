@@ -170,7 +170,8 @@ def main():
         res = skills.evaluate(store, sk, target, guard, runner, training_cases=train)
         verdicts.append({"skill": sk, "case": c, "res": res})
         if res["verdict"] == "PROMOTE":
-            skills.promote(store, sk["id"])
+            # 显式绑定本次评估，不靠「取最近一条」的隐式选择。
+            skills.promote(store, sk["id"], evaluation_id=res["id"])
     n_promote = sum(1 for v in verdicts if v["res"]["verdict"] == "PROMOTE")
     progress("验证完成：%d 个候选技能，晋升 %d" % (len(verdicts), n_promote))
 

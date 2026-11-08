@@ -122,12 +122,26 @@ def split_cases():
     return train, val
 
 
-def build_library(src, dst, ids, note):
-    """把训练库里选中的技能导出成一个独立库，status 一律 active、version=2。
+def build_library(src, dst, entries, note, strict=False):
+    """把训练库里选中的技能导出成独立库。
+
+    strict=True（D 严格库）：entries 是 (skill_id, evaluation_id)。必须先在源库
+    调用 skills.promote 走完晋升门禁再导出；以前这里直接 `UPDATE ... SET
+    status='active', version=2` 伪造「验证通过」，等于把 P0 03 门禁整个绕过。
+
+    strict=False（C 放宽库）：这是**故意不验证**的对照组，仍以 active/v2 写入，
+    代表「探索成功就入库」。它是实验变量，不是晋升链路的证据，报告里必须写清。
 
     version=2 是刻意的：模拟「晋升过一次」，让 C 的 `ORDER BY version DESC`
     一定出现并列 —— 上一轮就是在这里踩到「按扫描顺序取行」的坑。
     """
+    if strict:
+        # promote 会自己开连接写源库，必须在下面的 src.conn() 事务之外完成。
+        for sid, eid in entries:
+            skills.promote(src, sid, evaluation_id=eid)
+        ids = [sid for sid, _ in entries]
+    else:
+        ids = list(entries)
     if os.path.exists(dst):
         os.remove(dst)
     store = core.Store(dst, fast=True)
@@ -138,16 +152,24 @@ def build_library(src, dst, ids, note):
             r = c.execute("SELECT * FROM skills WHERE id=?", (sid,)).fetchone()
             if not r:
                 continue
-            c.execute("UPDATE skills SET status='active', version=2 WHERE id=?", (sid,))
             row = dict(r)
+            if strict:
+                status, version = row["status"], row["version"]
+                active_version = row.get("active_version") or version
+            else:
+                # 对照组不碰源库证据，只在目标库里模拟一次「未经验证的启用」。
+                status, version, active_version = "active", 2, 2
             with store.conn() as c2:
                 c2.execute("INSERT OR REPLACE INTO skills(id,name,task_type,fault_type,"
-                           "strategy,required_tools,safety,status,version,created_at,scope) "
-                           "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                           "strategy,required_tools,safety,status,version,created_at,scope,"
+                           "active_version,promoted_from_evaluation,promoted_at) "
+                           "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                            (row["id"], row["name"], row["task_type"], row["fault_type"],
                             row["strategy"], row["required_tools"], row["safety"],
-                            "active", 2, row["created_at"],
-                            row.get("scope") or "single"))
+                            status, version, row["created_at"],
+                            row.get("scope") or "single", active_version,
+                            row.get("promoted_from_evaluation") if strict else None,
+                            row.get("promoted_at") if strict else None))
             n += 1
     store.close()
     return n
@@ -257,7 +279,7 @@ def main():
                   flush=True)
 
     # ---------- 2. 严格验证（给 D 用）：target 增益 + guard 负迁移 ----------
-    promote_ids, verdicts = [], []
+    promotions, verdicts = [], []   # (skill_id, evaluation_id) —— 晋升必须绑定评估
     for j, item in enumerate(proposed, 1):
         sk, c = item["skill"], item["case"]
         # 技能的真实匹配面：运行时只按 root_cause 匹配，而复合故障的 root_cause
@@ -292,7 +314,7 @@ def main():
         stats["ran"] += len(target) * 2 + len(guard) * 2
         verdicts.append({"skill": sk, "res": res, "case": c})
         if res["verdict"] == "PROMOTE":
-            promote_ids.append(sk["id"])
+            promotions.append((sk["id"], res["id"]))
         print("  [验证 %d/%d] %s/%s %s gain=%spp neg=%s → %s"
               % (j, len(proposed), c["agent_type"], c.get("fault_type"),
                  core.as_chain(sk["strategy"]), res["gain_pp"],
@@ -301,8 +323,10 @@ def main():
 
     # ---------- 3. 导出两套库 ----------
     all_ids = [p["skill"]["id"] for p in proposed]
-    n_d = build_library(store, LIB_D, promote_ids, "严格：验证通过才入库")
-    n_c = build_library(store, LIB_C, all_ids, "放宽：探索成功就入库，不验证")
+    n_d = build_library(store, LIB_D, promotions, "严格：验证通过才入库", strict=True)
+    n_c = build_library(store, LIB_C, all_ids, "放宽：探索成功就入库，不验证", strict=False)
+    print("[门禁] D 库 %d 条均通过 promote 校验；C 库 %d 条为故意放宽的对照组"
+          % (n_d, n_c))
     print("[√] 严格库 %d 条 → %s" % (n_d, LIB_D))
     print("[√] 放宽库 %d 条 → %s" % (n_c, LIB_C))
 

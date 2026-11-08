@@ -6,6 +6,10 @@
   2. 技能只能声明"遇到 X 用 Y 策略"，**不得**携带可执行代码
   3. 晋升必须通过独立验证集，且必须同时检查「有没有把原本能做的事弄坏」
   4. 评测标准在代码里固定，技能自己改不了
+
+P0 03：第 3 条此前只靠「调用方自觉先 evaluate」维持，promote 自身不核对。
+本模块现在把评估记录、候选正文指纹、验证集指纹和当前指针绑在同一个事务里，
+没有有效评估的晋升请求直接被拒；重复请求返回已启用的版本而不继续升版本。
 """
 import copy
 import hashlib
@@ -22,14 +26,17 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS skills(
   id TEXT PRIMARY KEY, name TEXT, task_type TEXT, fault_type TEXT, strategy TEXT,
   required_tools TEXT, safety TEXT, status TEXT, version INTEGER, created_at REAL,
-  scope TEXT DEFAULT 'single');
+  scope TEXT DEFAULT 'single', active_version INTEGER,
+  promoted_from_evaluation TEXT, promoted_at REAL);
 
 CREATE TABLE IF NOT EXISTS skill_versions(
   id TEXT PRIMARY KEY, skill_id TEXT, version INTEGER, snapshot TEXT, created_at REAL);
 
 CREATE TABLE IF NOT EXISTS skill_evaluations(
   id TEXT PRIMARY KEY, skill_id TEXT, target_n INTEGER, before_rate REAL, after_rate REAL,
-  gain_pp REAL, guard_n INTEGER, neg_transfer_rate REAL, verdict TEXT, created_at REAL);
+  gain_pp REAL, guard_n INTEGER, neg_transfer_rate REAL, verdict TEXT, created_at REAL,
+  protocol_version TEXT, details TEXT, candidate_hash TEXT, validation_hash TEXT,
+  consumed_by TEXT, consumed_at REAL);
 """
 
 CANDIDATE, ACTIVE, REJECTED, NEEDS_REVIEW = "candidate", "active", "rejected", "needs_review"
@@ -48,6 +55,43 @@ MAX_NEG_TRANSFER = 0.05
 VALIDATION_PROTOCOL = "paired-v2"
 MIN_VALIDATION_TASKS = 3  # 工程证据下限，不是统计安全保证
 
+# 评估有效期：数据集、prompt、模型或工具后端换过之后，旧一次 gain/neg
+# 已经不描述当前候选，不能拿它当今天的晋升证据。
+MAX_EVALUATION_AGE_S = 24 * 3600
+# 门禁自身的版本：评估明细里的字段布局变了，旧明细就不能再被新门禁读取。
+PROMOTION_PROTOCOL = "promotion-gate-v1"
+
+# 技能「正文」= 决定执行行为的全部字段。status / version / 时间戳刻意排除：
+# 晋升本身会改它们，纳入哈希会让同一评估在幂等重放时立刻失效。
+CONTENT_FIELDS = ("name", "task_type", "fault_type", "strategy",
+                  "required_tools", "safety", "scope")
+
+PROMOTION_ERRORS = {
+    "NO_EVALUATION": "该技能没有任何评估记录，必须先跑 paired-v2 独立验证",
+    "EVALUATION_NOT_FOUND": "指定的评估记录不存在",
+    "EVALUATION_SKILL_MISMATCH": "评估记录属于另一条技能",
+    "EVALUATION_PROTOCOL_MISMATCH": "评估协议与当前门槛不一致，历史 NULL 协议不得冒充新版",
+    "EVALUATION_DETAILS_MISSING": "评估记录缺少 paired-v2 明细，无法核对配对与样本",
+    "EVALUATION_VERDICT": "评估判决不是 PROMOTE",
+    "EVALUATION_EXPIRED": "评估已过期，需在当前数据集 / 模型 / 工具后端下重跑",
+    "EVALUATION_ALREADY_CONSUMED": "该评估已用于另一次晋升，且当前指针不在那个版本",
+    "EVALUATION_PAIR_MISMATCH": "成对明细与评估记录不一致，明细可能被改动",
+    "EVALUATION_HASH_MISMATCH": "验证集指纹与成对明细不一致",
+    "EVALUATION_SAMPLE_INSUFFICIENT": "独立任务、baseline 成功样本或门槛不满足",
+    "CANDIDATE_CONTENT_CHANGED": "评估之后候选技能正文被改动，旧评估失效",
+    "SKILL_STATUS_REJECTED": "已拒绝的技能不得晋升",
+    "MISSING_VERSION_SNAPSHOT": "当前版本缺不可变快照，不能追加新版本",
+    "SKILL_NOT_FOUND": "技能不存在",
+}
+
+
+class PromotionRejected(ValueError):
+    """晋升被拒。code 可定位，message 是逐项核对后的可读失败说明。"""
+
+    def __init__(self, code, message=""):
+        self.code = code
+        super().__init__("[%s] %s" % (code, message or PROMOTION_ERRORS.get(code, code)))
+
 
 def ensure_schema(store):
     exp_mod.ensure_schema(store)      # evolution_events 在经验模块里，一起建
@@ -58,11 +102,18 @@ def ensure_schema(store):
         cols = [r[1] for r in c.execute("PRAGMA table_info(skills)").fetchall()]
         if "scope" not in cols:
             c.execute("ALTER TABLE skills ADD COLUMN scope TEXT DEFAULT 'single'")
+        for name, decl in (("active_version", "INTEGER"),
+                           ("promoted_from_evaluation", "TEXT"),
+                           ("promoted_at", "REAL")):
+            if name not in cols:
+                c.execute("ALTER TABLE skills ADD COLUMN %s %s" % (name, decl))
         cols = [r[1] for r in c.execute("PRAGMA table_info(skill_evaluations)")]
         # NULL 明确表示历史协议，不能给旧结果补上新版协议标签。
-        for name in ("protocol_version", "details"):
+        for name, decl in (("protocol_version", "TEXT"), ("details", "TEXT"),
+                           ("candidate_hash", "TEXT"), ("validation_hash", "TEXT"),
+                           ("consumed_by", "TEXT"), ("consumed_at", "REAL")):
             if name not in cols:
-                c.execute("ALTER TABLE skill_evaluations ADD COLUMN %s TEXT" % name)
+                c.execute("ALTER TABLE skill_evaluations ADD COLUMN %s %s" % (name, decl))
 
 
 def propose(exp):
@@ -169,6 +220,46 @@ def _case_key(case):
                        "seed": case.get("seed", 7)})
 
 
+def _canon(value):
+    """把「内存对象」和「落库后的 JSON 字符串」归一到同一种结构。
+
+    evaluate 收到的是 dict/list，promote 从 DB 读回的是字符串；不归一，
+    同一个候选在验证时和晋升时会算出两个哈希，门禁永远误报正文改动。
+    只解析看起来像 JSON 容器的字符串，避免把普通策略名 "123" 变成数字。
+    """
+    if isinstance(value, str):
+        if value.strip()[:1] in ("[", "{", '"'):
+            value = core.loads(value, value)
+        else:
+            return value
+    if isinstance(value, (list, tuple)):
+        return [_canon(x) for x in value]
+    if isinstance(value, dict):
+        return {str(k): _canon(value[k]) for k in sorted(value)}
+    return value
+
+
+def content_hash(skill):
+    """技能正文指纹。内存候选与 DB 行必须算出同一个值。"""
+    body = {}
+    for key in CONTENT_FIELDS:
+        v = skill.get(key)
+        if key == "scope":
+            v = v or SINGLE
+        body[key] = _canon(v)
+    return hashlib.sha256(core.dumps(body).encode("utf-8")).hexdigest()
+
+
+def _validation_cases(target_cases, guard_cases, training_cases):
+    return {"target": [_case_key(c) for c in target_cases],
+            "guard": [_case_key(c) for c in guard_cases],
+            "training": sorted(_case_key(c) for c in training_cases)}
+
+
+def validation_hash(validation_cases):
+    return hashlib.sha256(core.dumps(validation_cases).encode("utf-8")).hexdigest()
+
+
 def _outcome(result):
     """兼容旧 bool 和 (bool, run_id)，新适配器可提供 cost 字典。"""
     if isinstance(result, dict):
@@ -261,8 +352,16 @@ def evaluate(store, skill, target_cases, guard_cases, run_case, *, training_case
         verdict = "NEEDS_REVIEW"
         reasons.append("target gain below promotion threshold")
 
+    # 评估绑定的是「这一份候选正文」和「这一组验证题」。晋升时重新指纹比对，
+    # 正文被改、验证题被换或配对明细被篡改都会让旧评估失效。
+    vc = _validation_cases(target_cases, guard_cases, training_cases)
+    vh = validation_hash(vc)
+    ch = content_hash(skill)
+    ts = core.now()
     result = {"id": "ske_" + uuid.uuid4().hex[:10], "skill_id": skill["id"],
               "protocol_version": VALIDATION_PROTOCOL,
+              "promotion_protocol": PROMOTION_PROTOCOL, "created_at": ts,
+              "candidate_hash": ch, "validation_hash": vh, "validation_cases": vc,
               "gain_pp": gain_pp, "before_rate": before_rate, "after_rate": after_rate,
               "neg_transfer_rate": neg, "verdict": verdict, "reasons": reasons,
               "target_n": t_n, "guard_n": g_n, "target_tasks": target_tasks,
@@ -278,32 +377,281 @@ def evaluate(store, skill, target_cases, guard_cases, run_case, *, training_case
               "pairs": pairs}
     with store.conn() as c:
         c.execute("INSERT INTO skill_evaluations(id,skill_id,target_n,before_rate,after_rate,"
-                  "gain_pp,guard_n,neg_transfer_rate,verdict,created_at,protocol_version,details) "
-                  "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                  "gain_pp,guard_n,neg_transfer_rate,verdict,created_at,protocol_version,"
+                  "details,candidate_hash,validation_hash,consumed_by,consumed_at) "
+                  "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                   (result["id"], skill["id"], t_n, before_rate, after_rate, gain_pp,
-                   g_n, neg, verdict, core.now(), VALIDATION_PROTOCOL, core.dumps(result)))
+                   g_n, neg, verdict, ts, VALIDATION_PROTOCOL, core.dumps(result),
+                   ch, vh, None, None))
     exp_mod.event(store, "skill_evaluated", skill["id"],
                   "%s gain=%spp neg=%s verdict=%s" % (VALIDATION_PROTOCOL, gain_pp, neg, verdict))
     return result
 
 
-def promote(store, skill_id):
-    """晋升：新增版本并置为 active。旧版本保留，不覆盖。"""
+def _load_evaluation(c, skill_id, evaluation_id):
+    """取本次晋升要核对的评估。不指定 id 时取该技能最近一条。"""
+    if evaluation_id:
+        r = c.execute("SELECT * FROM skill_evaluations WHERE id=?",
+                      (evaluation_id,)).fetchone()
+        if not r:
+            raise PromotionRejected("EVALUATION_NOT_FOUND",
+                                    "找不到评估记录 %s" % evaluation_id)
+        ev = dict(r)
+        if ev.get("skill_id") != skill_id:
+            raise PromotionRejected("EVALUATION_SKILL_MISMATCH",
+                                    "评估 %s 属于技能 %s，不是 %s"
+                                    % (evaluation_id, ev.get("skill_id"), skill_id))
+        return ev
+    r = c.execute("SELECT * FROM skill_evaluations WHERE skill_id=? "
+                  "ORDER BY created_at DESC, rowid DESC LIMIT 1", (skill_id,)).fetchone()
+    if not r:
+        raise PromotionRejected("NO_EVALUATION", "技能 %s 从未经过独立验证" % skill_id)
+    return dict(r)
+
+
+def _close(a, b):
+    if a is None or b is None:
+        return a is None and b is None
+    try:
+        return abs(float(a) - float(b)) < 1e-9
+    except (TypeError, ValueError):
+        return False
+
+
+def _audit_promotion(row, ev, now_s, versions):
+    """逐项核对晋升前提，返回可定位、可打印的结构化结果。
+
+    不信任评估记录里的汇总数字：独立任务数、负迁移率、增益全部从 pairs
+    重算再与记录比对。只把 verdict 列改成 PROMOTE 是放不了行的。
+    """
+    checks, failed = [], []
+
+    def add(code, name, ok, expected, actual):
+        ok = bool(ok)
+        checks.append({"code": code, "name": name, "ok": ok,
+                       "expected": str(expected), "actual": str(actual)})
+        if not ok:
+            failed.append(code)
+
+    details = core.loads(ev.get("details"), None)
+    details = details if isinstance(details, dict) else None
+    d = details or {}
+    pairs = d.get("pairs") or []
+    vc = d.get("validation_cases") or {}
+    t_pairs = [p for p in pairs if p.get("group") == "target"]
+    g_pairs = [p for p in pairs if p.get("group") == "guard"]
+
+    # 同一评估 + 同一指针 + 已启用 = 重放请求，不是新一次晋升。
+    replay = (bool(ev.get("consumed_by"))
+              and str(ev["consumed_by"]) == str(row["version"])
+              and row["status"] == ACTIVE)
+
+    add("EVALUATION_SKILL_MISMATCH", "skill_id 归属",
+        ev.get("skill_id") == row["id"], row["id"], ev.get("skill_id"))
+    add("EVALUATION_PROTOCOL_MISMATCH", "评估协议",
+        ev.get("protocol_version") == VALIDATION_PROTOCOL
+        and d.get("protocol_version") == VALIDATION_PROTOCOL
+        and d.get("promotion_protocol") == PROMOTION_PROTOCOL,
+        "%s / %s" % (VALIDATION_PROTOCOL, PROMOTION_PROTOCOL),
+        "%s / %s" % (ev.get("protocol_version"), d.get("promotion_protocol")))
+    add("EVALUATION_DETAILS_MISSING", "paired-v2 明细",
+        bool(details) and bool(pairs), "非空 details.pairs",
+        "%d 对" % len(pairs) if details else "无明细（历史记录）")
+    add("EVALUATION_VERDICT", "评估判决",
+        ev.get("verdict") == "PROMOTE" and d.get("verdict") == "PROMOTE",
+        "PROMOTE", ev.get("verdict"))
+
+    age = now_s - float(ev.get("created_at") or 0)
+    expiry_ok = 0 <= age <= MAX_EVALUATION_AGE_S
+    add("EVALUATION_EXPIRED", "评估有效期", expiry_ok or replay,
+        "0 ~ %d 秒" % MAX_EVALUATION_AGE_S,
+        "%.0f 秒%s" % (age, "（幂等重放）" if replay else ""))
+
+    cur_ver = int(row["version"])
+    add("SKILL_STATUS_REJECTED", "旧版本状态", row["status"] != REJECTED,
+        "非 rejected", row["status"])
+    add("MISSING_VERSION_SNAPSHOT", "当前版本不可变快照",
+        cur_ver in versions, "v%d 快照存在" % cur_ver, sorted(versions))
+    if not replay:
+        add("EVALUATION_ALREADY_CONSUMED", "评估未被其他版本消费",
+            not ev.get("consumed_by"), "未消费", ev.get("consumed_by") or "未消费")
+
+    now_ch = content_hash(row)
+    recorded_ch = d.get("candidate_hash")
+    add("CANDIDATE_CONTENT_CHANGED", "候选正文指纹",
+        recorded_ch is not None and recorded_ch == now_ch
+        and ev.get("candidate_hash") == now_ch,
+        now_ch, recorded_ch)
+
+    recorded_vh = d.get("validation_hash")
+    try:
+        vh_ok = (isinstance(vc, dict) and bool(vc) and recorded_vh is not None
+                 and validation_hash(vc) == recorded_vh
+                 and ev.get("validation_hash") == recorded_vh)
+    except (TypeError, ValueError):
+        vh_ok = False
+    add("EVALUATION_HASH_MISMATCH", "验证集指纹", vh_ok,
+        recorded_vh, validation_hash(vc) if isinstance(vc, dict) else "非字典")
+
+    measured = {}
+    try:
+        if not isinstance(vc, dict):
+            raise TypeError("validation_cases 不是字典")
+        rebuilt_t = [_case_key(p["case"]) for p in t_pairs]
+        rebuilt_g = [_case_key(p["case"]) for p in g_pairs]
+        pair_intact = (rebuilt_t == vc.get("target") and rebuilt_g == vc.get("guard")
+                       and len(t_pairs) == d.get("target_n")
+                       and len(g_pairs) == d.get("guard_n")
+                       and all(isinstance(p.get("baseline_success"), bool)
+                               and isinstance(p.get("candidate_success"), bool)
+                               for p in pairs))
+        target_tasks = len({_family_key(p["case"]) for p in t_pairs})
+        guard_tasks = len({_family_key(p["case"]) for p in g_pairs})
+        ok_guard_tasks = len({_family_key(p["case"]) for p in g_pairs
+                              if p["baseline_success"]})
+        g_before = sum(1 for p in g_pairs if p["baseline_success"])
+        regressed = sum(1 for p in g_pairs
+                        if p["baseline_success"] and not p["candidate_success"])
+        neg = regressed / g_before if g_before else None
+        t_n = len(t_pairs)
+        b_rate = sum(1 for p in t_pairs if p["baseline_success"]) / t_n if t_n else None
+        a_rate = sum(1 for p in t_pairs if p["candidate_success"]) / t_n if t_n else None
+        gain_pp = (a_rate - b_rate) * 100 if t_n else None
+        th = d.get("thresholds") or {}
+        sample_ok = bool(
+            pair_intact and d.get("training_overlap_checked")
+            and target_tasks >= MIN_VALIDATION_TASKS
+            and guard_tasks >= MIN_VALIDATION_TASKS
+            and ok_guard_tasks >= MIN_VALIDATION_TASKS
+            and d.get("target_tasks") == target_tasks
+            and d.get("guard_tasks") == guard_tasks
+            and d.get("guard_baseline_success_tasks") == ok_guard_tasks
+            and _close(d.get("neg_transfer_rate"), ev.get("neg_transfer_rate"))
+            and _close(d.get("gain_pp"), ev.get("gain_pp"))
+            # 重算值与记录值必须一致：改了某一对的成功状态却不动汇总列，
+            # 也必须被拦下，不能只靠 details 与 SQL 列互相印证。
+            and _close(d.get("neg_transfer_rate"), neg)
+            and _close(d.get("gain_pp"), gain_pp)
+            and d.get("guard_baseline_success") == g_before
+            and d.get("guard_regressions") == regressed
+            and neg is not None and neg <= MAX_NEG_TRANSFER
+            and gain_pp is not None and gain_pp >= MIN_GAIN_PP
+            and th.get("min_gain_pp") == MIN_GAIN_PP
+            and th.get("max_neg_transfer") == MAX_NEG_TRANSFER
+            and th.get("min_validation_tasks") == MIN_VALIDATION_TASKS)
+        measured = {"target_tasks": target_tasks, "guard_tasks": guard_tasks,
+                    "guard_baseline_success_tasks": ok_guard_tasks,
+                    "neg_transfer_rate": neg, "gain_pp": gain_pp,
+                    "pairs_intact": bool(pair_intact)}
+    except (KeyError, TypeError, ValueError, AttributeError):
+        pair_intact, sample_ok = False, False
+
+    add("EVALUATION_PAIR_MISMATCH", "成对明细自洽", pair_intact,
+        "target/guard 题目、数量与两侧布尔结果和记录一致",
+        "%d target + %d guard" % (len(t_pairs), len(g_pairs)))
+    add("EVALUATION_SAMPLE_INSUFFICIENT", "样本充分性与门槛", sample_ok,
+        "target/guard/成功 guard 各 ≥ %d 独立任务，neg ≤ %s，gain ≥ %spp，"
+        "训练验证重叠已检查"
+        % (MIN_VALIDATION_TASKS, MAX_NEG_TRANSFER, MIN_GAIN_PP),
+        measured or "无法从成对明细重算")
+
+    return {"ok": not failed, "code": failed[0] if failed else None,
+            "idempotent": bool(replay and not failed), "version": cur_ver,
+            "skill_id": row["id"], "evaluation_id": ev.get("id"),
+            "candidate_hash": now_ch, "validation_hash": recorded_vh,
+            "evaluation_age_s": age, "measured": measured, "checks": checks}
+
+
+def promotion_failure_text(audit):
+    """把逐项核对写成能直接贴进报告 / 终端的失败说明。"""
+    code = audit.get("code") or "UNKNOWN"
+    lines = ["晋升被拒绝：%s" % PROMOTION_ERRORS.get(code, ""),
+             "诊断码 %s ｜ 技能 %s ｜ 评估 %s ｜ 当前 v%s"
+             % (code, audit.get("skill_id"), audit.get("evaluation_id"),
+                audit.get("version")),
+             "逐项核对："]
+    for c in audit.get("checks") or []:
+        lines.append("  %s %-20s 期望 %s ｜ 实际 %s"
+                     % ("通过" if c["ok"] else "失败", c["name"],
+                        c["expected"], c["actual"]))
+    if audit.get("detail"):
+        lines.append("  补充：%s" % audit["detail"])
+    lines.append("处理建议：确认候选正文、验证集与训练/验证划分未改动，"
+                 "重新运行 paired-v2 验证后再晋升；不要手工改 verdict 放行。")
+    return "\n".join(lines)
+
+
+def audit_promotion(store, skill_id, evaluation_id=None, *, now_s=None):
+    """只读体检：不写库，返回同一套逐项核对结果，供报告与 CLI 使用。"""
+    ensure_schema(store)
+    t = core.now() if now_s is None else now_s
+    try:
+        with store.conn() as c:
+            r = c.execute("SELECT * FROM skills WHERE id=?", (skill_id,)).fetchone()
+            if not r:
+                return {"ok": False, "code": "SKILL_NOT_FOUND", "idempotent": False,
+                        "checks": [], "skill_id": skill_id,
+                        "evaluation_id": evaluation_id,
+                        "detail": "技能不存在：%s" % skill_id}
+            row = dict(r)
+            ev = _load_evaluation(c, skill_id, evaluation_id)
+            versions = [int(x[0]) for x in c.execute(
+                "SELECT version FROM skill_versions WHERE skill_id=?",
+                (skill_id,)).fetchall()]
+            return _audit_promotion(row, ev, t, versions)
+    except PromotionRejected as e:
+        return {"ok": False, "code": e.code, "idempotent": False, "checks": [],
+                "skill_id": skill_id, "evaluation_id": evaluation_id,
+                "detail": str(e)}
+
+
+def promote(store, skill_id, *, evaluation_id=None, now_s=None):
+    """晋升门禁：核对评估 → 事务内追加不可变快照 → 更新当前指针。
+
+    不传 evaluation_id 时自动绑定该技能最近一次评估（正式入口常规路径）。
+    重复请求命中「同一评估 + 同一指针」时返回已启用版本，不继续升版本。
+    """
+    ensure_schema(store)
+    t = core.now() if now_s is None else now_s
     with store.conn() as c:
         r = c.execute("SELECT * FROM skills WHERE id=?", (skill_id,)).fetchone()
         if not r:
             raise KeyError("技能不存在：%s" % skill_id)
-        new_ver = int(r["version"]) + 1
-        c.execute("UPDATE skills SET status=?, version=? WHERE id=?",
-                  (ACTIVE, new_ver, skill_id))
-        snap = dict(r)
-        snap["version"] = new_ver
-        snap["status"] = ACTIVE
+        row = dict(r)
+        try:
+            ev = _load_evaluation(c, skill_id, evaluation_id)
+        except PromotionRejected as e:
+            raise PromotionRejected(e.code, promotion_failure_text({
+                "code": e.code, "skill_id": skill_id, "evaluation_id": evaluation_id,
+                "version": int(row["version"]), "checks": [], "detail": str(e)}))
+        versions = [int(x[0]) for x in c.execute(
+            "SELECT version FROM skill_versions WHERE skill_id=?",
+            (skill_id,)).fetchall()]
+        audit = _audit_promotion(row, ev, t, versions)
+        if not audit["ok"]:
+            raise PromotionRejected(audit["code"], promotion_failure_text(audit))
+        if audit["idempotent"]:
+            return int(ev["consumed_by"])
+
+        new_ver = int(row["version"]) + 1
+        snap = dict(row)
+        snap.update({"version": new_ver, "status": ACTIVE,
+                     "active_version": new_ver,
+                     "promoted_from_evaluation": ev["id"], "promoted_at": t})
+        # 三条写在同一事务：快照、当前指针、评估消费标记。任一失败整体回滚，
+        # 不会留下「已启用但没有快照」或「同一评估被用两次」的中间态。
         c.execute("INSERT INTO skill_versions(id,skill_id,version,snapshot,created_at) "
                   "VALUES(?,?,?,?,?)",
                   ("skv_" + uuid.uuid4().hex[:8], skill_id, new_ver,
-                   core.dumps(snap), round(time.time(), 3)))
-    exp_mod.event(store, "skill_promoted", skill_id, "v%d" % new_ver)
+                   core.dumps(snap), t))
+        c.execute("UPDATE skills SET status=?, version=?, active_version=?, "
+                  "promoted_from_evaluation=?, promoted_at=? WHERE id=?",
+                  (ACTIVE, new_ver, new_ver, ev["id"], t, skill_id))
+        c.execute("UPDATE skill_evaluations SET consumed_by=?, consumed_at=? WHERE id=?",
+                  (str(new_ver), t, ev["id"]))
+    exp_mod.event(store, "skill_promoted", skill_id,
+                  "v%d eval=%s candidate=%s"
+                  % (new_ver, ev["id"], (ev.get("candidate_hash") or "")[:12]))
     return new_ver
 
 

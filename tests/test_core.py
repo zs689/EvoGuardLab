@@ -40,6 +40,34 @@ def fresh():
     return core.Store(path)
 
 
+def validated_promote(store, skill, prefix="p0"):
+    """让旧测试也经过真实晋升门禁，而不是绕过它。
+
+    P0 03 之前这三处测试直接 promote，等于假设「调用方会自觉先验证」——
+    正是 Word 计划 3.3 指出的漏洞。这里只准备一份满足 paired-v2 门槛的
+    独立证据，被测行为（版本不覆盖 / 回滚状态 / 组合链取回）保持不变。
+    """
+    at, ft = skill["task_type"], skill["fault_type"]
+    target = [{"case_id": "%s-t%d" % (prefix, i), "agent_type": at,
+               "task_id": "%s-task%d" % (prefix, i), "fault_type": ft, "seed": 7}
+              for i in range(3)]
+    guard = [{"case_id": "%s-g%d" % (prefix, i), "agent_type": at,
+              "task_id": "%s-guard%d" % (prefix, i), "fault_type": "unrelated_fault",
+              "seed": 7} for i in range(3)]
+    train = [{"case_id": "%s-train" % prefix, "agent_type": at,
+              "task_id": "%s-train-task" % prefix, "fault_type": "other", "seed": 7}]
+
+    def runner(case, sk):
+        if case["case_id"].startswith(prefix + "-t"):
+            return sk is not None       # target：baseline 全败、候选全胜 → 100pp
+        return True                     # guard：两侧全胜 → 负迁移 0
+
+    res = skills.evaluate(store, skill, target, guard, runner, training_cases=train)
+    if res["verdict"] != "PROMOTE":
+        raise AssertionError("测试夹具未构造出可晋升评估：%s" % res["reasons"])
+    return skills.promote(store, skill["id"], evaluation_id=res["id"])
+
+
 class TestStateMachine(unittest.TestCase):
     def test_illegal_transition(self):
         s = fresh()
@@ -137,7 +165,7 @@ class TestSkills(unittest.TestCase):
         skills.ensure_schema(s)
         sk = self._skill()
         skills.save(s, sk)
-        new_ver = skills.promote(s, sk["id"])
+        new_ver = validated_promote(s, sk)
         self.assertEqual(new_ver, 2, "晋升必须产生新版本")
         with s.conn() as c:
             n = c.execute("SELECT COUNT(*) FROM skill_versions WHERE skill_id=?",
@@ -161,7 +189,7 @@ class TestSkills(unittest.TestCase):
         skills.ensure_schema(s)
         sk = self._skill()
         skills.save(s, sk)
-        skills.promote(s, sk["id"])
+        validated_promote(s, sk)
         skills.rollback(s, sk["id"])
         with s.conn() as c:
             st = c.execute("SELECT status FROM skills WHERE id=?", (sk["id"],)).fetchone()[0]
@@ -265,7 +293,7 @@ class TestChain(unittest.TestCase):
               "required_tools": [], "safety": {"max_retry": 2},
               "status": skills.CANDIDATE, "version": 1, "created_at": 0}
         skills.save(s, sk)
-        skills.promote(s, sk["id"])
+        validated_promote(s, sk)
         got = skills.lookup(s, "order", "missing_field", "D")
         self.assertIsNotNone(got)
         self.assertEqual(core.as_chain(got["strategy"]),

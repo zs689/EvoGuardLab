@@ -15,9 +15,8 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（109 个：24 核心 + 9 评测口径 + 19 难度组 + 34 检查器 + 23 静态）
-python -m unittest tests.test_core tests.test_judgeability \
-    tests.test_hard_tasks tests.test_inspect tests.test_static -v
+# 2) 回归测试（145 个：24 核心 + 9 评测口径 + 19 难度组 + 34 检查器 + 23 静态 + 36 技能验证/晋升）
+python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
 python ai-service/api/app.py           # http://127.0.0.1:8770
@@ -80,7 +79,7 @@ Web 看板是**原生 HTML/CSS/JS 单文件**，不引 CDN、不需要 Node 构�
 三条读法（完整解读见 `experiments/real_model/analysis.md`）：
 
 - **治理第一次在四组对照里显形，而且是方向相反的两组差距**：复合故障上 D 100% / C 0%，
-  单故障上 C 100% / D 98.5%。C 的 0% 不是模型不行 —— 它库里 38 条垃圾技能把两条有效的链
+  单故障上 C 100% / D 97.1%。C 的 0% 不是模型不行 —— 它库里 38 条垃圾技能把两条有效的链
   挤到了永远轮不到的位置（第 1 轮恢复优先用单步技能，链长 1 就结束，第二个坏点没机会处理）。
 - **D 少的 2.9pp 是能力缺口，不是治理出错**：6 条失败全在 `planner/incorrect_planning`，
   真实模型下 `cross_verify` 在验证集上 `before=0 / after=0`，严格验证拒了它，
@@ -317,7 +316,8 @@ EvoGuardLab/
 │   ├── test_judgeability.py 9 个测试（可评口径：业务失败 vs 服务抖动）
 │   ├── test_hard_tasks.py   19 个测试（真值可独立算 / 判定不误杀 / 训练集与评测集不相交）
 │   ├── test_inspect.py      34 个测试（规则全命中 / 零误报 / 配置适配 / 事故模式）
-│   └── test_static.py       23 个测试（静态规则 / 框架写法适配 / 低置信度噪音治理）
+│   ├── test_static.py       23 个测试（静态规则 / 框架写法适配 / 低置信度噪音治理）
+│   └── test_skill_validation.py 36 个测试（成对负迁移 / 样本充分性 / 晋升门禁 / 严格库链路）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
