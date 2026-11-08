@@ -115,6 +115,106 @@ def to_markdown(traces, issues, path_note=""):
     return "\n".join(L)
 
 
+# ---------------- 静态检查报告 ----------------
+STATIC_GROUP_DESC = {
+    "prompt": "提示词层：没写清楚的边界，模型只能自己猜",
+    "tool": "工具定义层：模型选错工具、误用写操作的根源",
+    "config": "配置层：超时 / 重试 / 上限 / 输出约束",
+}
+STATIC_ORDER = ["prompt", "tool", "config"]
+
+
+def write_static(out_dir, defs, issues):
+    """静态检查只读定义，所以报告必须把「置信度」写出来 —— 仓库扫描是猜的。"""
+    os.makedirs(out_dir, exist_ok=True)
+    by_sev, by_rule, by_group = summarize(issues)
+    data = {
+        "version": 1,
+        "agents": [{"name": d.name, "source": d.source, "kind": d.source_kind,
+                    "confidence": d.confidence, "tools": len(d.tools),
+                    "prompt_chars": len(d.system_prompt), "notes": d.notes}
+                   for d in defs],
+        "issues": issues,
+        "summary": {"by_severity": by_sev, "by_rule": by_rule, "by_group": by_group},
+    }
+    j = os.path.join(out_dir, "static.json")
+    with open(j, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    L = ["# Agent 静态检查报告（不执行 Agent）", ""]
+    L.append("> 检查器：EvoGuard inspect --agent（确定性规则，不调用模型、不运行被检代码）")
+    L.append("")
+    L.append("## 一、被检对象")
+    L.append("")
+    L.append("| Agent | 来源 | 类型 | 工具数 | prompt 字数 | 置信度 |")
+    L.append("|---|---|---|---|---|---|")
+    for d in defs:
+        L.append("| %s | `%s` | %s | %d | %d | **%s** |" % (
+            d.name, (d.source or "-")[-60:], d.source_kind, len(d.tools),
+            len(d.system_prompt), d.confidence))
+    L.append("")
+    for d in defs:
+        if d.notes:
+            L.append("- `%s`：" % d.name + "；".join(d.notes))
+    if any(d.notes for d in defs):
+        L.append("")
+    L.append("> **confidence=low 表示定义是从源码里猜出来的** —— prompt 边界和工具清单都可能不全，")
+    L.append("> 这类结论只能当线索，不能当事实。")
+    L.append("")
+
+    L.append("## 二、总览")
+    L.append("")
+    L.append("| 严重度 | 条数 |")
+    L.append("|---|---|")
+    for sev in ("error", "warn", "info"):
+        L.append("| %s | %d |" % (sev, by_sev.get(sev, 0)))
+    L.append("")
+    if by_group:
+        L.append("| 分组 | 条数 | 说明 |")
+        L.append("|---|---|---|")
+        for g in STATIC_ORDER:
+            if g in by_group:
+                L.append("| %s | %d | %s |" % (g, by_group[g], STATIC_GROUP_DESC.get(g, "")))
+        L.append("")
+
+    if not issues:
+        L.append("**没有命中任何静态规则。** 这只说明「本规则集没发现问题」，")
+        L.append("不等于 Agent 没问题 —— 静态检查看不到运行时行为。")
+        L.append("")
+    else:
+        L.append("## 三、问题明细（按分组）")
+        L.append("")
+        for g in STATIC_ORDER:
+            gi = [i for i in issues if i.get("group") == g]
+            if not gi:
+                continue
+            L.append("### %s · %s" % (g, STATIC_GROUP_DESC.get(g, "")))
+            L.append("")
+            for i in gi:
+                L.append("**[%s] %s**" % (i["severity"].upper(), i["title"]))
+                L.append("")
+                L.append("- 对象：`%s`（置信度 %s）" % (i["agent"], i.get("confidence", "-")))
+                if i.get("evidence"):
+                    L.append("- 证据：`%s`" % str(i["evidence"])[:160])
+                L.append("- 事实：%s" % i["detail"])
+                if i["fix"]:
+                    L.append("- 怎么改：%s" % i["fix"])
+                if i.get("false_positive"):
+                    L.append("- **可能是误报**：%s" % i["false_positive"])
+                L.append("")
+
+    L.append("## 四、这份报告不能说明什么")
+    L.append("")
+    L.append("1. 只看定义，**不知道 Agent 实际会怎么执行** —— 那需要轨迹（`--trace`）。")
+    L.append("2. 规则集之外的风险它看不见（本报告只跑了配置里启用的规则）。")
+    L.append("3. 从源码提取的定义置信度低，结论需要人工复核。")
+    L.append("")
+    m = os.path.join(out_dir, "static.md")
+    with open(m, "w", encoding="utf-8") as f:
+        f.write("\n".join(L))
+    return j, m
+
+
 def write(out_dir, traces, issues, path_note=""):
     os.makedirs(out_dir, exist_ok=True)
     j = os.path.join(out_dir, "inspect.json")

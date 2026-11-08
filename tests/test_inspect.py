@@ -150,7 +150,7 @@ class TestReportShape(unittest.TestCase):
         traces = load("trace_synthetic_bad.json")
         issues = R.check_all(traces)
         j = report.to_json(traces, issues)
-        self.assertEqual(j["traces"], 11, "合成夹具现在是 11 条轨迹")
+        self.assertEqual(j["traces"], 17, "合成夹具现在是 17 条轨迹（含 6 条事故模式）")
         self.assertIn("by_severity", j["summary"])
         md = report.to_markdown(traces, issues)
         self.assertIn("Agent 离线检查报告", md)
@@ -248,6 +248,74 @@ class TestComplexAgent(unittest.TestCase):
         self.assertTrue(cfg.is_write("billing.charge"))
         self.assertFalse(cfg.is_write("kb.search"))
         self.assertTrue(config.Config().is_write("order.settle"), "关键词兜底要生效")
+
+
+class TestCaseRules(unittest.TestCase):
+    """公开事故模式提炼的 6 条轨迹规则。
+
+    同样两类一起测：坏轨迹逐条命中，负例不许误报。特别是
+    「工具报错 → 同工具重试 → 成功」这条轨迹，绝不能被判成「谎报成功」——
+    那会把健康处理了故障的 Agent 也标红，这类误报最毁工具可信度。
+    """
+
+    NEW_RULES = {
+        "self_report_contradiction", "retry_storm", "silent_stall",
+        "write_timeout_ambiguous", "retry_on_permanent_error",
+        "hallucination_propagation",
+    }
+    CASES = {
+        "t-liereport-0012": "self_report_contradiction",
+        "t-retrystorm-0013": "retry_storm",
+        "t-stall-0014": "silent_stall",
+        "t-writetimeout-0015": "write_timeout_ambiguous",
+        "t-permanenterr-0016": "retry_on_permanent_error",
+        "t-propagation-0017": "hallucination_propagation",
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.traces = load("trace_synthetic_bad.json")
+        cls.issues = R.check_all(cls.traces, config.DEFAULT)
+        cls.by_trace = {}
+        for i in cls.issues:
+            cls.by_trace.setdefault(i["trace_id"], set()).add(i["rule_id"])
+
+    def _hit(self, tid, rid):
+        self.assertIn(rid, self.by_trace.get(tid, set()),
+                      "%s 应命中 %s，实际 %s" % (tid, rid, self.by_trace.get(tid)))
+
+    def test_all_six_case_rules_fire(self):
+        self.assertEqual(len(self.traces), 17)
+        for tid, rid in self.CASES.items():
+            self._hit(tid, rid)
+
+    def test_negative_traces_no_case_false_positive(self):
+        """干净 / 重试成功 / 真实幻觉轨迹，新规则一条都不许命中。"""
+        for name in ("trace_clean.json", "trace_retry_ok.json",
+                     "trace_hallucination.json", "trace_langsmith.json"):
+            ids = {i["rule_id"] for i in R.check_all(load(name), config.DEFAULT)}
+            self.assertFalse(ids & self.NEW_RULES,
+                             "%s 被新规则误报：%s" % (name, ids & self.NEW_RULES))
+
+    def test_retry_ok_is_not_lying(self):
+        """回归断言：失败后同工具重试成功，说「完成」是诚实的。"""
+        ids = {i["rule_id"] for i in R.check_all(load("trace_retry_ok.json"))}
+        self.assertNotIn("self_report_contradiction", ids)
+
+    def test_rule_library_shape(self):
+        """扩库后 25 条轨迹规则 / 20 条静态规则，且每条都有误报说明。"""
+        from evoguard_inspect.static import rules as SR
+        self.assertEqual(len(registry.RULES), 25)
+        self.assertEqual(len(SR.RULES), 20)
+        for rid, m in list(registry.RULES.items()) + list(SR.RULES.items()):
+            self.assertTrue(m["false_positive"], "%s 缺误报说明" % rid)
+            self.assertIn(m["severity"], ("error", "warn", "info"))
+
+    def test_case_rules_have_fix(self):
+        for i in self.issues:
+            if i["rule_id"] in self.NEW_RULES:
+                self.assertTrue(i["fix"], "%s 缺修复建议" % i["rule_id"])
+                self.assertTrue(i["detail"], "%s 缺事实描述" % i["rule_id"])
 
 
 if __name__ == "__main__":

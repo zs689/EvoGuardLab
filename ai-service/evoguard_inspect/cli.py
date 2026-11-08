@@ -12,10 +12,13 @@
 """
 import argparse
 import json
+import os
 import sys
 
 from . import config, report
 from .rules import registry, trace_rules
+from .static import loader as static_loader
+from .static import rules as static_rules
 
 
 def print_rules(groups=None):
@@ -33,11 +36,61 @@ def print_rules(groups=None):
     print("\n共 %d 条规则" % len(registry.RULES))
 
 
+def run_static(args, cfg=None):
+    from . import report as _report
+    cfg = cfg or config.load(args.config)
+    defs = []
+    for p in args.agent:
+        try:
+            if args.split_dir and os.path.isdir(p):
+                defs.extend(static_loader.load_repo_split(p))
+            else:
+                defs.append(static_loader.load_any(p))
+        except Exception as e:
+            print("[×] 加载失败 %s：%s" % (p, e))
+    if not defs:
+        print("[×] 没有可分析的 Agent 定义")
+        return 2
+    rules = static_rules.select(groups=args.group, only=args.only, skip=args.skip)
+    if not rules:
+        print("[×] 规则过滤后一条都没剩下")
+        return 2
+    issues = []
+    for d in defs:
+        issues.extend(static_rules.check(d, cfg, rules))
+    by_sev, by_rule, by_group = _report.summarize(issues)
+
+    print("[√] 分析 %d 个 Agent 定义 ｜ 静态规则 %d/%d 条生效"
+          % (len(defs), len(rules), len(static_rules.RULES)))
+    for d in defs:
+        print("    - %-28s %s  tools=%d  prompt=%d 字  confidence=%s"
+              % (d.name[:28], d.source_kind, len(d.tools),
+                 len(d.system_prompt), d.confidence))
+    print("    发现 %d 个问题：error %d / warn %d / info %d"
+          % (len(issues), by_sev.get("error", 0), by_sev.get("warn", 0),
+             by_sev.get("info", 0)))
+    for rid, n in sorted(by_rule.items(), key=lambda kv: -kv[1]):
+        m = static_rules.RULES.get(rid, {})
+        print("    - %-28s %2d  [%s] %s" % (rid, n, m.get("group", "-"),
+                                            m.get("title", "")))
+    if args.out:
+        j, m = _report.write_static(args.out, defs, issues)
+        print("    报告：%s" % m)
+        print("    明细：%s" % j)
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="inspect",
                                  description="Agent 离线检查：只读轨迹，不执行 Agent")
     ap.add_argument("--trace", nargs="*", default=[],
                     help="轨迹文件（OTLP JSON 或 LangSmith runs）")
+    ap.add_argument("--agent", nargs="*", default=[],
+                    help="Agent 定义：JSON 文件或代码仓库目录（只读文本，不执行）")
+    ap.add_argument("--list-static-rules", action="store_true",
+                    help="列出静态规则库后退出")
+    ap.add_argument("--split-dir", action="store_true",
+                    help="把 --agent 目录下的一级子目录各当一个 Agent（仓库里通常有多个）")
     ap.add_argument("--format", default=None, choices=["otel", "langsmith"])
     ap.add_argument("--config", default=None, help="配置文件（JSON），用于适配不同 Agent")
     ap.add_argument("--out", default=None, help="输出目录")
@@ -58,8 +111,26 @@ def main(argv=None):
         print_rules(args.group)
         return 0
 
+    if args.list_static_rules:
+        from collections import defaultdict
+        by = defaultdict(list)
+        for rid, m in static_rules.RULES.items():
+            by[m["group"]].append((rid, m))
+        for g, title in static_rules.GROUPS.items():
+            rows = sorted(by.get(g, []))
+            print("\n[%s] %s（%d 条）" % (g, title, len(rows)))
+            for rid, m in rows:
+                print("  %-28s %-6s %s" % (rid, m["severity"], m["title"]))
+        print("\n共 %d 条静态规则" % len(static_rules.RULES))
+        return 0
+
+    # ---- 静态检查分支（只读定义，不执行 Agent）----
+    if args.agent:
+        return run_static(args, cfg=None)
+
     if not args.trace:
-        print("[×] 没有输入：用 --trace 指定轨迹文件，或用 --list-rules 看规则库")
+        print("[×] 没有输入：用 --trace 指定轨迹、用 --agent 指定定义，"
+              "或用 --list-rules / --list-static-rules 看规则库")
         return 2
 
     try:

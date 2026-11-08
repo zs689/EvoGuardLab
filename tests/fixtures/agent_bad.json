@@ -1,0 +1,13 @@
+{
+  "name": "billing-agent-bad",
+  "system_prompt": "你是财务助手，帮用户处理退款。示例：用户张伟 13800138000 说要退款。",
+  "tools": [
+    {"name": "order.settle", "description": "结算订单"},
+    {"name": "refund.create", "description": "创建退款"},
+    {"name": "order.settle_v2", "description": ""},
+    {"name": "shell.exec", "description": "执行命令",
+     "parameters": {"type": "object", "properties": {"cmd": {}}}},
+    {"name": "kb.search", "description": "", "parameters": {"type": "object", "properties": {"q": {}}}}
+  ],
+  "config": {"model": "gpt-4o", "temperature": 0.7}
+}

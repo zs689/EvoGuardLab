@@ -15,9 +15,9 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（81 个：24 核心 + 9 评测口径 + 19 难度组 + 29 检查器）
+# 2) 回归测试（109 个：24 核心 + 9 评测口径 + 19 难度组 + 34 检查器 + 23 静态）
 python -m unittest tests.test_core tests.test_judgeability \
-    tests.test_hard_tasks tests.test_inspect -v
+    tests.test_hard_tasks tests.test_inspect tests.test_static -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
 python ai-service/api/app.py           # http://127.0.0.1:8770
@@ -143,17 +143,20 @@ C 的库里 calc 只有 3 条，最新那条是 `replay_checkpoint`，而 C 只�
 要真拉开差距，得让技能能表达规则表**没有**的东西（比如 calc 的规则顺序偏好、
 xref 的「比版本号而不是比命中位置」）—— 那是下一步，也是「自进化」真正的落点。
 
-### 离线检查器：不运行 Agent，只读轨迹
+### 离线检查器：不运行 Agent，只读轨迹 / 只读定义
 
 前面所有实验都要「把 Agent 跑起来」。但企业里更常见的场景是：
 **Agent 已经跑过了（或别人写的），我要知道它有没有出问题。** 这一层不执行、不调模型、不改数据。
 
 ```bash
 cd ai-service
-python -m evoguard_inspect.cli --list-rules                      # 看规则库
+python -m evoguard_inspect.cli --list-rules                      # 看轨迹规则库（25 条）
+python -m evoguard_inspect.cli --list-static-rules               # 看静态规则库（20 条）
 python -m evoguard_inspect.cli --trace trace.json --out ../experiments/inspect
 python -m evoguard_inspect.cli --trace t.json --config inspect.json   # 适配别的 Agent
 python -m evoguard_inspect.cli --trace t.json --group tool flow       # 只看某几组
+python -m evoguard_inspect.cli --agent agent.json --out ../experiments/inspect  # 静态检查
+python -m evoguard_inspect.cli --agent repo/ --split-dir        # 扫真实代码仓库
 ```
 
 **输入格式**（自动识别，认不出就明确报错，不静默返回空）：
@@ -162,18 +165,30 @@ python -m evoguard_inspect.cli --trace t.json --group tool flow       # 只看�
 |---|---|---|
 | 任意 OTel 化框架 | OTLP JSON（`resourceSpans`） | `gen_ai.*` 语义约定；LangChain / LlamaIndex / OpenAI Agents SDK / Langfuse 都能导出 |
 | LangSmith | `{"runs": [...]}` | `run_type` 为 `llm` / `tool` 的记录 |
+| Agent 定义 | JSON（prompt / tools / config） | 静态检查，不运行 |
+| 代码仓库 | 目录（只读文本） | 启发式提取定义，`confidence=low` |
 
 接 OTel 而不是给每个框架写适配器，是因为它是目前唯一被多框架同时采纳的标准。
 
-**规则库 19 条，分 5 组**（全部确定性，不调用模型）：
+**轨迹规则库 25 条，分 5 组**（全部确定性，不调用模型）：
 
 | 分组 | 条数 | 查什么 |
 |---|---|---|
-| `answer` 输出层 | 5 | 空答案、缺约定字段、数字/标识无出处、PII 泄漏 |
-| `tool` 工具层 | 6 | 报错被吞、零工具调用、参数为空、结果未被引用、参数与上游不符、工具名幻觉 |
-| `flow` 流程层 | 4 | 写前不读、同参数重试、A→B→A→B 循环、无有效结果就下定论 |
+| `answer` 输出层 | 6 | 空答案、缺约定字段、数字/标识无出处、PII 泄漏、**自称成功但证据不支持** |
+| `tool` 工具层 | 7 | 报错被吞、零工具调用、参数为空、结果未引用、参数与上游不符、工具名幻觉、**永久错误仍重试** |
+| `flow` 流程层 | 6 | 写前不读、同参数重试、A→B→A→B 循环、过早收尾、**重试风暴**、**静默空转** |
 | `resource` 资源层 | 2 | token 超预算、单步异常慢 |
-| `structure` 结构层 | 2 | 模型报错仍出答案、相邻两次写操作 |
+| `structure` 结构层 | 4 | 模型报错仍出答案、相邻双写、**写超时后重复调用**、**多 Agent 幻觉传播** |
+
+**静态规则库 20 条，分 3 组**：prompt 层 6 / 工具定义层 8 / 配置层 6。
+查的是「没运行时也能看见的东西」：prompt 缺拒答边界、工具描述没写副作用、
+写操作没审批、密钥硬编码、命令执行工具没沙箱说明、缺超时/重试/轮次上限、
+工具结果未声明为不可信数据、写工具没幂等键、没有单次运行预算。
+
+其中 **10 条规则来自公开生产事故**（Replit 删库、Air Canada 幻觉政策、
+重试风暴烧钱、CrewAI 静默死锁、AutoGen 幻觉传播、工具结果注入等）。
+案例 → 根因 → 对应规则 → 怎么修的完整对照表见
+`experiments/inspect/agent_failure_cases.md`。
 
 分组的用处是**排查顺序**：先看输出层（结论错了），再往工具层/流程层倒推原因。
 
@@ -192,20 +207,58 @@ python -m evoguard_inspect.cli --trace t.json --group tool flow       # 只看�
 
 | 夹具 | 来源 | 期望 | 实测 |
 |---|---|---|---|
-| `trace_synthetic_bad.json`（11 条轨迹） | 合成，每条只坏一处 | 各规则能对上具体那条 | 12 条规则命中 |
+| `trace_synthetic_bad.json`（17 条轨迹） | 合成，每条只坏一处 | 各规则能对上具体那条 | 25 条规则里 20 条命中 |
 | `trace_clean.json` | 真实成功轨迹 | 零命中 | 0 条 |
-| `trace_retry_ok.json` | 真实「工具报错后重试成功」 | **不许**报 `error_swallowed` | 未报 |
+| `trace_retry_ok.json` | 真实「工具报错后重试成功」 | **不许**报 `error_swallowed` / `self_report_contradiction` | 均未报 |
 | `trace_hallucination.json` | 真实工具输出幻觉 | 命中 `hallucinated_number` | 命中 |
+| `agent_bad.json` / `agent_good.json` | 手写坏/好定义 | 坏的命中、好的零命中 | 16 / 0 |
 
 只测命中，规则可以乱报；只测不误报，规则可以什么都不报。所以两类一起测。
+未命中的 5 条不是失灵：`answer_schema_missing` 需要配 `expect_keys`、
+`slow_step` 需要耗时字段、`model_error_ignored` / `tool_never_called` /
+`unsupported_entity` 需要对应的数据形态，夹具里没有就**不该报**。
 
 **误报是这类工具的头号死因，所以每条规则都必须写「什么时候会误报」**，
 报告会把它印在每条问题下面。没有误报说明的规则不允许入库（注册时直接抛错）。
 
 第一版 `tool_result_unused` 拿整个 JSON 的 token 做交集，11 条轨迹全命中 ——
-因为 JSON 的 key（items / docs / ok）本来就不会出现在答案里。这种规则没有区分度，
-只能制造噪音。改成「只看值、且要求返回有实质内容」后降到 5 条，并加了回归断言
-（命中数不得超过轨迹数一半）。
+因为 JSON 的 key（items / docs / ok）本来就不会出现在答案里。改成「只看值、
+且要求返回有实质内容」后降到 5 条，并加了回归断言（命中数不得超过轨迹数一半）。
+
+### 真实框架实测与误报治理
+
+扫了 **9 个框架、76 个 Agent 定义**：OpenAI Agents SDK / Swarm、Google ADK、
+Microsoft AutoGen、Hugging Face smolagents、LangGraph、CrewAI、PydanticAI、Agno
+（大厂 + 小厂 + 多 Agent 框架）。完整报告见 `experiments/inspect/real_agents_scan.md`。
+
+**最重要的结果是「报得更少」**：第一版报出 298 条线索，其中
+`no_timeout` / `no_retry_policy` / `no_max_iterations` / `no_output_schema`
+在几乎所有框架 100% 命中。按项目里踩过的教训 ——
+**一条规则如果命中率接近 100%，它就是噪音，不是发现** —— 根因是这些
+「缺失型」规则在从源码猜出来的定义上判断「没读到 ≠ 不存在」：
+教学示例的配置在框架默认值 / 环境变量 / 部署平台里。
+
+修法：给静态规则加 `needs_high` 标记，13 条缺失型规则只在
+`confidence=high`（显式定义文件）上生效；低置信度下只保留 3 类
+「存在型」证据（读到 PII / 读到密钥 / 读到命令执行工具）。
+**298 条 → 2 条真线索，0 条高命中噪音规则。**
+
+顺带补齐了提取器对各框架特有写法的适配，并各加一条回归测试：
+AutoGen `system_message=`、Google ADK `instruction=`、CrewAI `role/goal`、
+PydanticAI `@agent.tool`、多行字符串拼接 prompt。修复前扫 AutoGen /
+PydanticAI 一个定义都拿不到。
+
+**安全**：下载物全程只读文本，未执行、未 import、未安装；解压拒绝路径穿越；
+`_sandbox` 用完删除（11934 个文件 / 403.9 MB，可执行文件 0 个，目录已确认不存在）。
+清理脚本 `scripts/cleanup_sandbox.py` 会打印可核对的清点记录。
+
+**这份实测不说明什么**：「0 条线索」不等于框架没问题；静态检查看不到运行时行为，
+示例不等于生产配置；闭源 Agent（Replit、Air Canada bot）拿不到定义，
+只能依据公开案例分析。真正查运行时问题要靠轨迹检查，两层一起用。
+
+> 想复现实测：先跑 `scripts/fetch_mini_repos.py` 与整包下载重建 `_sandbox`，
+> 再跑 `scripts/scan_real_agents.py`，最后 `scripts/cleanup_sandbox.py` 清理。
+> 当前 `_sandbox` 已按要求删除，扫描结果以 `real_agents_scan.json` 为准。
 
 ### 三个必须讲清楚的解释
 
@@ -263,7 +316,8 @@ EvoGuardLab/
 │   ├── test_core.py         24 个测试（对抗性投毒 / 策略链 / 不变量 / 技能定序与作用域）
 │   ├── test_judgeability.py 9 个测试（可评口径：业务失败 vs 服务抖动）
 │   ├── test_hard_tasks.py   19 个测试（真值可独立算 / 判定不误杀 / 训练集与评测集不相交）
-│   └── test_inspect.py      29 个测试（规则全命中 / 零误报 / 配置适配 / 分组过滤）
+│   ├── test_inspect.py      34 个测试（规则全命中 / 零误报 / 配置适配 / 事故模式）
+│   └── test_static.py       23 个测试（静态规则 / 框架写法适配 / 低置信度噪音治理）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析

@@ -130,6 +130,51 @@ def main():
                       {"order_id": "X11", "total": 88.0}))
     spans.append(chat(tid, 2, {"order_id": "X11"}))
 
+    # ---------- 公开事故模式（case_rules.py 的 6 条规则） ----------
+    # 12) 谎报成功：Replit 删库后伪造测试记录、自称完成
+    tid = "t-liereport-0012"
+    spans.append(tool(tid, 1, "db.migrate", {"script": "v3"}, {},
+                      err="destructive operation failed"))
+    spans.append(chat(tid, 2, {"text": "全部完成，测试通过，数据完好"}))
+
+    # 13) 重试风暴：连续 4 次同一失败，中间没有一次成功
+    tid = "t-retrystorm-0013"
+    for i in range(1, 5):
+        spans.append(tool(tid, i, "kb.search", {"query": "发票"}, {},
+                          err="upstream timeout"))
+    spans.append(chat(tid, 5, {"text": "暂时查不到"}))
+
+    # 14) 静默死锁：连续 3 步空返回，不报错也不收尾
+    tid = "t-stall-0014"
+    for i in range(1, 4):
+        spans.append(tool(tid, i, "pipeline.next", {"stage": i}, {}))
+    spans.append(chat(tid, 4, {"text": "查不到"}))
+
+    # 15) 写操作超时后同参数重试（可能重复结算）
+    tid = "t-writetimeout-0015"
+    spans.append(tool(tid, 1, "order.settle", {"order_id": "X15", "total": 50.0},
+                      {}, err="timeout after 30s"))
+    spans.append(tool(tid, 2, "order.settle", {"order_id": "X15", "total": 50.0},
+                      {"settled": True}))
+    spans.append(chat(tid, 3, {"text": "结算结果已记录"}))
+
+    # 16) 永久性错误仍被重试
+    tid = "t-permanenterr-0016"
+    spans.append(tool(tid, 1, "kb.search", {"query": "X"}, {},
+                      err="401 unauthorized: invalid api key"))
+    spans.append(tool(tid, 2, "kb.search", {"query": "X"}, {"docs": []}))
+    spans.append(chat(tid, 3, {"text": "没有相关文档"}))
+
+    # 17) 多 Agent 幻觉传播：下游用了上游从没返回过的标识
+    tid = "t-propagation-0017"
+    spans.append(tool(tid, 1, "kb.search", {"query": "发票"},
+                      {"docs": [{"doc_id": "KB-01"}]}))
+    spans.append(tool(tid, 2, "order.get_order", {"order_id": "A1001"},
+                      {"order_id": "A1001", "total": 10.0}))
+    spans.append(tool(tid, 3, "order.get_order", {"order_id": "A1001"},
+                      {"order_id": "A1001", "total": 10.0}))
+    spans.append(chat(tid, 4, {"text": "已查到订单"}))
+
     doc = {"resourceSpans": [{
         "resource": {"attributes": [
             {"key": "service.name", "value": {"stringValue": "synthetic-agent"}}]},
@@ -137,7 +182,7 @@ def main():
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=1)
-    print("写出 %s（%d 个 span，11 条轨迹）" % (OUT, len(spans)))
+    print("写出 %s（%d 个 span，17 条轨迹）" % (OUT, len(spans)))
     return 0
 
 

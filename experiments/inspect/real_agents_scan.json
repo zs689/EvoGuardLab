@@ -1,0 +1,243 @@
+{
+  "version": 1,
+  "purpose": "验证静态检查器对多种真实框架示例的适配能力；结论是线索，不代表框架缺陷（confidence=low）",
+  "safety": "只读文本，未执行/未安装任何被检代码",
+  "rules_available": 20,
+  "frameworks": 9,
+  "total_defs": 76,
+  "total_issues": 2,
+  "results": [
+    {
+      "name": "OpenAI Agents SDK",
+      "vendor": "OpenAI · 大厂",
+      "status": "ok",
+      "mode": "split",
+      "path": "_sandbox/openai-agents-python/openai-agents-python-main/examples",
+      "defs": 15,
+      "with_prompt": 14,
+      "with_tools": 13,
+      "tools_total": 59,
+      "prompt_chars": 2914,
+      "confidence": [
+        "low"
+      ],
+      "issues": 0,
+      "by_severity": {},
+      "by_rule": {},
+      "high_hit_rules": [],
+      "sample_defs": [
+        "agent_patterns",
+        "basic",
+        "customer_service",
+        "decisions",
+        "handoffs",
+        "hosted_mcp"
+      ]
+    },
+    {
+      "name": "OpenAI Swarm",
+      "vendor": "OpenAI · 大厂",
+      "status": "ok",
+      "mode": "split",
+      "path": "_sandbox/swarm/swarm-main/examples",
+      "defs": 6,
+      "with_prompt": 6,
+      "with_tools": 1,
+      "tools_total": 10,
+      "prompt_chars": 1618,
+      "confidence": [
+        "low"
+      ],
+      "issues": 0,
+      "by_severity": {},
+      "by_rule": {},
+      "high_hit_rules": [],
+      "sample_defs": [
+        "airline",
+        "basic",
+        "customer_service_streaming",
+        "support_bot",
+        "triage_agent",
+        "weather_agent"
+      ]
+    },
+    {
+      "name": "Google ADK",
+      "vendor": "Google · 大厂",
+      "status": "ok",
+      "mode": "split",
+      "path": "_sandbox/adk/adk-python-main/contributing/samples",
+      "defs": 19,
+      "with_prompt": 19,
+      "with_tools": 3,
+      "tools_total": 17,
+      "prompt_chars": 8928,
+      "confidence": [
+        "low"
+      ],
+      "issues": 0,
+      "by_severity": {},
+      "by_rule": {},
+      "high_hit_rules": [],
+      "sample_defs": [
+        "a2a",
+        "adk_team",
+        "context_management",
+        "core",
+        "environment_and_skills",
+        "evaluation"
+      ]
+    },
+    {
+      "name": "LangGraph",
+      "vendor": "LangChain · 主流框架",
+      "status": "ok",
+      "mode": "file",
+      "path": "_sandbox/langgraph/langgraph-main/libs/cli/examples",
+      "defs": 1,
+      "with_prompt": 0,
+      "with_tools": 1,
+      "tools_total": 1,
+      "prompt_chars": 0,
+      "confidence": [
+        "low"
+      ],
+      "issues": 0,
+      "by_severity": {},
+      "by_rule": {},
+      "high_hit_rules": [],
+      "sample_defs": [
+        "storm.py"
+      ]
+    },
+    {
+      "name": "smolagents",
+      "vendor": "Hugging Face · 大厂",
+      "status": "ok",
+      "mode": "split",
+      "path": "_sandbox/smolagents/smolagents-main/examples",
+      "defs": 2,
+      "with_prompt": 1,
+      "with_tools": 2,
+      "tools_total": 10,
+      "prompt_chars": 40,
+      "confidence": [
+        "low"
+      ],
+      "issues": 0,
+      "by_severity": {},
+      "by_rule": {},
+      "high_hit_rules": [],
+      "sample_defs": [
+        "examples",
+        "open_deep_research"
+      ]
+    },
+    {
+      "name": "Agno",
+      "vendor": "Agno · 小厂",
+      "status": "ok",
+      "mode": "split",
+      "path": "_sandbox/agno/agno-main/cookbook",
+      "defs": 20,
+      "with_prompt": 20,
+      "with_tools": 9,
+      "tools_total": 108,
+      "prompt_chars": 6262,
+      "confidence": [
+        "low"
+      ],
+      "issues": 2,
+      "by_severity": {
+        "error": 2
+      },
+      "by_rule": {
+        "unsafe_shell_tool": 2
+      },
+      "high_hit_rules": [],
+      "sample_defs": [
+        "00_quickstart",
+        "02_agents",
+        "03_teams",
+        "04_workflows",
+        "05_agent_os",
+        "06_storage"
+      ]
+    },
+    {
+      "name": "Microsoft AutoGen",
+      "vendor": "Microsoft · 大厂",
+      "status": "ok",
+      "mode": "file",
+      "path": "_sandbox/autogen_mini",
+      "defs": 4,
+      "with_prompt": 4,
+      "with_tools": 0,
+      "tools_total": 0,
+      "prompt_chars": 340,
+      "confidence": [
+        "low"
+      ],
+      "issues": 0,
+      "by_severity": {},
+      "by_rule": {},
+      "high_hit_rules": [],
+      "sample_defs": [
+        "README.md",
+        "app.py",
+        "agent.py",
+        "app_agent.py"
+      ]
+    },
+    {
+      "name": "PydanticAI",
+      "vendor": "Pydantic · 小厂",
+      "status": "ok",
+      "mode": "file",
+      "path": "_sandbox/pydanticai_mini",
+      "defs": 7,
+      "with_prompt": 5,
+      "with_tools": 6,
+      "tools_total": 10,
+      "prompt_chars": 380,
+      "confidence": [
+        "low"
+      ],
+      "issues": 0,
+      "by_severity": {},
+      "by_rule": {},
+      "high_hit_rules": [],
+      "sample_defs": [
+        "bank_support.py",
+        "data_analyst.py",
+        "flight_booking.py",
+        "medical_agent_delegation.py",
+        "rag.py",
+        "sql_gen.py"
+      ]
+    },
+    {
+      "name": "CrewAI",
+      "vendor": "CrewAI · 小厂",
+      "status": "ok",
+      "mode": "file",
+      "path": "_sandbox/crewai_mini",
+      "defs": 2,
+      "with_prompt": 1,
+      "with_tools": 2,
+      "tools_total": 3,
+      "prompt_chars": 58,
+      "confidence": [
+        "low"
+      ],
+      "issues": 0,
+      "by_severity": {},
+      "by_rule": {},
+      "high_hit_rules": [],
+      "sample_defs": [
+        "README.md",
+        "base_tool.py"
+      ]
+    }
+  ]
+}

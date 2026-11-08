@@ -1155,6 +1155,837 @@
        "status": {
         "code": "STATUS_CODE_OK"
        }
+      },
+      {
+       "traceId": "t-liereport-0012",
+       "spanId": "t-liereport-0012-01",
+       "name": "execute_tool db.migrate",
+       "startTimeUnixNano": "1000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "db.migrate"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"script\": \"v3\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{}"
+         }
+        },
+        {
+         "key": "error.type",
+         "value": {
+          "stringValue": "destructive operation failed"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_ERROR"
+       }
+      },
+      {
+       "traceId": "t-liereport-0012",
+       "spanId": "t-liereport-0012-02",
+       "name": "chat synthetic",
+       "startTimeUnixNano": "2000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"text\": \"全部完成，测试通过，数据完好\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-retrystorm-0013",
+       "spanId": "t-retrystorm-0013-01",
+       "name": "execute_tool kb.search",
+       "startTimeUnixNano": "1000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "kb.search"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"发票\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{}"
+         }
+        },
+        {
+         "key": "error.type",
+         "value": {
+          "stringValue": "upstream timeout"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_ERROR"
+       }
+      },
+      {
+       "traceId": "t-retrystorm-0013",
+       "spanId": "t-retrystorm-0013-02",
+       "name": "execute_tool kb.search",
+       "startTimeUnixNano": "2000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "kb.search"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"发票\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{}"
+         }
+        },
+        {
+         "key": "error.type",
+         "value": {
+          "stringValue": "upstream timeout"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_ERROR"
+       }
+      },
+      {
+       "traceId": "t-retrystorm-0013",
+       "spanId": "t-retrystorm-0013-03",
+       "name": "execute_tool kb.search",
+       "startTimeUnixNano": "3000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "kb.search"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"发票\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{}"
+         }
+        },
+        {
+         "key": "error.type",
+         "value": {
+          "stringValue": "upstream timeout"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_ERROR"
+       }
+      },
+      {
+       "traceId": "t-retrystorm-0013",
+       "spanId": "t-retrystorm-0013-04",
+       "name": "execute_tool kb.search",
+       "startTimeUnixNano": "4000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "kb.search"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"发票\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{}"
+         }
+        },
+        {
+         "key": "error.type",
+         "value": {
+          "stringValue": "upstream timeout"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_ERROR"
+       }
+      },
+      {
+       "traceId": "t-retrystorm-0013",
+       "spanId": "t-retrystorm-0013-05",
+       "name": "chat synthetic",
+       "startTimeUnixNano": "5000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"text\": \"暂时查不到\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-stall-0014",
+       "spanId": "t-stall-0014-01",
+       "name": "execute_tool pipeline.next",
+       "startTimeUnixNano": "1000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "pipeline.next"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"stage\": 1}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-stall-0014",
+       "spanId": "t-stall-0014-02",
+       "name": "execute_tool pipeline.next",
+       "startTimeUnixNano": "2000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "pipeline.next"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"stage\": 2}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-stall-0014",
+       "spanId": "t-stall-0014-03",
+       "name": "execute_tool pipeline.next",
+       "startTimeUnixNano": "3000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "pipeline.next"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"stage\": 3}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-stall-0014",
+       "spanId": "t-stall-0014-04",
+       "name": "chat synthetic",
+       "startTimeUnixNano": "4000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"text\": \"查不到\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-writetimeout-0015",
+       "spanId": "t-writetimeout-0015-01",
+       "name": "execute_tool order.settle",
+       "startTimeUnixNano": "1000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "order.settle"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"order_id\": \"X15\", \"total\": 50.0}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{}"
+         }
+        },
+        {
+         "key": "error.type",
+         "value": {
+          "stringValue": "timeout after 30s"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_ERROR"
+       }
+      },
+      {
+       "traceId": "t-writetimeout-0015",
+       "spanId": "t-writetimeout-0015-02",
+       "name": "execute_tool order.settle",
+       "startTimeUnixNano": "2000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "order.settle"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"order_id\": \"X15\", \"total\": 50.0}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{\"settled\": true}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-writetimeout-0015",
+       "spanId": "t-writetimeout-0015-03",
+       "name": "chat synthetic",
+       "startTimeUnixNano": "3000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"text\": \"结算结果已记录\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-permanenterr-0016",
+       "spanId": "t-permanenterr-0016-01",
+       "name": "execute_tool kb.search",
+       "startTimeUnixNano": "1000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "kb.search"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"X\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{}"
+         }
+        },
+        {
+         "key": "error.type",
+         "value": {
+          "stringValue": "401 unauthorized: invalid api key"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_ERROR"
+       }
+      },
+      {
+       "traceId": "t-permanenterr-0016",
+       "spanId": "t-permanenterr-0016-02",
+       "name": "execute_tool kb.search",
+       "startTimeUnixNano": "2000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "kb.search"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"X\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{\"docs\": []}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-permanenterr-0016",
+       "spanId": "t-permanenterr-0016-03",
+       "name": "chat synthetic",
+       "startTimeUnixNano": "3000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"text\": \"没有相关文档\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-propagation-0017",
+       "spanId": "t-propagation-0017-01",
+       "name": "execute_tool kb.search",
+       "startTimeUnixNano": "1000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "kb.search"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"发票\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{\"docs\": [{\"doc_id\": \"KB-01\"}]}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-propagation-0017",
+       "spanId": "t-propagation-0017-02",
+       "name": "execute_tool order.get_order",
+       "startTimeUnixNano": "2000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "order.get_order"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"order_id\": \"A1001\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{\"order_id\": \"A1001\", \"total\": 10.0}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-propagation-0017",
+       "spanId": "t-propagation-0017-03",
+       "name": "execute_tool order.get_order",
+       "startTimeUnixNano": "3000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "order.get_order"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"order_id\": \"A1001\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{\"order_id\": \"A1001\", \"total\": 10.0}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "t-propagation-0017",
+       "spanId": "t-propagation-0017-04",
+       "name": "chat synthetic",
+       "startTimeUnixNano": "4000000",
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "synthetic-agent"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"text\": \"已查到订单\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
       }
      ]
     }
