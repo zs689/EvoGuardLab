@@ -1,0 +1,200 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evoguard-planner"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "evoguard.export"
+     },
+     "spans": [
+      {
+       "traceId": "run_5cf841360030",
+       "spanId": "41360030-01",
+       "name": "rule-plan",
+       "startTimeUnixNano": "1000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "training"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.rule-plan"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_5cf841360030",
+       "spanId": "41360030-02",
+       "name": "execute_tool task.make_plan",
+       "startTimeUnixNano": "2000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "training"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "task.make_plan"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"goal_key\": \"training\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{\"goal_key\": \"training\", \"steps\": [\"确定课表\", \"邀请讲师\", \"组织考核\", \"归档成绩\"]}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_5cf841360030",
+       "spanId": "41360030-03",
+       "name": "build_context",
+       "startTimeUnixNano": "3000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "training"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.build_context"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_5cf841360030",
+       "spanId": "41360030-04",
+       "name": "rule-plan",
+       "startTimeUnixNano": "4000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "training"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.rule-plan"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_5cf841360030",
+       "spanId": "41360030-05",
+       "name": "chat planner",
+       "startTimeUnixNano": "5000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "training"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": 133
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"parsed\": {\"steps\": [\"确定课表\", \"邀请讲师\", \"组织考核\", \"归档成绩\", \"补充步骤 777\"]}, \"text\": \"{\\n  \\\"steps\\\": [\\n    \\\"确定课表\\\",\\n    \\\"邀请讲师\\\",\\n    \\\"组织考核\\\",\\n    \\\"归档成绩\\\"\\n  ]\\n}\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -15,8 +15,9 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（52 个：24 核心 + 9 评测口径 + 19 难度组）
-python -m unittest tests.test_core tests.test_judgeability tests.test_hard_tasks -v
+# 2) 回归测试（69 个：24 核心 + 9 评测口径 + 19 难度组 + 17 检查器）
+python -m unittest tests.test_core tests.test_judgeability \
+    tests.test_hard_tasks tests.test_inspect -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
 python ai-service/api/app.py           # http://127.0.0.1:8770
@@ -142,6 +143,50 @@ C 的库里 calc 只有 3 条，最新那条是 `replay_checkpoint`，而 C 只�
 要真拉开差距，得让技能能表达规则表**没有**的东西（比如 calc 的规则顺序偏好、
 xref 的「比版本号而不是比命中位置」）—— 那是下一步，也是「自进化」真正的落点。
 
+### 离线检查器：不运行 Agent，只读轨迹
+
+前面所有实验都要「把 Agent 跑起来」。但企业里更常见的场景是：
+**Agent 已经跑过了（或别人写的），我要知道它有没有出问题。** 这一层不执行、不调模型、不改数据。
+
+```bash
+cd ai-service
+python -m evoguard_inspect.cli --trace trace.json --out ../experiments/inspect
+```
+
+**输入格式**（自动识别，认不出就明确报错，不静默返回空）：
+
+| 来源 | 格式 | 说明 |
+|---|---|---|
+| 任意 OTel 化框架 | OTLP JSON（`resourceSpans`） | `gen_ai.*` 语义约定；LangChain / LlamaIndex / OpenAI Agents SDK / Langfuse 都能导出 |
+| LangSmith | `{"runs": [...]}` | `run_type` 为 `llm` / `tool` 的记录 |
+
+接 OTel 而不是给每个框架写适配器，是因为它是目前唯一被多框架同时采纳的标准。
+接住一个标准，等于接住大半个生态。
+
+**5 条规则**（全部确定性，不调用模型）：
+
+| 规则 | 严重度 | 查什么 |
+|---|---|---|
+| `empty_answer` | error | 宣称完成但没有产出答案 |
+| `error_swallowed` | error | 工具报错后没重试就给出了最终答案 |
+| `hallucinated_number` | warn | 答案里的数字不在任何**工具输出**里 |
+| `write_before_read` | warn | 第一次调用就是写操作，之前没读状态 |
+| `repeated_tool_call` | warn | 同工具同参数被调用 ≥3 次 |
+
+**怎么验证它不是摆设**（这一点比规则本身重要）：
+
+| 夹具 | 来源 | 期望 | 实测 |
+|---|---|---|---|
+| `trace_synthetic_bad.json` | 合成，四类错误各一条 | 5 条规则全命中 | 5/5 命中 |
+| `trace_clean.json` | 真实成功轨迹 | 零命中 | 0 条 |
+| `trace_retry_ok.json` | 真实「工具报错后重试成功」 | **不许**报 `error_swallowed` | 未报 |
+| `trace_hallucination.json` | 真实工具输出幻觉 | 命中 `hallucinated_number` | 命中 |
+
+只测命中，规则可以乱报；只测不误报，规则可以什么都不报。所以两类一起测。
+
+**已知误报（报告里会逐条显示）**：`hallucinated_number` 抓不到「算出来的数字」
+（比如小计×折扣），所以它只报警不判错，必须人工核实。
+
 ### 三个必须讲清楚的解释
 
 - **C = D = 100% 不代表「严格验证没用」**。规则表已覆盖全部单故障，技能在那上面增益为 0，
@@ -197,7 +242,8 @@ EvoGuardLab/
 ├── tests/
 │   ├── test_core.py         24 个测试（对抗性投毒 / 策略链 / 不变量 / 技能定序与作用域）
 │   ├── test_judgeability.py 9 个测试（可评口径：业务失败 vs 服务抖动）
-│   └── test_hard_tasks.py   19 个测试（真值可独立算 / 判定不误杀 / 训练集与评测集不相交）
+│   ├── test_hard_tasks.py   19 个测试（真值可独立算 / 判定不误杀 / 训练集与评测集不相交）
+│   └── test_inspect.py      17 个测试（合成夹具全命中 / 干净轨迹零误报 / 两种格式）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析

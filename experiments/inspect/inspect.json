@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "traces": 5,
+  "trace_ids": [
+    "t-swallow-0001",
+    "t-writefirst-0002",
+    "t-repeat-0003",
+    "t-empty-0004",
+    "run_5cf841360030"
+  ],
+  "issues": [
+    {
+      "rule_id": "error_swallowed",
+      "title": "工具报错后仍然给出了最终答案",
+      "severity": "error",
+      "trace_id": "t-swallow-0001",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "order.get_order",
+      "detail": "工具 order.get_order 报错(timeout)，之后没有重试就给出了答案",
+      "fix": "失败分支要显式降级或重试；把工具错误写进答案，别静默吞掉",
+      "false_positive": "该工具本来就允许失败（可选增强），且答案不依赖它。"
+    },
+    {
+      "rule_id": "hallucinated_number",
+      "title": "答案里出现工具没返回过的数字",
+      "severity": "warn",
+      "trace_id": "t-swallow-0001",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 3,
+      "step_name": "chat synthetic",
+      "detail": "这些数字在任何工具输出里都找不到：999.0",
+      "fix": "要求 Agent 只引用工具返回的数值；",
+      "false_positive": "**数字可能是算出来的**（如 小计×折扣）或来自 prompt 常量 —— 所以这条只报警不判错，必须人工核实一次。"
+    },
+    {
+      "rule_id": "hallucinated_number",
+      "title": "答案里出现工具没返回过的数字",
+      "severity": "warn",
+      "trace_id": "t-writefirst-0002",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 2,
+      "step_name": "chat synthetic",
+      "detail": "这些数字在任何工具输出里都找不到：100.0",
+      "fix": "要求 Agent 只引用工具返回的数值；",
+      "false_positive": "**数字可能是算出来的**（如 小计×折扣）或来自 prompt 常量 —— 所以这条只报警不判错，必须人工核实一次。"
+    },
+    {
+      "rule_id": "write_before_read",
+      "title": "写操作发生在读取之前",
+      "severity": "warn",
+      "trace_id": "t-writefirst-0002",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "order.settle",
+      "detail": "第一次调用就是写操作 order.settle，之前没有任何读取",
+      "fix": "写之前先读一次当前状态，或确认入参已含前置信息",
+      "false_positive": "写操作本身是幂等的、或入参已包含全部前置信息。"
+    },
+    {
+      "rule_id": "hallucinated_number",
+      "title": "答案里出现工具没返回过的数字",
+      "severity": "warn",
+      "trace_id": "t-repeat-0003",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 5,
+      "step_name": "chat synthetic",
+      "detail": "这些数字在任何工具输出里都找不到：7",
+      "fix": "要求 Agent 只引用工具返回的数值；",
+      "false_positive": "**数字可能是算出来的**（如 小计×折扣）或来自 prompt 常量 —— 所以这条只报警不判错，必须人工核实一次。"
+    },
+    {
+      "rule_id": "repeated_tool_call",
+      "title": "同一工具同参数被反复调用",
+      "severity": "warn",
+      "trace_id": "t-repeat-0003",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 4,
+      "step_name": "kb.search",
+      "detail": "kb.search 用同一组参数被调用 4 次",
+      "fix": "加去重/缓存；轮询类工具要显式标 polling 语义",
+      "false_positive": "该工具用于轮询等待（如查任务状态），重复是设计如此。"
+    },
+    {
+      "rule_id": "empty_answer",
+      "title": "宣称完成但没有产出答案",
+      "severity": "error",
+      "trace_id": "t-empty-0004",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": null,
+      "step_name": null,
+      "detail": "答案为空：'{}'",
+      "fix": "检查 Agent 的收尾分支；空答案不要按成功上报",
+      "false_positive": "流式输出被截断、或答案写在别的字段里（非 answer/completion）。"
+    },
+    {
+      "rule_id": "hallucinated_number",
+      "title": "答案里出现工具没返回过的数字",
+      "severity": "warn",
+      "trace_id": "run_5cf841360030",
+      "agent": "planner",
+      "task": "training",
+      "step_seq": 5,
+      "step_name": "chat planner",
+      "detail": "这些数字在任何工具输出里都找不到：777",
+      "fix": "要求 Agent 只引用工具返回的数值；",
+      "false_positive": "**数字可能是算出来的**（如 小计×折扣）或来自 prompt 常量 —— 所以这条只报警不判错，必须人工核实一次。"
+    }
+  ],
+  "summary": {
+    "by_severity": {
+      "error": 2,
+      "warn": 6
+    },
+    "by_rule": {
+      "error_swallowed": 1,
+      "hallucinated_number": 4,
+      "write_before_read": 1,
+      "repeated_tool_call": 1,
+      "empty_answer": 1
+    }
+  }
+}

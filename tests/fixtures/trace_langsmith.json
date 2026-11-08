@@ -1,0 +1,29 @@
+{
+ "runs": [
+  {
+   "id": "r-chain-1",
+   "trace_id": "ls-trace-1",
+   "name": "demo-langgraph-agent",
+   "run_type": "chain",
+   "inputs": {"question": "订单 X1 总价多少"},
+   "outputs": {}
+  },
+  {
+   "id": "r-tool-1",
+   "trace_id": "ls-trace-1",
+   "name": "order.get_order",
+   "run_type": "tool",
+   "inputs": {"order_id": "X1"},
+   "outputs": {"items": [{"price": 10.0, "qty": 2}, {"price": 5.0, "qty": 1}]}
+  },
+  {
+   "id": "r-llm-1",
+   "trace_id": "ls-trace-1",
+   "name": "ChatOpenAI",
+   "run_type": "llm",
+   "inputs": {"messages": ["..."]},
+   "outputs": {"outputs": {"total": 999.0}},
+   "total_tokens": 128
+  }
+ ]
+}
