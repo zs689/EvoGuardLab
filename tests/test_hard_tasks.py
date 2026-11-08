@@ -47,7 +47,7 @@ class TestCalcTruth(unittest.TestCase):
 class TestXrefTruthAndJudge(unittest.TestCase):
     def test_truth_is_highest_version(self):
         for topic, ans in sim.HARD_KB_ANSWER.items():
-            docs = sim.HARD_KB[topic]
+            docs = sim.ALL_HARD_KB[topic]
             top = max(docs, key=lambda d: d["version"])
             self.assertEqual(ans["doc"], top["doc_id"],
                              "%s 的真值必须取版本号最高的文档" % topic)
@@ -55,9 +55,9 @@ class TestXrefTruthAndJudge(unittest.TestCase):
 
     def test_all_versions_have_conflicting_answers(self):
         """每个主题的三个版本必须给出不同结论，否则「比版本」这个考点不存在。"""
-        for topic, docs in sim.HARD_KB.items():
-            found = {sim.re.search(r"\d+\s*个?(?:工作日|天|个月)", d["text"]).group(0)
-                     for d in docs}
+        pat = r"\d+\s*(?:个工作日|个?天|个月|元)"
+        for topic, docs in sim.ALL_HARD_KB.items():
+            found = {m.group(0) for m in (sim.re.search(pat, d["text"]) for d in docs) if m}
             self.assertGreater(len(found), 1,
                                "%s 的三个版本答案相同，比版本号没有意义" % topic)
 
@@ -134,10 +134,45 @@ class TestHardDataset(unittest.TestCase):
         self.assertEqual(len(none_cases), len(sim.HARD_ORDERS) + len(sim.HARD_KB))
 
     def test_hard_cases_do_not_touch_training_set(self):
-        """难度组不进训练集：AGENT_TYPES 里不能出现 calc / xref。"""
+        """calc / xref 不能出现在 AGENT_TYPES 里。
+
+        它们进 AGENT_TYPES 会让 204 例的数据集统计和训练集划分一起变，
+        历史数字全部作废。要学技能，用 hard_train_tasks 单独喂。
+        """
         for a in sim.HARD_AGENTS:
             self.assertNotIn(a, sim.AGENT_TYPES,
                              "难度组混进 AGENT_TYPES 会让训练集/技能库跟着变，历史数字全部作废")
+
+    def test_train_tasks_disjoint_from_eval_tasks(self):
+        """训练任务与评测任务绝不能重叠 —— 否则技能会「记住评测题的答案」。"""
+        for at in sim.HARD_AGENTS:
+            eval_ids = {t["task_id"] for t in sim.hard_tasks(at)}
+            train_ids = {t["task_id"] for t in sim.hard_train_tasks(at)}
+            self.assertFalse(eval_ids & train_ids,
+                             "%s 的训练任务和评测任务重叠：%s" % (at, eval_ids & train_ids))
+
+    def test_train_tasks_are_reachable_by_tools(self):
+        """训练任务必须能被工具查到。
+
+        踩过：工具只查了评测表（HARD_ORDERS），训练用的 T4001 报「订单不存在」，
+        探索阶段全部失败，训练静默产出 0 条 calc 技能 —— 表面看是"学不会"，
+        实际是数据层没打通。所以这条必须钉住。
+        """
+        for tid in sim.HARD_TRAIN_ORDERS:
+            out = sim.call_tool("order.get_quote_order", {"order_id": tid})
+            self.assertEqual(out["order_id"], tid)
+        for topic in sim.HARD_TRAIN_KB:
+            out = sim.call_tool("kb.search_all", {"topic": topic})
+            self.assertTrue(out["docs"], "%s 查不到文档" % topic)
+
+    def test_every_topic_has_nonempty_truth(self):
+        """真值抽取不能为空。
+
+        踩过：正则只认「工作日/天/个月」，遇到「满 129 元包邮」抽出来是空字符串，
+        于是无论模型答什么都判错 —— 一个静默的判分器 bug。
+        """
+        for topic, ans in sim.HARD_KB_ANSWER.items():
+            self.assertTrue(ans["must"], "%s 的真值为空，正则没覆盖这种文案" % topic)
 
 
 if __name__ == "__main__":

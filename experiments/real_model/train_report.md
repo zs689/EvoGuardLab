@@ -1,26 +1,26 @@
 # 真实模型自举闭环：训练报告
 
 > 由 `ai-service/real_model_train.py` 自动生成。
-> 模型 `qwen3:4b` ｜ 后端 `ollama` ｜ 用时 423s ｜ run 310 次
+> 模型 `qwen3:4b` ｜ 后端 `ollama` ｜ 用时 445s ｜ run 404 次
 
 ## 一、划分（test 一律不参与）
 
 | 用途 | 来源 | 用例数 |
 |---|---|---|
-| 探索（train） | dev task #1（每 agent）／复合 dev 每个模式各 1 条 | 39 |
-| 验证（val） | dev task #2（每 agent）／复合 dev 每个模式另 1 条 | 39 |
+| 探索（train） | dev task #1（每 agent）／复合 dev 每个模式各 1 条 | 49 |
+| 验证（val） | dev task #2（每 agent）／复合 dev 每个模式另 1 条 | 49 |
 | 评测 | test（6 task/agent + 30 复合） | 234 |
 
 ## 二、探索
 
 | 项 | 值 |
 |---|---|
-| 规则表直接救回（不需要新策略） | 31 |
+| 规则表直接救回（不需要新策略） | 35 |
 | 需要探索才救回 | 7 |
 | 其中靠组合链救回 | 5 |
-| 提炼并入库的经验 | 38 |
-| 经验准入被拒 | 0 |
-| 生成的候选技能 | 38 |
+| 提炼并入库的经验 | 41 |
+| 经验准入被拒 | 1 |
+| 生成的候选技能 | 41 |
 | 其中组合技能（链长>1） | 5 |
 
 ## 三、两套库的差别（这就是被激活的变量）
@@ -28,9 +28,9 @@
 | 库 | 入库条件 | 条数 | 给谁用 |
 |---|---|---|---|
 | 严格库 | 独立验证集 gain 达标 且 负迁移不超标 | 6 | D |
-| 放宽库 | 本次恢复成功即入库，**不验证** | 38 | C |
+| 放宽库 | 本次恢复成功即入库，**不验证** | 41 | C |
 
-判定分布：{"REJECT": 32, "PROMOTE": 6}
+判定分布：{"REJECT": 35, "PROMOTE": 6}
 
 ## 四、逐条验证结果
 
@@ -69,6 +69,9 @@
 | ['reformat'] | planner | format_violation | reformat | 0.0 | 0% | **REJECT** |
 | ['cross_verify'] | planner | tool_hallucination | cross_verify | 0.0 | 0% | **REJECT** |
 | ['replay_checkpoint'] | planner | premature_termination | replay_checkpoint | 0.0 | 0% | **REJECT** |
+| ['retry'] | calc | tool_timeout | retry | 0.0 | 0% | **REJECT** |
+| ['retry'] | calc | tool_exception | retry | 0.0 | 0% | **REJECT** |
+| ['replay_checkpoint'] | calc | premature_termination | replay_checkpoint | 0.0 | 0% | **REJECT** |
 | ['fallback_tool', 'cross_verify'] | order | missing_field+silent_corruption | fallback_tool→cross_verify | 100.0 | 0% | **PROMOTE** |
 | ['fallback_tool', 'cross_verify'] | order | wrong_tool+format_violation | fallback_tool→cross_verify | 100.0 | 0% | **PROMOTE** |
 | ['fallback_tool', 'cross_verify'] | kb | retrieval_failure+tool_hallucination | fallback_tool→cross_verify | 100.0 | 0% | **PROMOTE** |

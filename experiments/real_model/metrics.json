@@ -8,7 +8,7 @@
     "base": "http://127.0.0.1:11434",
     "system_prompt": "你是业务 Agent。只看用户给出的上下文回答，不要使用上下文以外的知识。只输出一个 JSON 对象，不要输出解释、不要复述要求、不要输出思考过程。",
     "system_prompt_sha256": "8da48e6cbf348d7b",
-    "code_sha256": "ecf75283f3e16de9",
+    "code_sha256": "301d2e966b5d5cca",
     "ollama_version": "0.40.15",
     "dataset": {
       "tasks": {
@@ -40,7 +40,14 @@
         }
       },
       "composite_patterns": 5,
-      "composite_test_cases": 30
+      "composite_test_cases": 30,
+      "hard": {
+        "cases": 36,
+        "per_agent": {
+          "calc": 18,
+          "xref": 18
+        }
+      }
     },
     "modes": [
       "A",
@@ -48,18 +55,18 @@
       "C",
       "D"
     ],
-    "started_at": 1794048176.636,
+    "started_at": 1794104216.848,
     "skillset": {
       "kind": "two_libs",
       "d": 6,
-      "c": 38,
+      "c": 41,
       "d_path": "library_d.db",
       "c_path": "library_c.db"
     }
   },
-  "finished_at": 1794099196.558,
-  "elapsed_s": 654.6,
-  "runs_completed": 936,
+  "finished_at": 1794104889.302,
+  "elapsed_s": 672.1,
+  "runs_completed": 1080,
   "single": {
     "suite": "single",
     "cases": 204,
@@ -69,7 +76,7 @@
         "ok": 0,
         "failed": 204,
         "unjudgeable": 0,
-        "failures_with_llm_error": 4,
+        "failures_with_llm_error": 2,
         "rate": 0.0,
         "rate_raw": 0.0,
         "judgeable_rate": 100.0
@@ -109,13 +116,13 @@
     "unjudgeable": 0,
     "errors": {},
     "llm_errors": {
-      "E_LLM_HTTP": 16
+      "E_LLM_HTTP": 14
     },
     "bad_model_output": 0,
     "model_calls": 816,
-    "avg_latency_ms": 734.4,
-    "total_latency_s": 599.3,
-    "avg_tokens": 104.1,
+    "avg_latency_ms": 544.0,
+    "total_latency_s": 443.9,
+    "avg_tokens": 104.5,
     "by_fault": {
       "tool_timeout": {
         "n": 18,
@@ -312,7 +319,7 @@
         "ok": 0,
         "failed": 30,
         "unjudgeable": 0,
-        "failures_with_llm_error": 5,
+        "failures_with_llm_error": 3,
         "rate": 0.0,
         "rate_raw": 0.0,
         "judgeable_rate": 100.0
@@ -332,14 +339,13 @@
     "unjudgeable": 0,
     "errors": {},
     "llm_errors": {
-      "E_LLM_DOWN": 4,
-      "E_LLM_UNREACHABLE": 11
+      "E_LLM_HTTP": 6
     },
     "bad_model_output": 0,
     "model_calls": 120,
-    "avg_latency_ms": 455.3,
-    "total_latency_s": 54.6,
-    "avg_tokens": 53.6,
+    "avg_latency_ms": 860.7,
+    "total_latency_s": 103.3,
+    "avg_tokens": 65.9,
     "by_fault": {
       "missing_field+silent_corruption": {
         "n": 6,
@@ -374,48 +380,300 @@
     },
     "D_failures": []
   },
+  "hard": {
+    "suite": "hard",
+    "cases": 36,
+    "modes": {
+      "A": {
+        "n": 36,
+        "ok": 8,
+        "failed": 28,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 0,
+        "rate": 22.2,
+        "rate_raw": 22.2,
+        "judgeable_rate": 100.0
+      },
+      "B": {
+        "n": 36,
+        "ok": 16,
+        "failed": 20,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 0,
+        "rate": 44.4,
+        "rate_raw": 44.4,
+        "judgeable_rate": 100.0
+      },
+      "C": {
+        "n": 36,
+        "ok": 25,
+        "failed": 11,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 0,
+        "rate": 69.4,
+        "rate_raw": 69.4,
+        "judgeable_rate": 100.0
+      },
+      "D": {
+        "n": 36,
+        "ok": 25,
+        "failed": 11,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 0,
+        "rate": 69.4,
+        "rate_raw": 69.4,
+        "judgeable_rate": 100.0
+      }
+    },
+    "judgeable_rate": 100.0,
+    "unjudgeable": 0,
+    "errors": {},
+    "llm_errors": {},
+    "bad_model_output": 0,
+    "model_calls": 136,
+    "avg_latency_ms": 458.3,
+    "total_latency_s": 66.0,
+    "avg_tokens": 171.2,
+    "by_fault": {
+      "none": {
+        "n": 6,
+        "ok": 5,
+        "failed": 1,
+        "unjudgeable": 0
+      },
+      "tool_timeout": {
+        "n": 6,
+        "ok": 5,
+        "failed": 1,
+        "unjudgeable": 0
+      },
+      "tool_exception": {
+        "n": 3,
+        "ok": 3,
+        "failed": 0,
+        "unjudgeable": 0
+      },
+      "missing_field": {
+        "n": 6,
+        "ok": 5,
+        "failed": 1,
+        "unjudgeable": 0
+      },
+      "silent_corruption": {
+        "n": 3,
+        "ok": 0,
+        "failed": 3,
+        "unjudgeable": 0
+      },
+      "premature_termination": {
+        "n": 6,
+        "ok": 5,
+        "failed": 1,
+        "unjudgeable": 0
+      },
+      "retrieval_failure": {
+        "n": 3,
+        "ok": 2,
+        "failed": 1,
+        "unjudgeable": 0
+      },
+      "stale_data": {
+        "n": 3,
+        "ok": 0,
+        "failed": 3,
+        "unjudgeable": 0
+      }
+    },
+    "D_failures": [
+      {
+        "agent": "calc",
+        "task": "H3001",
+        "fault": "silent_corruption",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'applied_order': ['rebate', 'discount'], 'order_id': 'H3001', 'total': 2587.2}"
+      },
+      {
+        "agent": "calc",
+        "task": "H3002",
+        "fault": "silent_corruption",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'applied_order': ['rebate', 'discount'], 'order_id': 'H3002', 'total': 1672.65}"
+      },
+      {
+        "agent": "calc",
+        "task": "H3003",
+        "fault": "silent_corruption",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'applied_order': ['rebate', 'discount'], 'order_id': 'H3003', 'total': 525.0}"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "none",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['KB-23 v1'], 'text': '自签收之日起 15 个工作日内可无理由退货。'}"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "tool_timeout",
+        "verdict": "failed",
+        "root_causes": [
+          "tool_timeout"
+        ],
+        "chain": [
+          "retry"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "retrieval_failure",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['KB-24 v3'], 'text': '整机保修 12 个月'}"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['KB-23 v1'], 'text': '自签收之日起 15 个工作日内可无理由退货。'}"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "missing_field",
+        "verdict": "failed",
+        "root_causes": [
+          "missing_field"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "premature_termination",
+        "verdict": "failed",
+        "root_causes": [
+          "premature_termination"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "{}"
+      },
+      {
+        "agent": "xref",
+        "task": "保修期限",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['KB-26 v1'], 'text': '整机保修 6 个月。'}"
+      },
+      {
+        "agent": "xref",
+        "task": "发票时限",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['KB-29 v1'], 'text': '电子发票在订单完成后 10 个工作日内开具。'}"
+      }
+    ]
+  },
   "grammar_control": {
     "n": 6,
     "strict_ok": 0,
     "errors": {},
-    "latency_ms_total": 63027,
+    "latency_ms_total": 58221,
     "samples": [
       {
         "strict": false,
-        "latency_ms": 10538,
+        "latency_ms": 10743,
         "head": "好的，我现在需要处理用户的这个请求。首先，用户给了一个上下文：“订单 A1001，计价工具返回总额 504.0。”然后要求输出一个JSON对"
       },
       {
         "strict": false,
-        "latency_ms": 10568,
-        "head": "首先，用户要求我作为业务 Agent，只根据上下文证据来回答问题。上下文证据是：\"自签收之日起 7 个工作日内可无理由退货。\" 问题：\"退货"
+        "latency_ms": 8684,
+        "head": "好的，我现在需要处理用户的这个查询。首先，用户给了一个上下文证据：“自签收之日起 7 个工作日内可无理由退货。”然后问题问的是“退货要几天内"
       },
       {
         "strict": false,
-        "latency_ms": 10600,
+        "latency_ms": 8940,
         "head": "好的，我现在需要处理用户的这个请求。用户给了一个上下文步骤：收集本周销售数据 / 核对异常订单 / 生成周报草稿 / 提交审核。然后要输出一"
       },
       {
         "strict": false,
-        "latency_ms": 11542,
+        "latency_ms": 10788,
         "head": "好的，我现在需要处理用户的这个请求。首先，用户给了一个上下文：“订单 A1002，计价工具返回总额 899.0。”然后要求输出一个JSON对"
       },
       {
         "strict": false,
-        "latency_ms": 10524,
+        "latency_ms": 10746,
         "head": "首先，用户要求我作为业务 Agent，只根据上下文证据来回答问题。上下文证据是：\"退货审核通过后 3 个工作日内原路退回。\" 问题：\"退款多"
       },
       {
         "strict": false,
-        "latency_ms": 9255,
-        "head": "好的，我现在需要处理用户的这个请求。用户给了一个上下文步骤：“冻结代码 / 跑回归测试 / 生成变更说明 / 灰度发布”，然后要我输出一个J"
+        "latency_ms": 8320,
+        "head": "好的，我现在需要处理用户的这个请求。用户给了一个上下文步骤：冻结代码 / 跑回归测试 / 生成变更说明 / 灰度发布。然后要输出一个JSON"
       }
     ],
-    "strict_rate": 0.0,
-    "avg_latency_ms": 10504.5,
+    "avg_latency_ms": 9703.5,
     "call_errors": 0,
     "judgeable": 6,
-    "strict_rate_all": 0.0
+    "valid": true,
+    "strict_rate": 0.0,
+    "strict_rate_all": 0.0,
+    "error_rate": 0.0
   },
   "mock_baseline": {
     "source": "experiments/metrics.json（mock 闭环）",

@@ -102,6 +102,18 @@ def split_cases():
                           "fault_type": ft, "seed": 7})
             val.append({"agent_type": at, "task_id": t_val["task_id"],
                         "fault_type": ft, "seed": 7})
+    # 难度组的两个 agent 也要学技能，否则评测时 C/D 在它们身上都查不到技能、
+    # 双双退化成规则表（那时 C = D 打平，四组对照少一半信息）。
+    # 用的是 hard_train_tasks（T4xxx / KB-3x），**不是评测题**，不会泄漏。
+    for at in sim.HARD_AGENTS:
+        tt = sim.hard_train_tasks(at)
+        if len(tt) < 2:
+            continue
+        for ft in sim.HARD_CASE_FAULTS[at]:
+            train.append({"agent_type": at, "task_id": tt[0]["task_id"],
+                          "fault_type": ft, "seed": 7})
+            val.append({"agent_type": at, "task_id": tt[1]["task_id"],
+                        "fault_type": ft, "seed": 7})
     by_pat = {}
     for c in sim.composite_cases("dev"):
         by_pat.setdefault(c["fault_type"], []).append(c)

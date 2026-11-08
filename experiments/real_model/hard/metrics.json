@@ -8,7 +8,7 @@
     "base": "http://127.0.0.1:11434",
     "system_prompt": "你是业务 Agent。只看用户给出的上下文回答，不要使用上下文以外的知识。只输出一个 JSON 对象，不要输出解释、不要复述要求、不要输出思考过程。",
     "system_prompt_sha256": "8da48e6cbf348d7b",
-    "code_sha256": "32b5b56d8401fafa",
+    "code_sha256": "301d2e966b5d5cca",
     "ollama_version": "0.40.15",
     "dataset": {
       "tasks": {
@@ -55,17 +55,17 @@
       "C",
       "D"
     ],
-    "started_at": 1794102680.557,
+    "started_at": 1794104134.488,
     "skillset": {
       "kind": "two_libs",
       "d": 6,
-      "c": 38,
+      "c": 41,
       "d_path": "library_d.db",
       "c_path": "library_c.db"
     }
   },
-  "finished_at": 1794102747.963,
-  "elapsed_s": 67.1,
+  "finished_at": 1794104201.706,
+  "elapsed_s": 66.8,
   "runs_completed": 144,
   "single": {
     "suite": "single",
@@ -231,10 +231,10 @@
     "errors": {},
     "llm_errors": {},
     "bad_model_output": 0,
-    "model_calls": 133,
-    "avg_latency_ms": 465.2,
-    "total_latency_s": 67.0,
-    "avg_tokens": 172.7,
+    "model_calls": 136,
+    "avg_latency_ms": 463.5,
+    "total_latency_s": 66.7,
+    "avg_tokens": 171.2,
     "by_fault": {
       "none": {
         "n": 6,

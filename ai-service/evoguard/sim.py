@@ -148,9 +148,9 @@ def _tool_get_quote_order(args):
     等于每跑一次就自带一个假故障 —— 实验数据立刻失真。
     """
     oid = args.get("order_id")
-    if oid not in HARD_ORDERS:
+    if oid not in ALL_HARD_ORDERS:
         raise KeyError("订单不存在：%s" % oid)
-    o = copy.deepcopy(HARD_ORDERS[oid])
+    o = copy.deepcopy(ALL_HARD_ORDERS[oid])
     return {"order_id": o["order_id"], "items": o["items"],
             "rebate": o["rebate"], "tier": o["tier"], "status": "待结算"}
 
@@ -560,26 +560,83 @@ HARD_KB = {
     ],
 }
 
+# ---------------- 难度组的训练任务（专供技能学习，不进评测集） ----------------
+# 为什么要单独占一组任务：要让 calc/xref 也积累技能，训练样本就必须覆盖这两个 agent；
+# 但训练样本和评测样本绝不能是同一批题，否则就是数据泄漏 ——
+# 技能会「记住评测题的答案」，那组数字就废了。
+# 所以：T4xxx 只用来学，H3xxx / KB-2x 只用来考。
+HARD_TRAIN_ORDERS = {
+    "T4001": {"order_id": "T4001", "tier": "gold",
+              "items": [{"sku": "T-1", "name": "机柜", "price": 1200.0, "qty": 1},
+                        {"sku": "T-2", "name": "电源", "price": 380.0, "qty": 2}],
+              "rebate": {"threshold": 1500.0, "amount": 150.0}},
+    "T4002": {"order_id": "T4002", "tier": "silver",
+              "items": [{"sku": "T-3", "name": "路由器", "price": 460.0, "qty": 3},
+                        {"sku": "T-4", "name": "光纤模块", "price": 210.0, "qty": 2}],
+              "rebate": {"threshold": 1000.0, "amount": 80.0}},
+}
+
+HARD_TRAIN_KB = {
+    "换货期限": [
+        {"doc_id": "KB-31", "title": "换货政策", "version": 2,
+         "text": "收货后 15 天内可换货，需保留原包装。"},
+        {"doc_id": "KB-32", "title": "换货政策（修订）", "version": 5,
+         "text": "收货后 30 天内可换货，需保留原包装与吊牌。"},
+        {"doc_id": "KB-33", "title": "换货政策（旧版）", "version": 1,
+         "text": "收货后 7 天内可换货。"},
+    ],
+    "运费规则": [
+        {"doc_id": "KB-34", "title": "运费规则", "version": 2,
+         "text": "单笔满 99 元包邮，偏远地区加收 8 元。"},
+        {"doc_id": "KB-35", "title": "运费规则（修订）", "version": 4,
+         "text": "单笔满 129 元包邮，偏远地区加收 12 元。"},
+        {"doc_id": "KB-36", "title": "运费规则（旧版）", "version": 1,
+         "text": "单笔满 59 元包邮。"},
+    ],
+}
+
+# 工具与真值查的是**合并表**：训练任务和评测任务在数据层长得一样，
+# 模型和工具都分不出来 —— 只有 hard_tasks() 会区分。
+ALL_HARD_ORDERS = dict(HARD_ORDERS, **HARD_TRAIN_ORDERS)
+ALL_HARD_KB = dict(HARD_KB, **HARD_TRAIN_KB)
+
 # 真值：只看 version 最高的那份（工具不知道这条规则，模型必须自己比）
 HARD_KB_ANSWER = {}
-for _topic, _docs in HARD_KB.items():
+for _topic, _docs in ALL_HARD_KB.items():
     _top = max(_docs, key=lambda d: d["version"])
-    _m = re.search(r"(\d+)\s*个?(?:工作日|天|个月)", _top["text"])
+    _m = re.search(r"(\d+)\s*(?:个工作日|个?天|个月|元)", _top["text"])
     HARD_KB_ANSWER[_topic] = {"must": _m.group(0) if _m else "", "doc": _top["doc_id"]}
 
 HARD_AGENTS = ["calc", "xref"]
 
+# 难度组可注入的故障（训练与评测共用同一套，否则学到的和考的不是一回事）
+HARD_CASE_FAULTS = {
+    "calc": ["tool_timeout", "tool_exception", "missing_field",
+             "silent_corruption", "premature_termination"],
+    "xref": ["tool_timeout", "retrieval_failure", "stale_data",
+             "missing_field", "premature_termination"],
+}
+
 
 def hard_tasks(agent_type):
+    """**评测**任务（H3xxx / KB-2x）。训练用的在 hard_train_tasks。"""
     if agent_type == "calc":
         return [{"task_id": k, "goal": "按规则算出订单 %s 的应付总额" % k}
                 for k in HARD_ORDERS]
     return [{"task_id": k, "goal": "按生效版本回答：%s" % k} for k in HARD_KB]
 
 
+def hard_train_tasks(agent_type):
+    """**训练**任务（T4xxx / KB-3x），不参与评测。"""
+    if agent_type == "calc":
+        return [{"task_id": k, "goal": "按规则算出订单 %s 的应付总额" % k}
+                for k in HARD_TRAIN_ORDERS]
+    return [{"task_id": k, "goal": "按生效版本回答：%s" % k} for k in HARD_TRAIN_KB]
+
+
 def expected_hard_total(order_id):
     """独立算：先满减、再会员折扣。顺序不能反 —— 反了结果就不一样。"""
-    o = HARD_ORDERS[order_id]
+    o = ALL_HARD_ORDERS[order_id]
     subtotal = sum(i["price"] * i["qty"] for i in o["items"])
     after = subtotal - o["rebate"]["amount"] if subtotal >= o["rebate"]["threshold"] else subtotal
     total = after * TIER_RATE[o["tier"]]
@@ -657,7 +714,7 @@ def _tool_kb_search_all(args):
     不能在这里挑最高版本 —— 那就是把答案算好了。
     """
     topic = args.get("topic", "")
-    docs = HARD_KB.get(topic)
+    docs = ALL_HARD_KB.get(topic)
     if not docs:
         raise KeyError("没有该主题的文档：%s" % topic)
     return {"topic": topic, "docs": [dict(d) for d in docs]}
@@ -665,7 +722,7 @@ def _tool_kb_search_all(args):
 
 def _tool_tier_lookup(args):
     return {"customer_id": args.get("customer_id"),
-            "tier": HARD_ORDERS.get(args.get("order_id"), {}).get("tier", "none")}
+            "tier": ALL_HARD_ORDERS.get(args.get("order_id"), {}).get("tier", "none")}
 
 
 TOOLS.update({
@@ -701,14 +758,8 @@ def hard_cases():
     测一个语义不成立的故障，只会得到一个看着像机制缺陷的假结论。
     答案层改用 premature_termination（没拿到结果就宣布完成），语义成立。
     """
-    faults = {
-        "calc": ["tool_timeout", "tool_exception", "missing_field",
-                 "silent_corruption", "premature_termination"],
-        "xref": ["tool_timeout", "retrieval_failure", "stale_data",
-                 "missing_field", "premature_termination"],
-    }
     out = []
-    for agent, fts in faults.items():
+    for agent, fts in HARD_CASE_FAULTS.items():
         for t in hard_tasks(agent):
             out.append({"agent_type": agent, "task_id": t["task_id"],
                         "fault_type": "none", "seed": 7})

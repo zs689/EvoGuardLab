@@ -136,7 +136,7 @@ def calc_agent(ctx):
       先折扣后满减：4020 → 3819 → 门槛不达标 → 3719（还少减了 100）
     """
     oid = ctx.task["task_id"]
-    o = sim.HARD_ORDERS[oid]
+    o = sim.ALL_HARD_ORDERS[oid]
 
     ctx.model("规划：取明细 -> 报价 -> 决定规则顺序 -> 交工具计算", tokens=56)
 
@@ -175,8 +175,8 @@ def calc_agent(ctx):
         "  discount = 乘会员折扣率\n"
         "注意：满减门槛是按**当前金额**判断的，所以顺序会影响结果。\n"
         "请给出你决定的执行顺序，只输出 JSON：{\"order\": [\"rebate\", \"discount\"]}"
-        % (oid, subtotal, sim.HARD_ORDERS[oid]["rebate"]["threshold"],
-           sim.HARD_ORDERS[oid]["rebate"]["amount"], q.get("tier"),
+        % (oid, subtotal, sim.ALL_HARD_ORDERS[oid]["rebate"]["threshold"],
+           sim.ALL_HARD_ORDERS[oid]["rebate"]["amount"], q.get("tier"),
            q.get("tier_rate")),
         {"order": []})
     seq = decided.get("order") if isinstance(decided, dict) else None
