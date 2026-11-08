@@ -121,19 +121,24 @@ def planner_agent(ctx):
 
 
 def calc_agent(ctx):
-    """多步计算：工具只给原料（小计、满减规则、会员折扣率），总额要模型自己算。
+    """多步计算：算术交给工具，**规则顺序由模型决定**。
 
-    与 order_agent 的关键差别：order_agent 里 `pricing.calc_total` 直接把 total
-    算好了，模型只是搬运工；这里**没有任何一步给出总额**，模型必须：
-      1) 判断小计够不够满减门槛
-      2) 先减、再乘会员折扣率（顺序反了结果不一样）
-      3) 自己写进答案
-    这才是真正会答错的题。
+    第一版让模型自己算，基线 0/3 —— 三题错法还不一样（抄小计 / 顺序反 / 误用门槛），
+    加"不得复制小计"的约束后仍然没用，H3001 直接从"算错"退化成"抄小计"。
+    结论：4B 模型不做多步算术，教不动。
+
+    所以改成分工：`calc.apply_rules` 负责算，模型只输出**执行顺序**。
+    这不是降低难度，是把考点从「会算数」挪到「会编排规则」——
+    后者才是真实 Agent 的活（真实业务里没人让 LLM 自己算账）。
+
+    顺序错了结果照样错：
+      先满减后折扣：4020 → 3920 → 3724
+      先折扣后满减：4020 → 3819 → 门槛不达标 → 3719（还少减了 100）
     """
     oid = ctx.task["task_id"]
     o = sim.HARD_ORDERS[oid]
 
-    ctx.model("规划：取明细 -> 报价 -> 按规则算总额 -> 结算", tokens=56)
+    ctx.model("规划：取明细 -> 报价 -> 决定规则顺序 -> 交工具计算", tokens=56)
 
     order = ctx.call("order.get_quote_order", {"order_id": oid})
     if not isinstance(order, dict):
@@ -160,17 +165,36 @@ def calc_agent(ctx):
         return {"success": False, "answer": None,
                 "expect": sim.expected_hard_total(oid), "reason": "报价里没有小计"}
 
-    # 把原料原样交给模型，总额由模型自己算（这里不替它算）
-    ctx.model("计算：按规则算出应付总额")
-    ans = ctx.answer(
+    # 第 7 步（ANSWER_STEP）：模型只决定顺序，不负责算
+    ctx.model("决策：规则按什么顺序套用")
+    decided = ctx.answer(
         "上下文：订单 %s\n"
         "小计 %s 元｜满减规则：满 %s 减 %s 元｜会员等级 %s，折扣率 %s\n"
-        "规则顺序：先满减，再乘会员折扣。\n"
-        "请自己计算后输出 JSON：{\"order_id\": \"订单号\", \"total\": 应付总额（保留两位小数）}"
+        "可用规则：\n"
+        "  rebate   = 满减（当前金额达到门槛才减）\n"
+        "  discount = 乘会员折扣率\n"
+        "注意：满减门槛是按**当前金额**判断的，所以顺序会影响结果。\n"
+        "请给出你决定的执行顺序，只输出 JSON：{\"order\": [\"rebate\", \"discount\"]}"
         % (oid, subtotal, sim.HARD_ORDERS[oid]["rebate"]["threshold"],
            sim.HARD_ORDERS[oid]["rebate"]["amount"], q.get("tier"),
            q.get("tier_rate")),
-        {"order_id": oid, "total": None})     # 不喂答案：None 就是"你自己算"
+        {"order": []})
+    seq = decided.get("order") if isinstance(decided, dict) else None
+    if not isinstance(seq, list) or not seq:
+        return {"success": False, "answer": None,
+                "expect": sim.expected_hard_total(oid),
+                "reason": "没有给出规则执行顺序"}
+
+    # 第 8 步：工具按模型给的顺序算（算错是工具的事，顺序错是模型的事）
+    out = ctx.call("calc.apply_rules", {"subtotal": subtotal, "rebate": rebate,
+                                        "tier_rate": q.get("tier_rate"),
+                                        "order": seq})
+    total = out.get("total") if isinstance(out, dict) else None
+    if not isinstance(total, (int, float)):
+        return {"success": False, "answer": None,
+                "expect": sim.expected_hard_total(oid), "reason": "工具没有返回总额"}
+
+    ans = {"order_id": oid, "total": total, "applied_order": seq}
     return {"success": True, "answer": ans,
             "expect": sim.expected_hard_total(oid), "reason": ""}
 

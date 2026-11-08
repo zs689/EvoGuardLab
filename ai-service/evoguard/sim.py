@@ -615,6 +615,42 @@ def _tool_quote_calc(args):
     return {"subtotal": round(sum(float(i["price"]) * int(i["qty"]) for i in items), 2)}
 
 
+def _tool_apply_rules(args):
+    """按**调用方给出的顺序**套用规则。
+
+    这是难度的落点：算术不让模型做（真实 Agent 就该调计算器），
+    但「先满减、还是先打折」必须由模型决定 —— 顺序不同结果不同，
+    而且满减门槛是按**当前金额**判断的，先打折可能导致门槛不达标。
+
+    两种规则：
+      rebate   —— 满 threshold 减 amount（按当前金额判断，不达标就不减）
+      discount —— 当前金额 × 折扣率
+    """
+    subtotal = float(args.get("subtotal"))
+    rebate = args.get("rebate") or {}
+    rate = args.get("tier_rate")
+    order = args.get("order") or []
+    if not order:
+        raise ValueError("缺少规则执行顺序 order")
+    cur = subtotal
+    applied = []
+    for name in order:
+        if name == "rebate":
+            th = float(rebate.get("threshold", 0))
+            am = float(rebate.get("amount", 0))
+            if cur >= th:
+                cur -= am
+                applied.append("rebate")
+        elif name == "discount":
+            if rate is None:
+                raise ValueError("缺少折扣率")
+            cur *= float(rate)
+            applied.append("discount")
+        else:
+            raise ValueError("未知规则：%s" % name)
+    return {"total": round(cur, 2), "applied": applied, "order": list(order)}
+
+
 def _tool_kb_search_all(args):
     """按主题返回**全部**历史版本，让模型自己比 version。
 
@@ -637,6 +673,9 @@ TOOLS.update({
                               "out_required": ["order_id", "items", "rebate", "tier"]},
     "pricing.quote": {"fn": _tool_quote, "args": ["items", "rebate", "tier"],
                       "out_required": ["subtotal", "tier_rate"]},
+    "calc.apply_rules": {"fn": _tool_apply_rules,
+                         "args": ["subtotal", "rebate", "tier_rate", "order"],
+                         "out_required": ["total"]},
     "pricing.subtotal": {"fn": _tool_quote_calc, "args": ["items"],
                          "out_required": ["subtotal"]},
     "kb.search_all": {"fn": _tool_kb_search_all, "args": ["topic"],
@@ -645,7 +684,7 @@ TOOLS.update({
                  "out_required": ["tier"]},
 })
 
-ANSWER_STEP.update({"calc": 9, "xref": 5})
+ANSWER_STEP.update({"calc": 7, "xref": 5})
 
 
 def hard_cases():
@@ -654,12 +693,19 @@ def hard_cases():
     每个任务额外带一条 `fault_type="none"` 的对照 —— 那是**纯能力基线**：
     没有任何故障时模型能不能算对。这个数字最重要：如果基线就不是 100%，
     说明题目确实难住了模型，而不是恢复机制出了问题。
+
+    为什么这组**不测 format_violation**：
+    该故障的语义是「内容本来是对的，只是输出成了散文」，注入方式是拿 fallback
+    答案包一层散文。而这一组模型的职责是"自己作决策"，agent 手里没有正确内容，
+    fallback 只能是空结构 → reformat 恢复出来仍是空 → 必然失败。
+    测一个语义不成立的故障，只会得到一个看着像机制缺陷的假结论。
+    答案层改用 premature_termination（没拿到结果就宣布完成），语义成立。
     """
     faults = {
         "calc": ["tool_timeout", "tool_exception", "missing_field",
-                 "silent_corruption", "format_violation"],
+                 "silent_corruption", "premature_termination"],
         "xref": ["tool_timeout", "retrieval_failure", "stale_data",
-                 "missing_field", "format_violation"],
+                 "missing_field", "premature_termination"],
     }
     out = []
     for agent, fts in faults.items():

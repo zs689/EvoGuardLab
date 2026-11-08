@@ -79,6 +79,50 @@ class TestXrefTruthAndJudge(unittest.TestCase):
         self.assertFalse(agents.is_correct("xref", ans, sim.expected_answer("xref", "退货期限")))
 
 
+class TestApplyRules(unittest.TestCase):
+    """算术交给工具、顺序交给模型 —— 这个分工是测出来的，不是拍出来的。
+
+    第一版让模型自己算，基线 33.3%；加 prompt 约束无效（H3001 从"算错"退化成"抄小计"）。
+    改成这个分工后基线 83.3%。
+    """
+
+    ARGS = {"subtotal": 4020.0, "rebate": {"threshold": 1000.0, "amount": 100.0},
+            "tier_rate": 0.95}
+
+    def _run(self, order):
+        return sim.call_tool("calc.apply_rules", dict(self.ARGS, order=order))
+
+    def test_rebate_then_discount_is_correct(self):
+        self.assertEqual(self._run(["rebate", "discount"])["total"], 3724.0)
+
+    def test_order_changes_result(self):
+        """顺序不同结果必须不同，否则「模型决定顺序」这个考点不存在。"""
+        self.assertNotEqual(self._run(["rebate", "discount"])["total"],
+                            self._run(["discount", "rebate"])["total"])
+
+    def test_threshold_checked_on_current_amount(self):
+        """先打折会让金额变小，可能就不满足门槛了 —— 这是顺序带来的真实差异。"""
+        out = self._run(["discount", "rebate"])
+        self.assertEqual(out["applied"], ["discount", "rebate"])
+        # 4020*0.95=3819 仍 >= 1000，所以还是减了 100
+        self.assertEqual(out["total"], 3719.0)
+
+    def test_empty_order_rejected(self):
+        with self.assertRaises(ValueError):
+            self._run([])
+
+    def test_unknown_rule_rejected(self):
+        with self.assertRaises(ValueError):
+            self._run(["rebate", "refund"])
+
+    def test_below_threshold_skips_rebate(self):
+        args = {"subtotal": 750.0, "rebate": {"threshold": 1000.0, "amount": 100.0},
+                "tier_rate": 1.0, "order": ["rebate", "discount"]}
+        out = sim.call_tool("calc.apply_rules", args)
+        self.assertEqual(out["applied"], ["discount"], "没到门槛不该减")
+        self.assertEqual(out["total"], 750.0)
+
+
 class TestHardDataset(unittest.TestCase):
     def test_cases_include_no_fault_baseline(self):
         """每个任务必须有 fault_type=none 的纯能力基线。

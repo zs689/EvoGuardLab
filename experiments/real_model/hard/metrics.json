@@ -8,7 +8,7 @@
     "base": "http://127.0.0.1:11434",
     "system_prompt": "你是业务 Agent。只看用户给出的上下文回答，不要使用上下文以外的知识。只输出一个 JSON 对象，不要输出解释、不要复述要求、不要输出思考过程。",
     "system_prompt_sha256": "8da48e6cbf348d7b",
-    "code_sha256": "4b25386a30ad100a",
+    "code_sha256": "32b5b56d8401fafa",
     "ollama_version": "0.40.15",
     "dataset": {
       "tasks": {
@@ -55,7 +55,7 @@
       "C",
       "D"
     ],
-    "started_at": 1794100233.94,
+    "started_at": 1794102680.557,
     "skillset": {
       "kind": "two_libs",
       "d": 6,
@@ -64,8 +64,8 @@
       "c_path": "library_c.db"
     }
   },
-  "finished_at": 1794100413.083,
-  "elapsed_s": 99.8,
+  "finished_at": 1794102747.963,
+  "elapsed_s": 67.1,
   "runs_completed": 144,
   "single": {
     "suite": "single",
@@ -125,7 +125,7 @@
     "D_failures": []
   },
   "composite": {
-    "suite": "single",
+    "suite": "composite",
     "cases": 0,
     "modes": {
       "A": {
@@ -187,79 +187,77 @@
     "modes": {
       "A": {
         "n": 36,
-        "ok": 2,
-        "failed": 34,
+        "ok": 8,
+        "failed": 28,
         "unjudgeable": 0,
-        "failures_with_llm_error": 2,
-        "rate": 5.6,
-        "rate_raw": 5.6,
+        "failures_with_llm_error": 0,
+        "rate": 22.2,
+        "rate_raw": 22.2,
         "judgeable_rate": 100.0
       },
       "B": {
         "n": 36,
-        "ok": 4,
-        "failed": 32,
+        "ok": 16,
+        "failed": 20,
         "unjudgeable": 0,
-        "failures_with_llm_error": 2,
-        "rate": 11.1,
-        "rate_raw": 11.1,
+        "failures_with_llm_error": 0,
+        "rate": 44.4,
+        "rate_raw": 44.4,
         "judgeable_rate": 100.0
       },
       "C": {
         "n": 36,
-        "ok": 8,
-        "failed": 28,
+        "ok": 25,
+        "failed": 11,
         "unjudgeable": 0,
-        "failures_with_llm_error": 2,
-        "rate": 22.2,
-        "rate_raw": 22.2,
+        "failures_with_llm_error": 0,
+        "rate": 69.4,
+        "rate_raw": 69.4,
         "judgeable_rate": 100.0
       },
       "D": {
         "n": 36,
-        "ok": 8,
-        "failed": 28,
+        "ok": 25,
+        "failed": 11,
         "unjudgeable": 0,
-        "failures_with_llm_error": 2,
-        "rate": 22.2,
-        "rate_raw": 22.2,
+        "failures_with_llm_error": 0,
+        "rate": 69.4,
+        "rate_raw": 69.4,
         "judgeable_rate": 100.0
       }
     },
     "judgeable_rate": 100.0,
     "unjudgeable": 0,
     "errors": {},
-    "llm_errors": {
-      "E_LLM_HTTP": 10
-    },
+    "llm_errors": {},
     "bad_model_output": 0,
-    "model_calls": 175,
-    "avg_latency_ms": 692.4,
-    "total_latency_s": 99.7,
-    "avg_tokens": 132.1,
+    "model_calls": 133,
+    "avg_latency_ms": 465.2,
+    "total_latency_s": 67.0,
+    "avg_tokens": 172.7,
     "by_fault": {
       "none": {
         "n": 6,
-        "ok": 2,
-        "failed": 4,
+        "ok": 5,
+        "failed": 1,
         "unjudgeable": 0
       },
       "tool_timeout": {
         "n": 6,
-        "ok": 2,
-        "failed": 4,
+        "ok": 5,
+        "failed": 1,
         "unjudgeable": 0
       },
       "tool_exception": {
         "n": 3,
-        "ok": 0,
-        "failed": 3,
+        "ok": 3,
+        "failed": 0,
         "unjudgeable": 0
       },
       "missing_field": {
         "n": 6,
-        "ok": 2,
-        "failed": 4,
+        "ok": 5,
+        "failed": 1,
         "unjudgeable": 0
       },
       "silent_corruption": {
@@ -268,10 +266,10 @@
         "failed": 3,
         "unjudgeable": 0
       },
-      "format_violation": {
+      "premature_termination": {
         "n": 6,
-        "ok": 0,
-        "failed": 6,
+        "ok": 5,
+        "failed": 1,
         "unjudgeable": 0
       },
       "retrieval_failure": {
@@ -291,58 +289,6 @@
       {
         "agent": "calc",
         "task": "H3001",
-        "fault": "none",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_hallucination"
-        ],
-        "chain": [
-          "cross_verify"
-        ],
-        "answer": "{'order_id': 'H3001', 'total': 3820.0}"
-      },
-      {
-        "agent": "calc",
-        "task": "H3001",
-        "fault": "tool_timeout",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_timeout"
-        ],
-        "chain": [
-          "retry"
-        ],
-        "answer": "None"
-      },
-      {
-        "agent": "calc",
-        "task": "H3001",
-        "fault": "tool_exception",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_exception"
-        ],
-        "chain": [
-          "retry"
-        ],
-        "answer": "None"
-      },
-      {
-        "agent": "calc",
-        "task": "H3001",
-        "fault": "missing_field",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_hallucination"
-        ],
-        "chain": [
-          "cross_verify"
-        ],
-        "answer": "{'order_id': 'H3001', 'total': 3820.0}"
-      },
-      {
-        "agent": "calc",
-        "task": "H3001",
         "fault": "silent_corruption",
         "verdict": "failed",
         "root_causes": [
@@ -351,72 +297,7 @@
         "chain": [
           "human_takeover"
         ],
-        "answer": "{'order_id': 'H3001', 'total': None}"
-      },
-      {
-        "agent": "calc",
-        "task": "H3001",
-        "fault": "format_violation",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_hallucination"
-        ],
-        "chain": [
-          "cross_verify"
-        ],
-        "answer": "{'order_id': 'H3001', 'total': 3820.0}"
-      },
-      {
-        "agent": "calc",
-        "task": "H3002",
-        "fault": "none",
-        "verdict": "failed",
-        "root_causes": [
-          "unknown"
-        ],
-        "chain": [
-          "human_takeover"
-        ],
-        "answer": "{'order_id': 'H3002', 'total': 2855.0}"
-      },
-      {
-        "agent": "calc",
-        "task": "H3002",
-        "fault": "tool_timeout",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_timeout"
-        ],
-        "chain": [
-          "retry"
-        ],
-        "answer": "None"
-      },
-      {
-        "agent": "calc",
-        "task": "H3002",
-        "fault": "tool_exception",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_exception"
-        ],
-        "chain": [
-          "retry"
-        ],
-        "answer": "None"
-      },
-      {
-        "agent": "calc",
-        "task": "H3002",
-        "fault": "missing_field",
-        "verdict": "failed",
-        "root_causes": [
-          "unknown"
-        ],
-        "chain": [
-          "human_takeover"
-        ],
-        "answer": "{'order_id': 'H3002', 'total': 2855.0}"
+        "answer": "{'applied_order': ['rebate', 'discount'], 'order_id': 'H3001', 'total': 2587.2}"
       },
       {
         "agent": "calc",
@@ -429,72 +310,7 @@
         "chain": [
           "human_takeover"
         ],
-        "answer": "{'order_id': 'H3002', 'total': 2855.0}"
-      },
-      {
-        "agent": "calc",
-        "task": "H3002",
-        "fault": "format_violation",
-        "verdict": "failed",
-        "root_causes": [
-          "unknown"
-        ],
-        "chain": [
-          "human_takeover"
-        ],
-        "answer": "{'order_id': 'H3002', 'total': 2855.0}"
-      },
-      {
-        "agent": "calc",
-        "task": "H3003",
-        "fault": "none",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_hallucination"
-        ],
-        "chain": [
-          "cross_verify"
-        ],
-        "answer": "{'order_id': 'H3003', 'total': 650.0}"
-      },
-      {
-        "agent": "calc",
-        "task": "H3003",
-        "fault": "tool_timeout",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_timeout"
-        ],
-        "chain": [
-          "retry"
-        ],
-        "answer": "None"
-      },
-      {
-        "agent": "calc",
-        "task": "H3003",
-        "fault": "tool_exception",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_exception"
-        ],
-        "chain": [
-          "retry"
-        ],
-        "answer": "None"
-      },
-      {
-        "agent": "calc",
-        "task": "H3003",
-        "fault": "missing_field",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_hallucination"
-        ],
-        "chain": [
-          "cross_verify"
-        ],
-        "answer": "{'order_id': 'H3003', 'total': 650.0}"
+        "answer": "{'applied_order': ['rebate', 'discount'], 'order_id': 'H3002', 'total': 1672.65}"
       },
       {
         "agent": "calc",
@@ -507,20 +323,7 @@
         "chain": [
           "human_takeover"
         ],
-        "answer": "{'order_id': 'H3003', 'total': None}"
-      },
-      {
-        "agent": "calc",
-        "task": "H3003",
-        "fault": "format_violation",
-        "verdict": "failed",
-        "root_causes": [
-          "tool_hallucination"
-        ],
-        "chain": [
-          "cross_verify"
-        ],
-        "answer": "{'order_id': 'H3003', 'total': 650.0}"
+        "answer": "{'applied_order': ['rebate', 'discount'], 'order_id': 'H3003', 'total': 525.0}"
       },
       {
         "agent": "xref",
@@ -590,13 +393,13 @@
       {
         "agent": "xref",
         "task": "退货期限",
-        "fault": "format_violation",
+        "fault": "premature_termination",
         "verdict": "failed",
         "root_causes": [
-          "format_violation"
+          "premature_termination"
         ],
         "chain": [
-          "reformat"
+          "replay_checkpoint"
         ],
         "answer": "{}"
       },
@@ -615,19 +418,6 @@
       },
       {
         "agent": "xref",
-        "task": "保修期限",
-        "fault": "format_violation",
-        "verdict": "failed",
-        "root_causes": [
-          "format_violation"
-        ],
-        "chain": [
-          "reformat"
-        ],
-        "answer": "{}"
-      },
-      {
-        "agent": "xref",
         "task": "发票时限",
         "fault": "stale_data",
         "verdict": "failed",
@@ -638,19 +428,6 @@
           "human_takeover"
         ],
         "answer": "{'cited': ['KB-29 v1'], 'text': '电子发票在订单完成后 10 个工作日内开具。'}"
-      },
-      {
-        "agent": "xref",
-        "task": "发票时限",
-        "fault": "format_violation",
-        "verdict": "failed",
-        "root_causes": [
-          "format_violation"
-        ],
-        "chain": [
-          "reformat"
-        ],
-        "answer": "{}"
       }
     ]
   },
