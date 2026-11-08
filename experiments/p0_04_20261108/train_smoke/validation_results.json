@@ -1,0 +1,779 @@
+{
+  "protocol_version": "paired-v2",
+  "backend": "mock",
+  "stats": {
+    "train": 6,
+    "val": 6,
+    "ran": 42,
+    "rule_ok": 6,
+    "explored_ok": 0,
+    "chain_used": 0,
+    "exp_saved": 6,
+    "exp_rejected": 0,
+    "proposed": 6
+  },
+  "evaluations": [
+    {
+      "id": "ske_0bef73dcb3",
+      "skill_id": "sk_c54ccb7263",
+      "protocol_version": "paired-v2",
+      "promotion_protocol": "promotion-gate-v1",
+      "created_at": 1794128572.133,
+      "candidate_hash": "ea5cba1c8912ee10fb83ec3f2a841f7b76cf337327f55559ac5506f8fff856be",
+      "validation_hash": "626e34627c7f813816d01f6ce9378ff09f32b1d52afae15e722dc694142c44a0",
+      "validation_cases": {
+        "target": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "guard": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"invalid_json\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "training": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"invalid_json\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"missing_field\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"retrieval_failure\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"silent_corruption\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}"
+        ]
+      },
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_4c7d99349bb7",
+          "candidate_run_id": "run_7f74217922e0",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_ec0115efd84a",
+          "candidate_run_id": "run_441d3ab95ea7",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_1605ea05fc8af89c",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "invalid_json",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "invalid_json",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_7c7b4d191b59",
+          "candidate_run_id": "run_9eb26ff9733d",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ske_5960d8eb75",
+      "skill_id": "sk_dc8c4b0baf",
+      "protocol_version": "paired-v2",
+      "promotion_protocol": "promotion-gate-v1",
+      "created_at": 1794128572.143,
+      "candidate_hash": "9ca43decc93b4826c681802b48a74e09f5106c3d03a3ed84c7d112d7ca9a5eec",
+      "validation_hash": "474d59fc4a1859ecef95b967ea370cef0c744d882e0902ffdd755c000bb63b4c",
+      "validation_cases": {
+        "target": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "guard": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"invalid_json\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "training": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"invalid_json\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"missing_field\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"retrieval_failure\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"silent_corruption\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}"
+        ]
+      },
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_407f81aef93b",
+          "candidate_run_id": "run_f01a95b1ac0c",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_972d80c96804",
+          "candidate_run_id": "run_dc5cd1a0d88d",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_1605ea05fc8af89c",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "invalid_json",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "invalid_json",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_6e92f685f7e2",
+          "candidate_run_id": "run_868d5c59c75e",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ske_c2486be355",
+      "skill_id": "sk_37cfa9301b",
+      "protocol_version": "paired-v2",
+      "promotion_protocol": "promotion-gate-v1",
+      "created_at": 1794128572.152,
+      "candidate_hash": "215e8e2ac0c0356169d7a625d294c32b0b7e67d296d503d5d08f48a3ce976873",
+      "validation_hash": "ece3cc229863c760edd9a8a044f614f96c26fd3c726c73f94644aeef0ea71663",
+      "validation_cases": {
+        "target": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"invalid_json\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "guard": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "training": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"invalid_json\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"missing_field\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"retrieval_failure\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"silent_corruption\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}"
+        ]
+      },
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_1605ea05fc8af89c",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "invalid_json",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "invalid_json",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_339f7b4bf85c",
+          "candidate_run_id": "run_e8e4ab84b9f3",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_6c3d8612a500",
+          "candidate_run_id": "run_e363f85eb419",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_555709675bf8",
+          "candidate_run_id": "run_c7abfb8c40b0",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ske_ad81d25d91",
+      "skill_id": "sk_89f853960d",
+      "protocol_version": "paired-v2",
+      "promotion_protocol": "promotion-gate-v1",
+      "created_at": 1794128572.161,
+      "candidate_hash": "83beeff7827c0ae134450bf53f9f9134998211f73478b5d4ec22d082e50fb016",
+      "validation_hash": "76b20edb52977d1d080afd947eddc08ac2ffe81a48f5bba5335724046c6afa22",
+      "validation_cases": {
+        "target": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"missing_field\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "guard": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "training": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"invalid_json\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"missing_field\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"retrieval_failure\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"silent_corruption\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}"
+        ]
+      },
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_1af6f5e27c40ea4d",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "missing_field",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "missing_field",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_17c4ab608ad1",
+          "candidate_run_id": "run_ba6caa1b3038",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_8d47432ba865",
+          "candidate_run_id": "run_4f30ec0c2a45",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_db6ac0622ee5",
+          "candidate_run_id": "run_e3738ff8196b",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ske_6b8fa66820",
+      "skill_id": "sk_ebbc454175",
+      "protocol_version": "paired-v2",
+      "promotion_protocol": "promotion-gate-v1",
+      "created_at": 1794128572.171,
+      "candidate_hash": "497cffa83d54e48595ee130cd75deaba0c2c42e78e4432a59a497edb603a22ce",
+      "validation_hash": "c30bfba2bdbb35b30ed8b9483ba2321e604f0b9f7e7bac4e4cf9fb7c0cec3797",
+      "validation_cases": {
+        "target": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"silent_corruption\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "guard": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "training": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"invalid_json\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"missing_field\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"retrieval_failure\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"silent_corruption\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}"
+        ]
+      },
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_92113378a377ccdb",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "silent_corruption",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "silent_corruption",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_c1325baf322d",
+          "candidate_run_id": "run_a6f39cdd6fea",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_0d635da41c3c",
+          "candidate_run_id": "run_300decbccb65",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_3ffd52310f54",
+          "candidate_run_id": "run_aa4b14276750",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ske_68c4a4ebcd",
+      "skill_id": "sk_4d6d2bddda",
+      "protocol_version": "paired-v2",
+      "promotion_protocol": "promotion-gate-v1",
+      "created_at": 1794128572.181,
+      "candidate_hash": "6180c98719bf489b14ce1bc071b085e2c2c16b96e74eee085e22b6a4df0b94be",
+      "validation_hash": "89ca80828165fe74e044e66a014958a5c6a9fe7d55f1f8b760f423347ddc4d52",
+      "validation_cases": {
+        "target": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"retrieval_failure\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "guard": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1002\"]}"
+        ],
+        "training": [
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"invalid_json\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"missing_field\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"retrieval_failure\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"silent_corruption\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_exception\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}",
+          "{\"fault_chain\": [], \"fault_target\": 0, \"fault_type\": \"tool_timeout\", \"seed\": 7, \"task\": [\"order\", \"A1001\"]}"
+        ]
+      },
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_33f502532b7d6687",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "retrieval_failure",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "retrieval_failure",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_1fe46e336e17",
+          "candidate_run_id": "run_3c3986da7aac",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_154d4b0707e1",
+          "candidate_run_id": "run_bd4bbf2a4fd3",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_0b4147159d46",
+          "candidate_run_id": "run_132f69ee8a78",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    }
+  ]
+}

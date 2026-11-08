@@ -162,14 +162,16 @@ def build_library(src, dst, entries, note, strict=False):
             with store.conn() as c2:
                 c2.execute("INSERT OR REPLACE INTO skills(id,name,task_type,fault_type,"
                            "strategy,required_tools,safety,status,version,created_at,scope,"
-                           "active_version,promoted_from_evaluation,promoted_at) "
-                           "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                           "active_version,promoted_from_evaluation,promoted_at,"
+                           "decision_params) "
+                           "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                            (row["id"], row["name"], row["task_type"], row["fault_type"],
                             row["strategy"], row["required_tools"], row["safety"],
                             status, version, row["created_at"],
                             row.get("scope") or "single", active_version,
                             row.get("promoted_from_evaluation") if strict else None,
-                            row.get("promoted_at") if strict else None))
+                            row.get("promoted_at") if strict else None,
+                            row.get("decision_params")))
             n += 1
     store.close()
     return n

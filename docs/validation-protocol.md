@@ -80,6 +80,44 @@ skill_id 归属、评估协议、paired-v2 明细存在、判决 PROMOTE、评�
 
 `tests/test_skill_validation.py` 的 `TestPromotionGate` / `TestStrictLibraryPipeline` 覆盖：无评估直接晋升被拒、候选正文或 scope 改动后旧评估失效、空 guard / 单验证任务即使手工翻 verdict 也不放行、过期评估、历史 NULL 协议、验证集或成对明细被篡改、评估属于别的技能、重复晋升不重复写版本、被拒后不留下任何写库痕迹、严格库必须由真实晋升产生。
 
+## P0 04 完整回滚（不可变快照与 active_version）
+
+`skills` 表是「当前工作副本」，`skill_versions` 是只追加、不修改的不可变快照。`active_version` 指向当前正在执行的那一份；`active_snapshot()` 让审计能回答「现在到底跑的是哪份正文」。
+
+### 三种操作的区别
+
+| 操作 | 正文 | status | active_version |
+|---|---|---|---|
+| `promote` | 固化当前正文为新版本 | active | 新版本号 |
+| `rollback(to_version=...)` | **从目标快照整份还原** | active | 目标版本 |
+| `disable` | 不改 | disabled | NULL |
+
+`rollback` 还原 name / task_type / fault_type / strategy / scope / required_tools / safety / decision_params，并把 version 与 active_version 一起指回目标快照；追加 `skill_rolled_back` 事件，不删除任何快照或评估。`disable` 只撤销启用，绝不顺手改正文。
+
+旧实现只读了快照的 version，却只 UPDATE status / version —— 版本号退回去了、实际执行的行为没变，这正是计划 3.4 指出的问题。
+
+### 正文变更与重新验证
+
+`revise()` 改正文后把当前行标为未启用草稿（candidate、active_version=NULL），不写快照、不自动启用。正文一变，`candidate_hash` 立即失配，旧评估不能再放行；必须重新跑 paired-v2 才能晋升，由 `promote` 把新正文固化成新的不可变版本。
+
+### 验收
+
+`tests/test_core.py::TestFullRollback` 用一组会改变行为的版本差异：v2 是单步 / single / 严格审批，v3 是两步 / multi / 宽松审批，且 required_tools、decision_params 都不同。启用 v3 后回滚 v2，检查：
+
+- `lookup` 实际选中的策略链、scope、required_tools、safety、decision_params 全部等于 v2；
+- `plan_recovery` 的 strategy_chain 与 skill_version，以及真实 `run_once` 落在 `recoveries` 里的 strategy / chain / skill_version；
+- `active_snapshot()` 指向 v2 快照，旧快照、两次评估与 rollback 事件都还在。
+
+已知边界：运行时目前只消费 strategy / scope / version，**尚未读取 `safety` 的审批声明来执行审批**。本轮验收的是「技能层声明的审批约束随正文一起还原」，不是「审批执行层已接通」。
+
+### 导出链路
+
+`real_model_train.build_library` 与历史入口 `real_model_bench` 复制技能时，现在一并带上 scope / active_version / decision_params。此前只复制 10 列，导出库里的技能无法按版本还原行为。
+
+### 指纹演进
+
+`CONTENT_FIELDS` 自 P0 04 起增加 `decision_params`。P0 03 报告 `promotion_gate_report.json` 里的 content_fields 是当时的 7 字段版本，属于冻结历史证据，不回填；其哈希不能与 P0 04 之后的评估横向比较。
+
 ## 后续边界
 
-本轮完成 P0 01/02/03，晋升链路在 `promote` 与严格库构建两处均不可绕过。但 `rollback` 仍只改 status/version，尚未恢复技能正文（P0 04）；经验引用溯源、环境元数据（P0 05）与冻结基线、报告统一（P0 06）仍未完成。24 小时有效期与 3 个独立任务只是工程下限，不是统计安全保证。不得把本轮结果描述为「回滚可恢复实际行为」或「实验已可完整复现」。
+本轮完成 P0 01/02/03/04：验证指标、样本充分性、晋升门禁、完整回滚均已落地。经验引用溯源、环境元数据与 `fault_scope` 持久化（P0 05）、冻结基线 manifest 与报告统一（P0 06）仍未完成。24 小时有效期与 3 个独立任务只是工程下限；运行时尚未消费 safety 审批声明；历史评测入口的技能库选择仍未接通。不得把本轮结果描述为「实验已可完整复现」或「审批执行层已验证」。

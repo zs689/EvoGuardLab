@@ -179,12 +179,17 @@ def prepare_db(db_path=None):
                 "SELECT * FROM skills WHERE status='active'").fetchall()]
         with store.conn() as c:
             for r in rows:
+                # 正文要整份复制：以前只带 10 列，连 scope 都丢了，
+                # 导出库里的技能根本没法按版本还原行为。
                 c.execute("INSERT OR REPLACE INTO skills(id,name,task_type,fault_type,"
-                          "strategy,required_tools,safety,status,version,created_at) "
-                          "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                          "strategy,required_tools,safety,status,version,created_at,"
+                          "scope,active_version,decision_params) "
+                          "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                           (r["id"], r["name"], r["task_type"], r["fault_type"],
                            r["strategy"], r["required_tools"], r["safety"],
-                           r["status"], r["version"], r["created_at"]))
+                           r["status"], r["version"], r["created_at"],
+                           r.get("scope") or "single", r.get("active_version"),
+                           r.get("decision_params")))
                 copied += 1
     return store, {"kind": "shared_mock_migration", "shared": copied}
 

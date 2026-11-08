@@ -184,16 +184,33 @@ class TestSkills(unittest.TestCase):
         self.assertIsNotNone(skills.lookup(s, "order", "silent_corruption", "C"),
                              "C 模式（不严格验证）会用到候选技能 —— 这正是它退化的原因")
 
-    def test_rollback(self):
+    def test_rollback_and_disable_are_different_operations(self):
+        """回滚 = 恢复旧版正文并继续启用；撤销 = 不再参与 D，但不改正文。"""
         s = fresh()
         skills.ensure_schema(s)
         sk = self._skill()
         skills.save(s, sk)
         validated_promote(s, sk)
-        skills.rollback(s, sk["id"])
+        self.assertEqual(skills.rollback(s, sk["id"]), 1)
         with s.conn() as c:
-            st = c.execute("SELECT status FROM skills WHERE id=?", (sk["id"],)).fetchone()[0]
-        self.assertEqual(st, skills.CANDIDATE, "回滚后应退回候选，不再参与 D 模式")
+            row = dict(c.execute("SELECT status,version,active_version,strategy "
+                                 "FROM skills WHERE id=?", (sk["id"],)).fetchone())
+        self.assertEqual(row["status"], skills.ACTIVE,
+                         "回滚是换回旧内容继续用，不是撤销启用")
+        self.assertEqual(row["active_version"], 1)
+        self.assertEqual(row["strategy"], "cross_verify")
+        self.assertIsNotNone(skills.active_snapshot(s, sk["id"]),
+                             "当前指针必须能追到一份不可变快照")
+
+        skills.disable(s, sk["id"])
+        self.assertIsNone(skills.lookup(s, "order", "silent_corruption", "D"),
+                          "撤销启用后才不再参与 D 模式")
+        with s.conn() as c:
+            st = c.execute("SELECT status,strategy FROM skills WHERE id=?",
+                           (sk["id"],)).fetchone()
+        self.assertEqual(st["status"], skills.DISABLED)
+        self.assertEqual(st["strategy"], "cross_verify",
+                         "撤销不得顺手改掉正文，那是回滚的职责")
 
 
 class TestSkillLookupDeterminism(unittest.TestCase):
@@ -403,6 +420,143 @@ class TestAdversarialGovernance(unittest.TestCase):
                           "D 绝不能用到未经独立验证的候选技能")
         self.assertFalse(run("C"), "投毒后 C 应当失败")
         self.assertTrue(run("D"), "D 不该被有害候选技能影响")
+
+
+class TestFullRollback(unittest.TestCase):
+    """P0 04 验收：v1 单步 / v2 两步且 scope 不同，回滚后实际行为必须等于 v1。
+
+    只检查 version 数字变化不算通过 —— 必须看运行时真正选中的策略、
+    recoveries 里落下的执行轨迹，以及技能声明的审批约束。
+    """
+
+    def setUp(self):
+        self.s = fresh()
+        self.addCleanup(self.s.close)
+        skills.ensure_schema(self.s)
+        self.v1 = {"id": "sk_rollback", "name": "v1 单步", "task_type": "order",
+                   "fault_type": "missing_field", "strategy": "fallback_tool",
+                   "required_tools": [],
+                   "safety": {"max_retry": 1, "require_approval_for_write": True,
+                              "max_chain": 1},
+                   "status": skills.CANDIDATE, "version": 1, "created_at": 0,
+                   "scope": skills.SINGLE,
+                   "decision_params": {"confidence_min": 0.9}}
+        skills.save(self.s, self.v1)
+        self.task_id = sim.test_tasks("order")[0]["task_id"]
+        runtime.FORCED_SKILL = None
+        self.addCleanup(self._reset_runtime)
+
+    def _reset_runtime(self):
+        runtime.FORCED_SKILL = None
+
+    def _trace(self):
+        """跑一次真实恢复，取运行时落下的轨迹（不是只读数据库配置）。"""
+        exp = self.s.create_experiment("rb", "order", self.task_id,
+                                       "missing_field", 0, 7, "D")
+        run = runtime.run_once(self.s, exp, "D")
+        recs = self.s.list_recoveries(run["id"])
+        self.assertTrue(recs, "这次运行必须真的产生一条恢复轨迹")
+        return recs[0]
+
+    def _body(self, row):
+        return {"name": row["name"], "task_type": row["task_type"],
+                "fault_type": row["fault_type"],
+                "strategy": core.as_chain(row["strategy"]),
+                "required_tools": core.loads(row["required_tools"], []),
+                "safety": core.loads(row["safety"], {}),
+                "scope": row["scope"],
+                "decision_params": core.loads(row["decision_params"], None)}
+
+    def _promote_v2(self):
+        """把当前行改成两步 / multi，再走一次完整晋升门禁。"""
+        skills.revise(self.s, self.v1["id"], name="v2 两步",
+                      strategy=["fallback_tool", "cross_verify"],
+                      scope=skills.MULTI,
+                      required_tools=["order.get_order"],
+                      safety={"max_retry": 3, "require_approval_for_write": False,
+                              "max_chain": 3},
+                      decision_params={"confidence_min": 0.4})
+        current = skills.lookup(self.s, "order", "missing_field", "C")
+        self.assertIsNotNone(current, "revise 后应留下未启用候选")
+        return validated_promote(self.s, current)
+
+    def test_rollback_restores_actual_v1_behavior(self):
+        validated_promote(self.s, self.v1)          # v2 = v1 正文，active
+        v3 = self._promote_v2()                     # v3 = 两步 / multi，active
+        self.assertEqual(v3, 3)
+
+        before = skills.lookup(self.s, "order", "missing_field", "D", scope="multi")
+        self.assertEqual(core.as_chain(before["strategy"]),
+                         ["fallback_tool", "cross_verify"])
+        self.assertEqual(before["scope"], skills.MULTI)
+        self.assertEqual(self._trace()["params"]["skill_version"], 3)
+
+        ver = skills.rollback(self.s, self.v1["id"], to_version=2)
+        self.assertEqual(ver, 2)
+
+        after = skills.lookup(self.s, "order", "missing_field", "D", scope="multi")
+        self.assertEqual(self._body(after)["strategy"], ["fallback_tool"],
+                         "回滚后实际选中的策略必须等于 v1")
+        self.assertEqual(after["scope"], skills.SINGLE)
+        self.assertEqual(self._body(after)["required_tools"], [])
+        self.assertEqual(self._body(after)["safety"], self.v1["safety"],
+                         "审批约束必须一起还原")
+        self.assertEqual(self._body(after)["decision_params"],
+                         self.v1["decision_params"])
+        self.assertEqual(after["name"], "v1 单步")
+
+        # 运行时决策与真实执行轨迹都要落回 v1，不只是 DB 里的正文。
+        plan = runtime.plan_recovery(self.s, "order", "missing_field", "D",
+                                     scope="multi")
+        self.assertEqual(plan["strategy_chain"], ["fallback_tool"])
+        self.assertEqual(plan["params"]["skill_version"], 2)
+        rec = self._trace()
+        self.assertEqual(rec["strategy"], "fallback_tool")
+        self.assertEqual(rec["params"]["chain"], ["fallback_tool"])
+        self.assertEqual(rec["params"]["skill_version"], 2)
+
+        # 历史、评估、审计都不能被删；指针必须能追到不可变快照。
+        snap = skills.active_snapshot(self.s, self.v1["id"])
+        self.assertEqual(int(snap["version"]), 2)
+        self.assertEqual(core.as_chain(core.loads(snap["snapshot"], {})["strategy"]),
+                         ["fallback_tool"])
+        with self.s.conn() as c:
+            n_snap = c.execute("SELECT COUNT(*) FROM skill_versions WHERE skill_id=?",
+                               (self.v1["id"],)).fetchone()[0]
+            n_eval = c.execute("SELECT COUNT(*) FROM skill_evaluations WHERE skill_id=?",
+                               (self.v1["id"],)).fetchone()[0]
+            ev = c.execute("SELECT detail FROM evolution_events WHERE subject_id=? "
+                           "AND kind='skill_rolled_back'",
+                           (self.v1["id"],)).fetchone()
+        self.assertGreaterEqual(n_snap, 3, "旧快照不得删除")
+        self.assertGreaterEqual(n_eval, 2, "两次评估都得保留")
+        self.assertIsNotNone(ev, "必须追加 rollback 事件")
+        self.assertIn("恢复整份正文", ev["detail"])
+
+    def test_revise_invalidates_previous_evaluation(self):
+        validated_promote(self.s, self.v1)
+        skills.revise(self.s, self.v1["id"], strategy="cross_verify")
+        audit = skills.audit_promotion(self.s, self.v1["id"])
+        self.assertFalse(audit["ok"])
+        self.assertIn("CANDIDATE_CONTENT_CHANGED", audit["failed_codes"],
+                      "改了正文的草稿不能拿旧评估放行")
+        self.assertIn("CANDIDATE_CONTENT_CHANGED",
+                      skills.promotion_failure_text(audit))
+        with self.assertRaises(skills.PromotionRejected):
+            skills.promote(self.s, self.v1["id"])
+        self.assertIsNone(skills.active_snapshot(self.s, self.v1["id"]),
+                          "草稿阶段没有正在执行的版本指针")
+
+    def test_rollback_default_picks_previous_active_version(self):
+        validated_promote(self.s, self.v1)
+        self._promote_v2()
+        self.assertEqual(skills.rollback(self.s, self.v1["id"]), 2)
+
+    def test_rollback_to_unknown_version_is_rejected(self):
+        validated_promote(self.s, self.v1)
+        with self.assertRaises(KeyError):
+            skills.rollback(self.s, self.v1["id"], to_version=99)
+        self.assertEqual(skills.active_snapshot(self.s, self.v1["id"])["version"], 2)
 
 
 if __name__ == "__main__":

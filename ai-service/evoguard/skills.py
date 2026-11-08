@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS skills(
   id TEXT PRIMARY KEY, name TEXT, task_type TEXT, fault_type TEXT, strategy TEXT,
   required_tools TEXT, safety TEXT, status TEXT, version INTEGER, created_at REAL,
   scope TEXT DEFAULT 'single', active_version INTEGER,
-  promoted_from_evaluation TEXT, promoted_at REAL);
+  promoted_from_evaluation TEXT, promoted_at REAL,
+  decision_params TEXT, disabled_at REAL,
+  rolled_back_from_version INTEGER, rolled_back_at REAL);
 
 CREATE TABLE IF NOT EXISTS skill_versions(
   id TEXT PRIMARY KEY, skill_id TEXT, version INTEGER, snapshot TEXT, created_at REAL);
@@ -39,7 +41,8 @@ CREATE TABLE IF NOT EXISTS skill_evaluations(
   consumed_by TEXT, consumed_at REAL);
 """
 
-CANDIDATE, ACTIVE, REJECTED, NEEDS_REVIEW = "candidate", "active", "rejected", "needs_review"
+CANDIDATE, ACTIVE, REJECTED, NEEDS_REVIEW, DISABLED = (
+    "candidate", "active", "rejected", "needs_review", "disabled")
 
 # 技能作用域：这条经验是「一个坏点」学来的，还是「两个坏点」学来的。
 # 为什么必须分开：技能只按 (agent, fault_type) 建索引，而复合故障的根因是
@@ -64,7 +67,7 @@ PROMOTION_PROTOCOL = "promotion-gate-v1"
 # 技能「正文」= 决定执行行为的全部字段。status / version / 时间戳刻意排除：
 # 晋升本身会改它们，纳入哈希会让同一评估在幂等重放时立刻失效。
 CONTENT_FIELDS = ("name", "task_type", "fault_type", "strategy",
-                  "required_tools", "safety", "scope")
+                  "required_tools", "safety", "scope", "decision_params")
 
 PROMOTION_ERRORS = {
     "NO_EVALUATION": "该技能没有任何评估记录，必须先跑 paired-v2 独立验证",
@@ -104,7 +107,11 @@ def ensure_schema(store):
             c.execute("ALTER TABLE skills ADD COLUMN scope TEXT DEFAULT 'single'")
         for name, decl in (("active_version", "INTEGER"),
                            ("promoted_from_evaluation", "TEXT"),
-                           ("promoted_at", "REAL")):
+                           ("promoted_at", "REAL"),
+                           ("decision_params", "TEXT"),
+                           ("disabled_at", "REAL"),
+                           ("rolled_back_from_version", "INTEGER"),
+                           ("rolled_back_at", "REAL")):
             if name not in cols:
                 c.execute("ALTER TABLE skills ADD COLUMN %s %s" % (name, decl))
         cols = [r[1] for r in c.execute("PRAGMA table_info(skill_evaluations)")]
@@ -146,23 +153,43 @@ def propose(exp):
     }
 
 
+def _db_value(value):
+    """正文里的结构字段落库前统一成 JSON 字符串，字符串策略保持原样。"""
+    if isinstance(value, (list, tuple, dict)):
+        return core.dumps(value)
+    return value
+
+
+def _snapshot(skill, strategy=None):
+    """构造不可变快照：正文 + 版本/状态元数据，字段齐全才谈得上完整回滚。
+
+    快照一旦写入 skill_versions 就不再修改；回滚读的是它，不是当前行。
+    """
+    snap = dict(skill)
+    if strategy is not None:
+        snap["strategy"] = strategy
+    snap.setdefault("scope", SINGLE)
+    snap.setdefault("decision_params", None)
+    snap.setdefault("active_version", None)
+    return snap
+
+
 def save(store, skill):
     ensure_schema(store)
-    strategy = skill["strategy"]
-    if isinstance(strategy, (list, tuple)):
-        strategy = core.dumps(list(strategy))
+    strategy = _db_value(skill["strategy"])
     with store.conn() as c:
         c.execute("INSERT INTO skills(id,name,task_type,fault_type,strategy,required_tools,"
-                  "safety,status,version,created_at,scope) "
-                  "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                  "safety,status,version,created_at,scope,decision_params) "
+                  "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                   (skill["id"], skill["name"], skill["task_type"], skill["fault_type"],
-                   strategy, core.dumps(skill["required_tools"]),
-                   core.dumps(skill["safety"]), skill["status"], skill["version"],
-                   skill["created_at"], skill.get("scope") or SINGLE))
+                   strategy, _db_value(skill["required_tools"]),
+                   _db_value(skill["safety"]), skill["status"], skill["version"],
+                   skill["created_at"], skill.get("scope") or SINGLE,
+                   _db_value(skill.get("decision_params"))))
         c.execute("INSERT INTO skill_versions(id,skill_id,version,snapshot,created_at) "
                   "VALUES(?,?,?,?,?)",
                   ("skv_" + uuid.uuid4().hex[:8], skill["id"], skill["version"],
-                   core.dumps(skill), skill["created_at"]))
+                   core.dumps(_snapshot(skill, strategy)), skill["created_at"]))
     exp_mod.event(store, "skill_proposed", skill["id"], skill["name"])
     return skill
 
@@ -556,6 +583,7 @@ def _audit_promotion(row, ev, now_s, versions):
         measured or "无法从成对明细重算")
 
     return {"ok": not failed, "code": failed[0] if failed else None,
+            "failed_codes": failed,
             "idempotent": bool(replay and not failed), "version": cur_ver,
             "skill_id": row["id"], "evaluation_id": ev.get("id"),
             "candidate_hash": now_ch, "validation_hash": recorded_vh,
@@ -576,6 +604,9 @@ def promotion_failure_text(audit):
                         c["expected"], c["actual"]))
     if audit.get("detail"):
         lines.append("  补充：%s" % audit["detail"])
+    codes = audit.get("failed_codes") or []
+    if len(codes) > 1:
+        lines.append("  全部失败项：%s" % "、".join(codes))
     lines.append("处理建议：确认候选正文、验证集与训练/验证划分未改动，"
                  "重新运行 paired-v2 验证后再晋升；不要手工改 verdict 放行。")
     return "\n".join(lines)
@@ -655,22 +686,130 @@ def promote(store, skill_id, *, evaluation_id=None, now_s=None):
     return new_ver
 
 
-def rollback(store, skill_id, to_version=None):
-    """回滚：把状态退回候选，并记录到指定历史版本。旧快照不删除。"""
+def revise(store, skill_id, **body):
+    """改技能正文，产生一份**未启用**的新草稿；不写快照、不自动启用。
+
+    正文一变，此前所有评估的 candidate_hash 立即失效（P0 03），必须重新
+    验证才能晋升。已启用版本的不可变快照保持不动；active_version 置空表示
+    「当前行是草稿，不是正在执行的版本」。version 不变，下一次 promote 会
+    把这份新正文固化成新的不可变版本。
+    """
+    ensure_schema(store)
+    unknown = set(body) - set(CONTENT_FIELDS)
+    if unknown:
+        raise ValueError("revise 只允许改技能正文，未知字段：%s" % sorted(unknown))
+    if not body:
+        raise ValueError("revise 至少要改一个正文字段")
+    t = core.now()
     with store.conn() as c:
-        rows = c.execute("SELECT * FROM skill_versions WHERE skill_id=? ORDER BY version",
-                         (skill_id,)).fetchall()
+        r = c.execute("SELECT * FROM skills WHERE id=?", (skill_id,)).fetchone()
+        if not r:
+            raise KeyError("技能不存在：%s" % skill_id)
+        cur = dict(r)
+        for k, v in body.items():
+            cur[k] = _db_value(v)
+        c.execute("UPDATE skills SET name=?,task_type=?,fault_type=?,strategy=?,"
+                  "required_tools=?,safety=?,scope=?,decision_params=?,"
+                  "status=?,active_version=NULL,promoted_from_evaluation=NULL,"
+                  "promoted_at=NULL WHERE id=?",
+                  (cur["name"], cur["task_type"], cur["fault_type"], cur["strategy"],
+                   cur["required_tools"], cur["safety"], cur.get("scope") or SINGLE,
+                   cur.get("decision_params"), CANDIDATE, skill_id))
+        c.execute("INSERT INTO evolution_events(id,ts,kind,subject_id,detail) "
+                  "VALUES(?,?,?,?,?)",
+                  ("ev_" + uuid.uuid4().hex[:10], t, "skill_revised", skill_id,
+                   "改正文 %s，已作废旧评估" % ",".join(sorted(body))))
+    return _get_skill(store, skill_id)
+
+
+def _get_skill(store, skill_id):
+    with store.conn() as c:
+        r = c.execute("SELECT * FROM skills WHERE id=?", (skill_id,)).fetchone()
+    return dict(r) if r else None
+
+
+def active_snapshot(store, skill_id):
+    """当前 active_version 指向的不可变快照。审计用它回答「现在到底执行哪份正文」。"""
+    ensure_schema(store)
+    with store.conn() as c:
+        r = c.execute("SELECT active_version FROM skills WHERE id=?",
+                      (skill_id,)).fetchone()
+        if not r or r["active_version"] is None:
+            return None
+        s = c.execute("SELECT * FROM skill_versions WHERE skill_id=? AND version=? "
+                      "ORDER BY rowid DESC LIMIT 1",
+                      (skill_id, int(r["active_version"]))).fetchone()
+    return dict(s) if s else None
+
+
+def disable(store, skill_id):
+    """撤销启用：只改状态与指针，**不恢复任何旧版正文**。
+
+    与 rollback 严格区分：disable 是「先别用了」，rollback 是「换回旧内容继续用」。
+    """
+    ensure_schema(store)
+    t = core.now()
+    with store.conn() as c:
+        r = c.execute("SELECT * FROM skills WHERE id=?", (skill_id,)).fetchone()
+        if not r:
+            raise KeyError("技能不存在：%s" % skill_id)
+        prev = r["active_version"]
+        c.execute("UPDATE skills SET status=?,active_version=NULL,disabled_at=? WHERE id=?",
+                  (DISABLED, t, skill_id))
+    exp_mod.event(store, "skill_disabled", skill_id, "撤销启用，原指针 v%s" % prev)
+    return DISABLED
+
+
+def rollback(store, skill_id, to_version=None):
+    """恢复旧版本正文并重新启用。保留全部快照与评估，不删除历史。
+
+    旧实现只读了快照的 version，却只 UPDATE status / version —— strategy、
+    scope、适用条件、required_tools、safety 全留在「新版本」状态，于是版本号
+    退回去了，实际执行的行为没变。这里把整份正文字段从不可变快照写回当前行，
+    并把 active_version 指到该快照；同时追加 rollback 审计事件。
+    """
+    ensure_schema(store)
+    t = core.now()
+    with store.conn() as c:
+        r = c.execute("SELECT * FROM skills WHERE id=?", (skill_id,)).fetchone()
+        if not r:
+            raise KeyError("技能不存在：%s" % skill_id)
+        cur = dict(r)
+        pointer = int(cur.get("active_version") or cur["version"])
+        rows = c.execute("SELECT * FROM skill_versions WHERE skill_id=? "
+                         "ORDER BY version, rowid", (skill_id,)).fetchall()
         if not rows:
             raise KeyError("没有可回滚的版本：%s" % skill_id)
-        target = [r for r in rows if int(r["version"]) == int(to_version)] if to_version else rows[:-1]
-        if not target:
-            raise KeyError("目标版本不存在")
-        snap = core.loads(target[-1]["snapshot"], {})
-        c.execute("UPDATE skills SET status=?, version=? WHERE id=?",
-                  (CANDIDATE, int(snap.get("version") or 1), skill_id))
-    exp_mod.event(store, "skill_rolled_back", skill_id,
-                  "to v%s" % (snap.get("version") or 1))
-    return snap.get("version")
+        if to_version is not None:
+            target = [x for x in rows if int(x["version"]) == int(to_version)]
+            if not target:
+                raise KeyError("目标版本不存在：v%s" % to_version)
+        else:
+            target = [x for x in rows if int(x["version"]) < pointer]
+            if not target:
+                raise KeyError("当前指针 v%s 之前没有更旧的快照" % pointer)
+        snap_row = target[-1]
+        snap = core.loads(snap_row["snapshot"], {})
+        if not snap:
+            raise ValueError("快照为空，无法回滚：%s" % snap_row["id"])
+        ver = int(snap.get("version") or snap_row["version"])
+        vals = {k: _db_value(snap.get(k)) for k in CONTENT_FIELDS}
+        vals["scope"] = vals.get("scope") or SINGLE
+        c.execute("UPDATE skills SET name=?,task_type=?,fault_type=?,strategy=?,"
+                  "required_tools=?,safety=?,scope=?,decision_params=?,"
+                  "status=?,version=?,active_version=?,"
+                  "rolled_back_from_version=?,rolled_back_at=?,"
+                  "promoted_from_evaluation=NULL,promoted_at=NULL,"
+                  "disabled_at=NULL WHERE id=?",
+                  (vals["name"], vals["task_type"], vals["fault_type"], vals["strategy"],
+                   vals["required_tools"], vals["safety"], vals["scope"],
+                   vals["decision_params"], ACTIVE, ver, ver, pointer, t, skill_id))
+        c.execute("INSERT INTO evolution_events(id,ts,kind,subject_id,detail) "
+                  "VALUES(?,?,?,?,?)",
+                  ("ev_" + uuid.uuid4().hex[:10], t, "skill_rolled_back", skill_id,
+                   "v%s → v%s，恢复整份正文（%s），历史快照与评估保留"
+                   % (pointer, ver, ",".join(CONTENT_FIELDS))))
+    return ver
 
 
 def list_skills(store, status=None):
