@@ -195,6 +195,141 @@ VERDICT_TEXT = {
 }
 
 
+# ---------------- 静态检查侧的覆盖率 ----------------
+# 静态检查的「输入不足」与轨迹侧不同：这里缺的是定义里的字段，
+# 以及 confidence —— 仓库启发式提取只能算 low，缺失型规则在 low 上不成立。
+ST_PROMPT = "prompt"          # 定义里有 system prompt
+ST_TOOLS = "tools"            # 定义里有工具
+ST_HIGH = "high"              # confidence=high（显式定义文件，不是源码猜的）
+ST_CFG_RETRY = "config:retry"  # 配置里声明了重试
+ST_WRITE_TOOLS = "write_tools"  # 至少一个写操作工具
+
+STATIC_REASON = {
+    ST_PROMPT: "定义里没有 system prompt",
+    ST_TOOLS: "定义里没有工具",
+    ST_HIGH: "定义来自源码启发式提取（confidence=low），缺失型规则在它上面不成立",
+    ST_CFG_RETRY: "配置里没声明重试次数",
+    ST_WRITE_TOOLS: "定义里没有写操作工具",
+}
+
+STATIC_REQUIRES = {
+    "prompt_missing": (ST_HIGH,),
+    "prompt_no_refusal_boundary": (ST_HIGH, ST_PROMPT),
+    "prompt_no_tool_policy": (ST_HIGH, ST_TOOLS, ST_PROMPT),
+    "prompt_secret_leak": (ST_PROMPT,),
+    "prompt_pii": (ST_PROMPT,),
+    "prompt_no_untrusted_boundary": (ST_PROMPT, ST_TOOLS),
+    "tool_write_no_approval": (ST_HIGH, ST_WRITE_TOOLS),
+    "tool_desc_missing": (ST_HIGH, ST_TOOLS),
+    "tool_desc_no_side_effect": (ST_HIGH, ST_WRITE_TOOLS),
+    "tool_arg_untyped": (ST_HIGH, ST_TOOLS),
+    "tool_too_many": (ST_HIGH, ST_TOOLS),
+    "tool_name_collision": (ST_HIGH, ST_TOOLS),
+    "unsafe_shell_tool": (ST_TOOLS,),
+    "no_timeout": (ST_HIGH,),
+    "no_retry_policy": (ST_HIGH,),
+    "no_max_iterations": (ST_HIGH,),
+    "no_output_schema": (ST_HIGH,),
+    "retry_without_backoff": (ST_CFG_RETRY,),
+    "no_run_budget": (ST_HIGH,),
+    "write_tool_no_idempotency": (ST_WRITE_TOOLS,),
+}
+
+
+def _def_facts(defn, cfg):
+    tools = list(getattr(defn, "tools", []) or [])
+    return {
+        ST_PROMPT: bool((getattr(defn, "system_prompt", "") or "").strip()),
+        ST_TOOLS: bool(tools),
+        ST_HIGH: getattr(defn, "confidence", "low") == "high",
+        ST_CFG_RETRY: bool((getattr(defn, "config", {}) or {}).get("retry")
+                           or (getattr(defn, "config", {}) or {}).get("max_retries")),
+        ST_WRITE_TOOLS: any(cfg.is_write(t.name) for t in tools),
+    }
+
+
+def analyze_static(defs, issues, cfg, selected_ids=None):
+    """静态检查的覆盖率。判定口径与轨迹侧一致，缺的输入条件不同。"""
+    from .static import rules as SR
+    ids = list(selected_ids) if selected_ids is not None else list(SR.RULES)
+    dfacts = [_def_facts(d, cfg) for d in defs]
+    hits = {}
+    for i in issues:
+        hits[i["rule_id"]] = hits.get(i["rule_id"], 0) + 1
+
+    rows, runnable, table_warnings = [], 0, []
+    for rid in ids:
+        meta = SR.RULES.get(rid, {})
+        reqs = STATIC_REQUIRES.get(rid, ())
+        ok_defs, reasons = 0, set()
+        for facts in dfacts:
+            miss = missing(facts, reqs)
+            if miss:
+                reasons.update(miss)
+            else:
+                ok_defs += 1
+        ok = ok_defs > 0
+        if not ok and hits.get(rid, 0) > 0:
+            ok, ok_defs = True, 1
+            reasons.clear()
+            table_warnings.append(
+                "%s 命中了 %d 次，但条件表认为它不可执行 —— 条件表需要修正"
+                % (rid, hits[rid]))
+        if ok:
+            runnable += 1
+        rows.append({
+            "rule_id": rid, "group": meta.get("group"), "severity": meta.get("severity"),
+            "requires": list(reqs), "applicable_defs": ok_defs,
+            "hits": hits.get(rid, 0), "runnable": ok,
+            "skipped_because": [] if ok else sorted(STATIC_REASON.get(r, r) for r in reasons),
+        })
+
+    total = len(ids)
+    if not defs:
+        verdict = "EMPTY_INPUT"
+    elif not issues and runnable < total:
+        verdict = "COVERAGE_LIMITED"
+    elif issues:
+        verdict = "FINDINGS"
+    else:
+        verdict = "PASS"
+    return {
+        "verdict": verdict, "total_rules": total, "runnable_rules": runnable,
+        "skipped_rules": total - runnable,
+        "runnable_ratio": round(runnable / total, 3) if total else None,
+        "defs": len(defs),
+        "defs_with": {k: sum(1 for f in dfacts if f.get(k)) for k in
+                      (ST_PROMPT, ST_TOOLS, ST_HIGH, ST_WRITE_TOOLS)},
+        "table_warnings": table_warnings,
+        "rules": rows,
+    }
+
+
+def render_static(coverage):
+    L = ["## 规则适用性", "",
+         VERDICT_TEXT.get(coverage["verdict"], coverage["verdict"]), "",
+         "- 选中规则 %d 条，可执行 %d 条，跳过 %d 条（可执行率 %s）"
+         % (coverage["total_rules"], coverage["runnable_rules"],
+            coverage["skipped_rules"], coverage["runnable_ratio"]),
+         "- 定义 %d 个；其中有 prompt %d、有工具 %d、高置信度 %d、有写操作工具 %d"
+         % (coverage["defs"], coverage["defs_with"][ST_PROMPT],
+            coverage["defs_with"][ST_TOOLS], coverage["defs_with"][ST_HIGH],
+            coverage["defs_with"][ST_WRITE_TOOLS]),
+         "",
+         "> 源码启发式提取的定义一律 confidence=low，缺失型规则（没超时 / 没重试 / 没轮次上限）",
+         "> 在它上面不成立 —— 源码里没读到，不等于运行时没配。"]
+    skipped = [r for r in coverage["rules"] if not r["runnable"]]
+    if skipped:
+        L += ["", "| 跳过的规则 | 分组 | 原因 |", "|---|---|---|"]
+        for r in skipped:
+            L.append("| %s | %s | %s |" % (r["rule_id"], r["group"],
+                                           "；".join(r["skipped_because"]) or "输入缺失"))
+    if coverage.get("table_warnings"):
+        L += ["", "条件表与实际行为不一致（需修正）："]
+        L += ["- %s" % w for w in coverage["table_warnings"]]
+    return L
+
+
 def render(coverage):
     """Markdown 片段：覆盖率 + 跳过原因。不写「通过」二字除非真的全跑了。"""
     L = ["## 规则适用性", "",

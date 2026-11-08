@@ -160,7 +160,7 @@ STATIC_GROUP_DESC = {
 STATIC_ORDER = ["prompt", "tool", "config"]
 
 
-def write_static(out_dir, defs, issues, parse_failures=None):
+def write_static(out_dir, defs, issues, parse_failures=None, coverage=None):
     """静态检查只读定义，所以报告必须把「置信度」写出来 —— 仓库扫描是猜的。"""
     os.makedirs(out_dir, exist_ok=True)
     by_sev, by_rule, by_group = summarize(issues)
@@ -174,6 +174,9 @@ def write_static(out_dir, defs, issues, parse_failures=None):
         "summary": {"by_severity": by_sev, "by_rule": by_rule, "by_group": by_group},
         "parse_failures": list(parse_failures or []),
     }
+    if coverage is not None:
+        data["coverage"] = coverage
+        data["verdict"] = coverage.get("verdict")
     j = os.path.join(out_dir, "static.json")
     with open(j, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -246,6 +249,12 @@ def write_static(out_dir, defs, issues, parse_failures=None):
     L.append("2. 规则集之外的风险它看不见（本报告只跑了配置里启用的规则）。")
     L.append("3. 从源码提取的定义置信度低，结论需要人工复核。")
     L.append("")
+    if coverage is not None:
+        from . import coverage as cov
+        L.append("## 五、规则适用性")
+        L.append("")
+        L.extend(cov.render_static(coverage)[2:])
+        L.append("")
     m = os.path.join(out_dir, "static.md")
     with open(m, "w", encoding="utf-8") as f:
         f.write("\n".join(L))

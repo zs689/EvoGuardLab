@@ -363,6 +363,11 @@ def check(defn, cfg=None, rules=None):
 
 
 def select(groups=None, only=None, skip=None):
+    return [RULES[rid]["fn"] for rid in select_ids(groups, only, skip)]
+
+
+def select_ids(groups=None, only=None, skip=None):
+    """与 select 同条件，返回规则 id —— 覆盖率统计要按 id 报。"""
     out = []
     for rid, m in RULES.items():
         if groups and m["group"] not in groups:
@@ -371,5 +376,5 @@ def select(groups=None, only=None, skip=None):
             continue
         if skip and rid in skip:
             continue
-        out.append(m["fn"])
+        out.append(rid)
     return out

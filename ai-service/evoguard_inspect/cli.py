@@ -75,9 +75,12 @@ def run_static(args, cfg=None):
     for d in defs:
         issues.extend(static_rules.check(d, cfg, rules))
     by_sev, by_rule, by_group = _report.summarize(issues)
+    cov = coverage.analyze_static(
+        defs, issues, cfg,
+        static_rules.select_ids(groups=args.group, only=args.only, skip=args.skip))
 
-    print("[√] 分析 %d 个 Agent 定义 ｜ 静态规则 %d/%d 条生效"
-          % (len(defs), len(rules), len(static_rules.RULES)))
+    print("[√] 分析 %d 个 Agent 定义 ｜ 静态规则 %d/%d 条生效（可执行 %d 条）"
+          % (len(defs), len(rules), len(static_rules.RULES), cov["runnable_rules"]))
     for d in defs:
         print("    - %-28s %s  tools=%d  prompt=%d 字  confidence=%s"
               % (d.name[:28], d.source_kind, len(d.tools),
@@ -89,8 +92,12 @@ def run_static(args, cfg=None):
         m = static_rules.RULES.get(rid, {})
         print("    - %-28s %2d  [%s] %s" % (rid, n, m.get("group", "-"),
                                             m.get("title", "")))
+    print("    %s" % coverage.VERDICT_TEXT[cov["verdict"]])
+    if cov["skipped_rules"]:
+        print("    跳过 %d 条（输入不足）：" % cov["skipped_rules"]
+              + "、".join(r["rule_id"] for r in cov["rules"] if not r["runnable"]))
     if args.out:
-        j, m = _report.write_static(args.out, defs, issues, load_failures)
+        j, m = _report.write_static(args.out, defs, issues, load_failures, cov)
         print("    报告：%s" % m)
         print("    明细：%s" % j)
     if load_failures:
@@ -106,10 +113,13 @@ def run_static(args, cfg=None):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="inspect",
                                  description="Agent 离线检查：只读轨迹，不执行 Agent")
-    ap.add_argument("--trace", nargs="*", default=[],
-                    help="轨迹文件（OTLP JSON 或 LangSmith runs）")
-    ap.add_argument("--agent", nargs="*", default=[],
-                    help="Agent 定义：JSON 文件或代码仓库目录（只读文本，不执行）")
+    # action="append"+nargs="*"：`--trace a --trace b` 与 `--trace a b` 都能用。
+    # 只用 nargs="*" 时重复写同一个参数会覆盖前一次 —— 前面的文件被静默丢掉，
+    # 报告看起来只检查了一部分输入，这正是这个工具最不该犯的错。
+    ap.add_argument("--trace", action="append", nargs="*", default=None,
+                    help="轨迹文件（OTLP JSON 或 LangSmith runs），可重复")
+    ap.add_argument("--agent", action="append", nargs="*", default=None,
+                    help="Agent 定义：JSON 文件或代码仓库目录（只读文本，不执行），可重复")
     ap.add_argument("--list-static-rules", action="store_true",
                     help="列出静态规则库后退出")
     ap.add_argument("--split-dir", action="store_true",
@@ -128,6 +138,8 @@ def main(argv=None):
     ap.add_argument("--strict-input", action="store_true",
                     help="任一份输入解析失败就以退出码 2 结束（默认只在终端提示）")
     args = ap.parse_args(argv)
+    args.trace = [p for group in (args.trace or []) for p in group]
+    args.agent = [p for group in (args.agent or []) for p in group]
 
     try:
         sys.stdout.reconfigure(encoding="utf-8")

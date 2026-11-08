@@ -245,5 +245,57 @@ class TestCaseRulesStatic(unittest.TestCase):
         self.assertTrue(self.NEW_RULES.issubset(set(SR.RULES)))
 
 
+class TestStaticCoverage(unittest.TestCase):
+    """静态侧的「规则适用性」：低置信度定义上跑不了的规则必须报出来。"""
+
+    def test_requires_table_only_names_real_rules(self):
+        from evoguard_inspect import coverage
+        unknown = set(coverage.STATIC_REQUIRES) - set(SR.RULES)
+        self.assertFalse(unknown, "条件表里出现未注册规则：%s" % unknown)
+
+    def test_good_definition_runs_every_rule(self):
+        from evoguard_inspect import coverage
+        d = loader.load_any(os.path.join(FIX, "agent_good.json"))
+        issues = SR.check(d)
+        cov = coverage.analyze_static([d], issues, config.DEFAULT)
+        missing = [r["rule_id"] for r in cov["rules"] if not r["runnable"]]
+        self.assertEqual(missing, [], "显式定义应让 20 条规则全部可执行")
+        self.assertEqual(cov["verdict"], "PASS")
+        self.assertEqual(issues, [])
+
+    def test_low_confidence_cannot_claim_pass(self):
+        from evoguard_inspect import coverage
+        from evoguard_inspect.static.model import AgentDef, ToolDef
+        d = AgentDef(name="guessed", system_prompt="你是一个查询助手，查不到就说查不到。",
+                     tools=[ToolDef(name="kb.search", description="检索知识库",
+                                    parameters={"properties": {"q": {"type": "string"}}})],
+                     config={"timeout_s": 10, "max_iterations": 5,
+                             "token_budget_per_run": 20000},
+                     source="repo/x.py", source_kind="repo", confidence="low")
+        cov = coverage.analyze_static([d], [], config.DEFAULT)
+        self.assertGreater(cov["skipped_rules"], 0, "源码猜出来的定义不可能全规则可查")
+        self.assertEqual(cov["verdict"], "COVERAGE_LIMITED",
+                         "低置信度零命中不能写成通过")
+
+    def test_static_report_carries_coverage(self):
+        import tempfile
+        from evoguard_inspect import coverage, report
+        from evoguard_inspect.static.model import AgentDef, ToolDef
+        d = AgentDef(name="a", system_prompt="x" * 60,
+                     tools=[ToolDef(name="kb.search", description="d")],
+                     config={}, source="t.json", confidence="high")
+        issues = SR.check(d)
+        cov = coverage.analyze_static([d], issues, config.DEFAULT)
+        with tempfile.TemporaryDirectory() as tmp:
+            j, m = report.write_static(tmp, [d], issues, [], cov)
+            with open(j, encoding="utf-8") as f:
+                data = json.load(f)
+            with open(m, encoding="utf-8") as f:
+                text = f.read()
+            self.assertEqual(data["verdict"], cov["verdict"])
+            self.assertEqual(data["coverage"]["total_rules"], 20)
+            self.assertIn("规则适用性", text)
+
+
 if __name__ == "__main__":
     unittest.main()

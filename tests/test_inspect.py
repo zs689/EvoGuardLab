@@ -413,5 +413,24 @@ class TestCoverageAndExitCodes(unittest.TestCase):
             devnull.close()
 
 
+    def test_repeated_args_do_not_drop_inputs(self):
+        """`--agent a --agent b` 不能只分析最后一个 —— 静默丢输入是最坏的失败方式。"""
+        import io
+        from contextlib import redirect_stdout
+        from evoguard_inspect import cli
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = cli.main(["--agent", os.path.join(FIX, "agent_bad.json"),
+                             "--agent", os.path.join(FIX, "agent_good.json")])
+        self.assertEqual(code, 0)
+        self.assertIn("2 个 Agent 定义", buf.getvalue())
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cli.main(["--trace", os.path.join(FIX, "trace_retry_ok.json"),
+                      "--trace", os.path.join(FIX, "trace_synthetic_bad.json")])
+        self.assertIn("18 条轨迹", buf.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
