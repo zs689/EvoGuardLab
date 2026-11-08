@@ -1,0 +1,76 @@
+{
+  "protocol_version": "paired-v2",
+  "backend": "mock",
+  "stats": {
+    "train": 1,
+    "val": 1,
+    "ran": 3,
+    "rule_ok": 1,
+    "explored_ok": 0,
+    "chain_used": 0,
+    "exp_saved": 1,
+    "exp_rejected": 0,
+    "proposed": 1
+  },
+  "evaluations": [
+    {
+      "id": "ske_7e5afa0fe0",
+      "skill_id": "sk_e2021629d1",
+      "protocol_version": "paired-v2",
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": null,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families",
+        "negative transfer is unestimable: no baseline guard successes"
+      ],
+      "target_n": 1,
+      "guard_n": 0,
+      "target_tasks": 1,
+      "guard_tasks": 0,
+      "guard_baseline_success": 0,
+      "guard_baseline_success_tasks": 0,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 0,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": null,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_b509a33682da",
+          "candidate_run_id": "run_b2dc3960baa9",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    }
+  ]
+}

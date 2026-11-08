@@ -5,12 +5,15 @@
     python ai-service/evolution_bench.py
 
 输出：
-    屏幕摘要 + experiments/evolution_report.md
+    屏幕摘要 + experiments/validation_runs/ 下的独立实验目录
 
 它回答的就是你那张图里的五个方框，一步都不跳。
 """
+import argparse
 import os
 import sys
+import time
+import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "evoguard"))
@@ -54,13 +57,22 @@ def run_mode(store, case, mode, skill=None):
 
 
 def main():
+    global DB, REPORT, METRICS
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--output-dir", help="新的隔离输出目录；已存在时拒绝覆盖")
+    args = ap.parse_args()
+    out = os.path.abspath(args.output_dir or os.path.join(
+        ROOT, "experiments", "validation_runs", "mock_%s_%s" % (
+            time.strftime("%Y%m%d_%H%M%S"), uuid.uuid4().hex[:8])))
+    os.makedirs(out, exist_ok=False)
+    DB = os.path.join(out, "evolution.db")
+    REPORT = os.path.join(out, "evolution_report.md")
+    METRICS = os.path.join(out, "metrics.json")
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
 
-    if os.path.exists(DB):
-        os.remove(DB)
     # 这是「跑完就重建」的实验库，开 fast：不 fsync + 复用连接。
     # 生产/服务进程用 core.Store(path) 默认配置，行为不变。
     store = core.Store(DB, fast=True)
@@ -73,15 +85,10 @@ def main():
     log = []
 
     # ---------- 1. 学：从训练集的一次故障里提炼经验 ----------
-    train = []
-    for at in sim.AGENT_TYPES:
-        for t in sim.dev_tasks(at):
-            for ft in sim.CASE_FAULTS[at]:
-                train.append({"agent_type": at, "task_id": t["task_id"],
-                              "fault_type": ft, "seed": 7})
-    # 复合故障也进训练：不进去就永远学不出组合链，策略链只能是摆设
-    comp_train = sim.composite_cases("dev")
-    train += comp_train
+    # 与真实入口共用 train/val 划分，test 只用于最终评测。
+    from real_model_train import split_cases
+    train, val = split_cases()
+    comp_train = [c for c in train if c.get("fault_chain")]
 
     # 探索候选：先单策略，再组合链。
     # 顺序有意义 —— 单故障一步就够，不该硬套两步链；
@@ -142,25 +149,25 @@ def main():
         # 复合经验必须用复合用例做 target，否则验证集里根本没有两个坏点，
         # 组合技能会被当成「和单策略一样」而误判增益。
         if c.get("fault_chain"):
-            target = [dict(cc) for cc in sim.composite_cases("test")
-                      if cc["agent_type"] == c["agent_type"]
+            target = [dict(cc) for cc in val if cc.get("fault_chain")
+                      and cc["agent_type"] == c["agent_type"]
                       and cc["fault_type"] == c["fault_type"]][:3]
         else:
-            target = [{"agent_type": c["agent_type"], "task_id": t["task_id"],
-                       "fault_type": c["fault_type"], "seed": 7}
-                      for t in sim.test_tasks(c["agent_type"])][:3]
+            target = [dict(v) for v in val if not v.get("fault_chain")
+                      and v["agent_type"] == c["agent_type"]
+                      and v["fault_type"] == c["fault_type"]][:3]
         # guard：同 agent、**不同故障** —— 不该被这个技能影响
-        # guard 只取前 4 个：测负迁移不需要全量，全量会让评测跑成几分钟
-        guard = [{"agent_type": c["agent_type"], "task_id": t["task_id"],
-                  "fault_type": ft, "seed": 7}
-                 for t in sim.test_tasks(c["agent_type"])
-                 for ft in sim.CASE_FAULTS[c["agent_type"]] if ft != c["fault_type"]][:4]
+        # 只取前 4 个做工程冒烟；独立任务不足时 evaluate 必须要求复核。
+        guard = [dict(v) for v in val if v["agent_type"] == c["agent_type"]
+                 and v["fault_type"] != c["fault_type"]][:4]
 
         def runner(case, skill):
-            ok, _ = run_mode(store, case, "D", skill=skill)
-            return ok
+            ok, rid = run_mode(store, case, "D", skill=skill)
+            run = store.get_run(rid)
+            return {"success": ok, "run_id": rid,
+                    "cost": {"reported_tokens": run["tokens"], "latency_ms": run["latency_ms"]}}
 
-        res = skills.evaluate(store, sk, target, guard, runner)
+        res = skills.evaluate(store, sk, target, guard, runner, training_cases=train)
         verdicts.append({"skill": sk, "case": c, "res": res})
         if res["verdict"] == "PROMOTE":
             skills.promote(store, sk["id"])
@@ -188,7 +195,8 @@ def main():
     for i, c in enumerate(test):
         if detail["B"][i] and not detail["D"][i]:
             neg += 1
-    neg_rate = pct(neg, len(test))
+    b_success = sum(detail["B"])
+    neg_rate = pct(neg, b_success) if b_success else None
     progress("四组对照完成：A %s%% / B %s%% / C %s%% / D %s%%"
              % (rates["A"], rates["B"], rates["C"], rates["D"]))
 
@@ -240,14 +248,18 @@ def main():
     L.append("")
     L.append("### 候选技能验证明细")
     L.append("")
+    L.append("> 验证协议 `%s`；N/A 为不可估计；不足三项独立任务只转复核。" % skills.VALIDATION_PROTOCOL)
+    L.append("")
     L.append("| 技能 | 目标病例 | 验证前成功率 | 验证后成功率 | 增益(pp) | 负迁移率 | 判定 |")
     L.append("|---|---|---|---|---|---|---|")
     for v in verdicts:
         r = v["res"]
         L.append("| %s | %s/%s | %s%% | %s%% | %s | %s%% | **%s** |" % (
             v["skill"]["name"][:28], v["case"]["agent_type"], v["case"]["fault_type"],
-            round(r["before_rate"] * 100, 1), round(r["after_rate"] * 100, 1),
-            r["gain_pp"], round(r["neg_transfer_rate"] * 100, 1), r["verdict"]))
+            (round(r["before_rate"] * 100, 1) if r["before_rate"] is not None else "N/A"),
+            (round(r["after_rate"] * 100, 1) if r["after_rate"] is not None else "N/A"),
+            r["gain_pp"], (round(r["neg_transfer_rate"] * 100, 1)
+                          if r["neg_transfer_rate"] is not None else "N/A"), r["verdict"]))
     L.append("")
     L.append("## 二、四组对照（独立测试集 %d 个用例）" % len(test))
     L.append("")
@@ -258,7 +270,9 @@ def main():
     L.append("| C | 用经验但**不严格验证** | %s%% |" % rates["C"])
     L.append("| D | 完整闭环（验证+晋升） | %s%% |" % rates["D"])
     L.append("")
-    L.append("- **负迁移率（B 成功但 D 失败）**：%s%%（%d/%d）" % (neg_rate, neg, len(test)))
+    L.append("- **负迁移率（B 成功但 D 失败 / B 成功）**：%s（%d/%d）" % (
+        ("%s%%" % neg_rate) if neg_rate is not None else "N/A", neg, b_success))
+    L.append("- 退化占全部测试的比例：%s%%（%d/%d）" % (pct(neg, len(test)), neg, len(test)))
     L.append("- D 相对 B 提升：**%s 个百分点**" % round(rates["D"] - rates["B"], 1))
     L.append("- D 相对 C 提升：**%s 个百分点**" % round(rates["D"] - rates["C"], 1))
     L.append("")
@@ -310,6 +324,7 @@ def main():
     # 机器可读指标：前端只读这个，不解析 Markdown，也不写死假数字。
     import json
     metrics = {
+        "protocol_version": skills.VALIDATION_PROTOCOL,
         "generated_at": core.now(),
         "dataset": sim.dataset_stats(),
         "closed_loop": {k: v for k, v in log},
@@ -317,10 +332,13 @@ def main():
         "promoted": n_promote,
         "chain_skills": chain_skills,
         "four_groups": {"n": len(test), "rates": rates,
-                        "neg_transfer_rate": neg_rate},
+                        "neg_transfer_rate": neg_rate,
+                        "baseline_success": b_success, "regressions": neg,
+                        "regression_fraction": pct(neg, len(test))},
         "composite": {"n": cn, "rates": comp_rates,
                       "counts": cs, "best_chain": BEST_CHAIN,
                       "single_pool": list(SINGLE_POOL)},
+        "evaluations": [v["res"] for v in verdicts],
         "verdicts": [
             {"name": v["skill"]["name"], "agent": v["case"]["agent_type"],
              "fault": v["case"]["fault_type"],

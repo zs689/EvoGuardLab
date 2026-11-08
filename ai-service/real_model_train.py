@@ -17,11 +17,9 @@
     python ai-service/real_model_train.py                # 全量
     python ai-service/real_model_train.py --limit 6      # 冒烟
 
-产物：
-    data/real_model_train.db     训练过程（经验 / 评估 / 事件）
-    data/library_d.db            严格库（D 用）
-    data/library_c.db            放宽库（C 用）
-    experiments/real_model/train_report.md
+产物默认写入 experiments/validation_runs/ 的新目录：
+    train.db / library_d.db / library_c.db / train_report.md / validation_results.json
+    --output-dir 可指定一个尚不存在的目录，不覆盖历史库。
 """
 import argparse
 import json
@@ -29,6 +27,7 @@ import os
 import shutil
 import sys
 import time
+import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "evoguard"))
@@ -155,11 +154,22 @@ def build_library(src, dst, ids, note):
 
 
 def main():
+    global OUT, TRAIN_DB, LIB_D, LIB_C, REPORT
     ap = argparse.ArgumentParser()
     ap.add_argument("--backend", default=os.environ.get("AGENTLAB_LLM", "ollama"))
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--guard-n", type=int, default=2, help="每个候选技能测几个 guard 用例")
+    ap.add_argument("--output-dir", help="新的隔离输出目录；已存在时拒绝覆盖")
     args = ap.parse_args()
+    if args.guard_n < 0 or args.limit < 0:
+        ap.error("--guard-n and --limit must be nonnegative")
+    OUT = os.path.abspath(args.output_dir or os.path.join(
+        ROOT, "experiments", "validation_runs", "train_%s_%s" % (
+            time.strftime("%Y%m%d_%H%M%S"), uuid.uuid4().hex[:8])))
+    os.makedirs(OUT, exist_ok=False)
+    TRAIN_DB = os.path.join(OUT, "train.db")
+    LIB_D, LIB_C = os.path.join(OUT, "library_d.db"), os.path.join(OUT, "library_c.db")
+    REPORT = os.path.join(OUT, "train_report.md")
 
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -182,9 +192,6 @@ def main():
         return 1
     print("[√] 服务可达，模型 %s ｜ 后端 %s" % (models, provider.name))
 
-    for p in (TRAIN_DB,):
-        if os.path.exists(p):
-            os.remove(p)
     store = core.Store(TRAIN_DB, fast=True)
     experience.ensure_schema(store)
     skills.ensure_schema(store)
@@ -275,30 +282,22 @@ def main():
                   and bool(v.get("fault_chain")) == from_composite]
         guard = [v for v in val if v["agent_type"] == c["agent_type"] and not _in(v)][
             :args.guard_n]
-        if not target:
-            # 无 target 必须喊出来。静默跳过会表现成「链学不出来」，
-            # 而真实原因是验证集里根本没有同模式的用例（切分错了）。
-            print("  [!!] %s/%s %s 没有可验证的 target，跳过（检查数据切分）"
-                  % (c["agent_type"], c.get("fault_type"), core.as_chain(sk["strategy"])),
-                  flush=True)
-            verdicts.append({"skill": sk, "res": {"verdict": "NO_TARGET", "gain_pp": 0,
-                                                  "neg_transfer_rate": 0,
-                                                  "before_rate": 0, "after_rate": 0},
-                             "case": c})
-            continue
-
         def runner(case, skill):
-            return run_case(store, case, "D", skill=skill)[0]
+            ok, rid = run_case(store, case, "D", skill=skill)
+            run = store.get_run(rid)
+            return {"success": ok, "run_id": rid,
+                    "cost": {"reported_tokens": run["tokens"], "latency_ms": run["latency_ms"]}}
 
-        res = skills.evaluate(store, sk, target, guard, runner)
+        res = skills.evaluate(store, sk, target, guard, runner, training_cases=train)
         stats["ran"] += len(target) * 2 + len(guard) * 2
         verdicts.append({"skill": sk, "res": res, "case": c})
         if res["verdict"] == "PROMOTE":
             promote_ids.append(sk["id"])
-        print("  [验证 %d/%d] %s/%s %s gain=%spp neg=%s%% → %s"
+        print("  [验证 %d/%d] %s/%s %s gain=%spp neg=%s → %s"
               % (j, len(proposed), c["agent_type"], c.get("fault_type"),
                  core.as_chain(sk["strategy"]), res["gain_pp"],
-                 round(res["neg_transfer_rate"] * 100, 1), res["verdict"]), flush=True)
+                 ("%s%%" % round(res["neg_transfer_rate"] * 100, 1)
+                  if res["neg_transfer_rate"] is not None else "N/A"), res["verdict"]), flush=True)
 
     # ---------- 3. 导出两套库 ----------
     all_ids = [p["skill"]["id"] for p in proposed]
@@ -309,6 +308,11 @@ def main():
 
     elapsed = time.time() - t0
     write_report(stats, proposed, verdicts, n_d, n_c, elapsed, provider)
+    with open(os.path.join(OUT, "validation_results.json"), "w", encoding="utf-8") as f:
+        json.dump({"protocol_version": skills.VALIDATION_PROTOCOL, "backend": provider.name,
+                   "stats": stats, "evaluations": [v["res"] for v in verdicts]},
+                  f, ensure_ascii=False, indent=2)
+    store.close()
     print("== 训练完成 == %.0fs ｜ run %d ｜ 候选 %d ｜ 严格晋升 %d ｜ 放宽入库 %d"
           % (elapsed, stats["ran"], stats["proposed"], n_d, n_c))
     print("   报告 %s" % REPORT)
@@ -325,6 +329,7 @@ def write_report(stats, proposed, verdicts, n_d, n_c, elapsed, provider):
 
     L = ["# 真实模型自举闭环：训练报告", "",
          "> 由 `ai-service/real_model_train.py` 自动生成。",
+         "> 验证协议 `%s`；N/A 表示不可估计，样本不足转 NEEDS_REVIEW。" % skills.VALIDATION_PROTOCOL,
          "> 模型 `%s` ｜ 后端 `%s` ｜ 用时 %.0fs ｜ run %d 次"
          % (os.environ.get("AGENTLAB_LLM_MODEL", "?"), provider.name, elapsed, stats["ran"]), ""]
     L += ["## 一、划分（test 一律不参与）", "",
@@ -347,16 +352,18 @@ def write_report(stats, proposed, verdicts, n_d, n_c, elapsed, provider):
           "| 放宽库 | 本次恢复成功即入库，**不验证** | %d | C |" % n_c, "",
           "判定分布：" + json.dumps(vd, ensure_ascii=False), ""]
     L += ["## 四、逐条验证结果", "",
-          "| 技能 | Agent | 故障 | 策略 | 增益(pp) | 负迁移 | 判定 |",
-          "|---|---|---|---|---|---|---|"]
+          "| 技能 | Agent | 故障 | 策略 | 增益(pp) | 负迁移 | 判定 | 原因 |",
+          "|---|---|---|---|---|---|---|---|"]
     for v in verdicts:
         r, c, sk = v["res"], v["case"], v["skill"]
-        L.append("| %s | %s | %s | %s | %s | %s%% | **%s** |" % (
+        L.append("| %s | %s | %s | %s | %s | %s | **%s** | %s |" % (
             core.as_chain(sk["strategy"]), c["agent_type"], c.get("fault_type"),
             "→".join(core.as_chain(sk["strategy"])), r.get("gain_pp"),
-            round((r.get("neg_transfer_rate") or 0) * 100, 1), r["verdict"]))
+            ("%s%%" % round(r["neg_transfer_rate"] * 100, 1)
+             if r["neg_transfer_rate"] is not None else "N/A"), r["verdict"],
+            "; ".join(r.get("reasons", []))))
     L += ["", "## 五、诚实说明", "",
-          "1. 这是**真实模型自举**（探索轨迹由 Qwen3 产生），不再是跨模型迁移。",
+          "1. 本轮后端为 `%s`；mock 是机制冒烟，不能作为真实模型结论。" % provider.name,
           "2. 但任务本身简单：模型在答案步几乎不犯错，所以探索失败基本都来自故障机制，",
           "   不是模型推理错。技能学到的是「遇到这类故障该走哪几步」。",
           "3. dev 每 agent 只有 2 个 task，train/val 各 1 个，样本极小，不能当统计结论。",

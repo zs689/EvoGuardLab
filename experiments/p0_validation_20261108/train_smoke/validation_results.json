@@ -1,0 +1,653 @@
+{
+  "protocol_version": "paired-v2",
+  "backend": "mock",
+  "stats": {
+    "train": 6,
+    "val": 6,
+    "ran": 42,
+    "rule_ok": 6,
+    "explored_ok": 0,
+    "chain_used": 0,
+    "exp_saved": 6,
+    "exp_rejected": 0,
+    "proposed": 6
+  },
+  "evaluations": [
+    {
+      "id": "ske_f22e8b9349",
+      "skill_id": "sk_377ce8559c",
+      "protocol_version": "paired-v2",
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_6db2e37f52d4",
+          "candidate_run_id": "run_26db2ef27e07",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_f44bc214d5ab",
+          "candidate_run_id": "run_ed60f95501c4",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_1605ea05fc8af89c",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "invalid_json",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "invalid_json",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_ebbcd8b704c5",
+          "candidate_run_id": "run_c29159a6d2ad",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ske_0425e8e2fb",
+      "skill_id": "sk_6c7012f788",
+      "protocol_version": "paired-v2",
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_9dd8a2535777",
+          "candidate_run_id": "run_d034dc2b5433",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_45ba48aa9de7",
+          "candidate_run_id": "run_480cddb6223a",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_1605ea05fc8af89c",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "invalid_json",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "invalid_json",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_e4cb49efc01a",
+          "candidate_run_id": "run_772eab49c648",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ske_8a6e98f0a7",
+      "skill_id": "sk_8372d5c2e6",
+      "protocol_version": "paired-v2",
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_1605ea05fc8af89c",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "invalid_json",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "invalid_json",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_bf933ce8236b",
+          "candidate_run_id": "run_efa28c8ba620",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_0c0f30e8f3c1",
+          "candidate_run_id": "run_75b149c86a73",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_b98b117d3a66",
+          "candidate_run_id": "run_da3243860b3a",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ske_e4c6139c4d",
+      "skill_id": "sk_7abd15c0a1",
+      "protocol_version": "paired-v2",
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_1af6f5e27c40ea4d",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "missing_field",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "missing_field",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_17771ea1be62",
+          "candidate_run_id": "run_dd6683f5a49c",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_cee2a2ff49ea",
+          "candidate_run_id": "run_778578e8ba60",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_c1b47bba37e3",
+          "candidate_run_id": "run_229910121e3f",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ske_dded051c63",
+      "skill_id": "sk_3b44c8753a",
+      "protocol_version": "paired-v2",
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_92113378a377ccdb",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "silent_corruption",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "silent_corruption",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_118e462b549d",
+          "candidate_run_id": "run_60c35ac40e41",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_32f905315f9e",
+          "candidate_run_id": "run_76c024a7720b",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_256bca42c10c",
+          "candidate_run_id": "run_b5c2af622d22",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "ske_ce2b139bca",
+      "skill_id": "sk_d28de658a5",
+      "protocol_version": "paired-v2",
+      "gain_pp": 0.0,
+      "before_rate": 1.0,
+      "after_rate": 1.0,
+      "neg_transfer_rate": 0.0,
+      "verdict": "NEEDS_REVIEW",
+      "reasons": [
+        "target has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 independent tasks/families",
+        "guard has fewer than 3 baseline-success tasks/families"
+      ],
+      "target_n": 1,
+      "guard_n": 2,
+      "target_tasks": 1,
+      "guard_tasks": 1,
+      "guard_baseline_success": 2,
+      "guard_baseline_success_tasks": 1,
+      "guard_regressions": 0,
+      "guard_improvements": 0,
+      "guard_retained": 2,
+      "guard_both_failed": 0,
+      "guard_regression_fraction": 0.0,
+      "training_overlap_checked": true,
+      "thresholds": {
+        "min_gain_pp": 15.0,
+        "max_neg_transfer": 0.05,
+        "min_validation_tasks": 3
+      },
+      "pairs": [
+        {
+          "group": "target",
+          "case_id": "case_33f502532b7d6687",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "retrieval_failure",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "retrieval_failure",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_f6c424e461ef",
+          "candidate_run_id": "run_683209f31169",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_4ab23180089c7b04",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_timeout",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_timeout",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_83e2db560a6e",
+          "candidate_run_id": "run_a7853ffd62b4",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        },
+        {
+          "group": "guard",
+          "case_id": "case_136c7175c438b56b",
+          "case": {
+            "agent_type": "order",
+            "task_id": "A1002",
+            "fault_type": "tool_exception",
+            "seed": 7
+          },
+          "seed": 7,
+          "fault_type": "tool_exception",
+          "baseline_success": true,
+          "candidate_success": true,
+          "baseline_run_id": "run_c5057b4aaf7f",
+          "candidate_run_id": "run_96bebfa233b5",
+          "baseline_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          },
+          "candidate_cost": {
+            "reported_tokens": 23,
+            "latency_ms": 0
+          }
+        }
+      ]
+    }
+  ]
+}

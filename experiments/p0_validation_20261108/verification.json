@@ -1,0 +1,48 @@
+{
+  "protocol_version": "paired-v2",
+  "historical_files_unchanged": 31,
+  "baseline_tests": {
+    "passed": 109
+  },
+  "initial_counterexample_tests": {
+    "tests": 14,
+    "failures": 9,
+    "errors": 5
+  },
+  "combined_regression": {
+    "passed": 123
+  },
+  "final_validation_tests": {
+    "passed": 18
+  },
+  "experiments": [
+    {
+      "experiment": "train_smoke",
+      "evaluations": 6,
+      "pairs_checked": 18,
+      "db_json_run_links_match": true
+    },
+    {
+      "experiment": "empty_guard_smoke",
+      "evaluations": 1,
+      "pairs_checked": 1,
+      "db_json_run_links_match": true
+    },
+    {
+      "experiment": "mock_final",
+      "evaluations": 39,
+      "pairs_checked": 195,
+      "db_json_run_links_match": true
+    }
+  ],
+  "existing_output_refusal": {
+    "train": true,
+    "mock": true
+  },
+  "empty_guard_final_cli": true,
+  "train_val_test_task_disjoint": true,
+  "notes": [
+    "No real model called in this verification.",
+    "promote validation binding and complete rollback remain pending."
+  ]
+}
