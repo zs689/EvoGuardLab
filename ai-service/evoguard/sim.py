@@ -131,10 +131,30 @@ def expected_answer(agent_type, task_id):
         return {"must": q["must"], "doc": q["doc"]}
     if agent_type == "planner":
         return {"steps": PLAN_LIBRARY[task_id]}
+    if agent_type == "calc":
+        return expected_hard_total(task_id)
+    if agent_type == "xref":
+        return HARD_KB_ANSWER[task_id]
     raise ValueError(agent_type)
 
 
 # ---------------- 工具实现 ----------------
+def _tool_get_quote_order(args):
+    """难度组（calc）专用的取单工具。
+
+    为什么单独开一个而不是复用 order.get_order：
+    那个工具的契约（out_required）要求 discount_policy，而难度组用的是
+    rebate + tier 两段规则。塞进去会让每一次调用都被判成「缺字段」，
+    等于每跑一次就自带一个假故障 —— 实验数据立刻失真。
+    """
+    oid = args.get("order_id")
+    if oid not in HARD_ORDERS:
+        raise KeyError("订单不存在：%s" % oid)
+    o = copy.deepcopy(HARD_ORDERS[oid])
+    return {"order_id": o["order_id"], "items": o["items"],
+            "rebate": o["rebate"], "tier": o["tier"], "status": "待结算"}
+
+
 def _tool_get_order(args):
     oid = args.get("order_id")
     if oid not in ORDERS:
@@ -209,6 +229,8 @@ def auto_target(agent_type, fault_type):
     比如 silent_corruption 必须打在计价步骤上，打在上游明细上会变成
     「链路内部自洽、外部无法发现」——那是另一个更难的课题，不适合当首版的靶子。
     """
+    if agent_type in ("calc", "xref"):
+        return hard_target(agent_type, fault_type)
     if fault_type == "context_loss":
         return 3                      # context 构建步
     if fault_type == "silent_corruption":
@@ -263,6 +285,11 @@ def corrupt(fault_type, tool, output, args=None):
             del out["total"]
         elif tool == "order.get_order" and "items" in out:
             del out["items"]
+        elif tool == "pricing.quote" and "tier_rate" in out:
+            # 少了会员折扣率 → 模型只能按原价算，答案是错的但结构合法
+            del out["tier_rate"]
+        elif tool == "kb.search_all":
+            out["docs"] = []
         elif tool == "kb.search":
             out["docs"] = []
         elif tool == "task.make_plan" and "steps" in out:
@@ -278,6 +305,11 @@ def corrupt(fault_type, tool, output, args=None):
             for d in out.get("docs") or []:
                 d["version"] = 1
                 d["text"] = re.sub(r"\d+", bump, d.get("text", ""))
+        elif tool == "kb.search_all":
+            # 只给最低版本的那份：模型不做版本比较就会照着旧条款回答
+            docs = out.get("docs") or []
+            if docs:
+                out["docs"] = [dict(min(docs, key=lambda d: d["version"]))]
         return out
     if fault_type == "wrong_tool":
         # 选错了工具：返回的是 kb.search 的结构。字段名全对、JSON 合法，
@@ -294,6 +326,10 @@ def corrupt(fault_type, tool, output, args=None):
         # 数值被改，但结构完全合法 —— 只有独立验算才抓得到
         if tool == "pricing.calc_total" and "total" in out:
             out["total"] = round(out["total"] * 1.15 + 12.0, 2)
+        elif tool == "pricing.quote" and "tier_rate" in out:
+            # 会员折扣率被悄悄改小：小计是真的，只有这一项错。
+            # 这是最隐蔽的形态 —— 模型按它算，算术全对，结果全错。
+            out["tier_rate"] = round(max(0.1, float(out["tier_rate"]) * 0.7), 2)
         elif tool == "order.get_order" and out.get("items"):
             out["items"][0]["price"] = round(out["items"][0]["price"] * 2, 2)
         return out
@@ -319,6 +355,13 @@ def corrupt(fault_type, tool, output, args=None):
             if other:
                 out["goal_key"] = other
                 out["steps"] = list(PLAN_LIBRARY[other])
+        elif tool == "kb.search_all":
+            # 取错主题：文档结构完全合法，只有主题对不上
+            topic = out.get("topic")
+            other = next((k for k in HARD_KB if k != topic), None)
+            if other:
+                out["topic"] = other
+                out["docs"] = [dict(d) for d in HARD_KB[other]]
         return out
     return out
 
@@ -456,4 +499,191 @@ def dataset_stats():
             "test_cases": sum(v["test_cases"] for v in per_agent.values()),
             "per_agent": per_agent,
             "composite_patterns": len(COMPOSITES),
-            "composite_test_cases": len(composite_cases("test"))}
+            "composite_test_cases": len(composite_cases("test")),
+            "hard": hard_stats()}
+
+
+# ==================== 难度升级：多步计算 / 跨文档冲突 ====================
+# 为什么必须单独一组，而不是把现有 204 例改难：
+#   1. 改了就没法和历史数字比，前面几轮的结论全部作废；
+#   2. 现有任务是**抽取式**的 —— 工具已经把答案算好，模型只要搬运，
+#      所以 936 次调用 0 次答错。这测的是恢复机制，不是模型。
+# 这里把工具从「给答案」改成「给原料」，模型必须自己算/自己比，才有答错的空间。
+#
+# 两类任务：
+#   calc —— 多步计算：两段计价规则有**先后顺序**（先满减、后会员折扣），
+#           工具只返回小计与规则，**不返回总额**。
+#   xref —— 跨文档冲突：同一主题有多份不同版本的文档，必须按「版本高者优先」
+#           挑出生效条款，只读一份就会答成别的数字。
+
+TIER_RATE = {"none": 1.0, "silver": 0.95, "gold": 0.9}
+
+HARD_ORDERS = {
+    "H3001": {"order_id": "H3001", "tier": "silver",
+              "items": [{"sku": "H-1", "name": "服务器", "price": 1580.0, "qty": 2},
+                        {"sku": "H-2", "name": "交换机", "price": 860.0, "qty": 1}],
+              "rebate": {"threshold": 1000.0, "amount": 100.0}},
+    "H3002": {"order_id": "H3002", "tier": "gold",
+              "items": [{"sku": "H-3", "name": "工控机", "price": 2400.0, "qty": 1},
+                        {"sku": "H-4", "name": "线材", "price": 45.5, "qty": 10}],
+              "rebate": {"threshold": 2000.0, "amount": 200.0}},
+    "H3003": {"order_id": "H3003", "tier": "none",
+              "items": [{"sku": "H-5", "name": "显示器", "price": 620.0, "qty": 1},
+                        {"sku": "H-6", "name": "支架", "price": 130.0, "qty": 1}],
+              "rebate": {"threshold": 1000.0, "amount": 100.0}},
+}
+
+HARD_KB = {
+    "退货期限": [
+        {"doc_id": "KB-21", "title": "退货政策", "version": 2,
+         "text": "自签收之日起 7 个工作日内可无理由退货。"},
+        {"doc_id": "KB-22", "title": "退货政策（修订）", "version": 4,
+         "text": "自签收之日起 10 个工作日内可无理由退货，需保留吊牌。"},
+        {"doc_id": "KB-23", "title": "退货政策（旧版）", "version": 1,
+         "text": "自签收之日起 15 个工作日内可无理由退货。"},
+    ],
+    "保修期限": [
+        {"doc_id": "KB-24", "title": "保修政策", "version": 3,
+         "text": "整机保修 12 个月。"},
+        {"doc_id": "KB-25", "title": "保修政策（修订）", "version": 5,
+         "text": "整机保修 24 个月，电池保修 12 个月。"},
+        {"doc_id": "KB-26", "title": "保修政策（旧版）", "version": 1,
+         "text": "整机保修 6 个月。"},
+    ],
+    "发票时限": [
+        {"doc_id": "KB-27", "title": "发票规则", "version": 2,
+         "text": "电子发票在订单完成后 5 个工作日内开具。"},
+        {"doc_id": "KB-28", "title": "发票规则（修订）", "version": 6,
+         "text": "电子发票在订单完成后 1 个工作日内开具，专票需 3 个工作日。"},
+        {"doc_id": "KB-29", "title": "发票规则（旧版）", "version": 1,
+         "text": "电子发票在订单完成后 10 个工作日内开具。"},
+    ],
+}
+
+# 真值：只看 version 最高的那份（工具不知道这条规则，模型必须自己比）
+HARD_KB_ANSWER = {}
+for _topic, _docs in HARD_KB.items():
+    _top = max(_docs, key=lambda d: d["version"])
+    _m = re.search(r"(\d+)\s*个?(?:工作日|天|个月)", _top["text"])
+    HARD_KB_ANSWER[_topic] = {"must": _m.group(0) if _m else "", "doc": _top["doc_id"]}
+
+HARD_AGENTS = ["calc", "xref"]
+
+
+def hard_tasks(agent_type):
+    if agent_type == "calc":
+        return [{"task_id": k, "goal": "按规则算出订单 %s 的应付总额" % k}
+                for k in HARD_ORDERS]
+    return [{"task_id": k, "goal": "按生效版本回答：%s" % k} for k in HARD_KB]
+
+
+def expected_hard_total(order_id):
+    """独立算：先满减、再会员折扣。顺序不能反 —— 反了结果就不一样。"""
+    o = HARD_ORDERS[order_id]
+    subtotal = sum(i["price"] * i["qty"] for i in o["items"])
+    after = subtotal - o["rebate"]["amount"] if subtotal >= o["rebate"]["threshold"] else subtotal
+    total = after * TIER_RATE[o["tier"]]
+    return {"subtotal": round(subtotal, 2),
+            "after_rebate": round(after, 2),
+            "total": round(total, 2)}
+
+
+def _tool_quote(args):
+    """只给原料：小计 + 规则，**不给总额**。
+
+    这是难度的来源：模型必须自己按「先满减后折扣」的顺序算。
+    以前的 pricing.calc_total 直接把 total 算好，模型抄一下就对 ——
+    那样测出来的 100% 只能说明它会搬运，不能说明它会计。
+    """
+    items = args.get("items") or []
+    rebate = args.get("rebate") or {}
+    tier = args.get("tier") or "none"
+    if not items or not isinstance(rebate, dict):
+        raise ValueError("缺少明细或满减规则")
+    subtotal = sum(float(i["price"]) * int(i["qty"]) for i in items)
+    return {"subtotal": round(subtotal, 2),
+            "rebate": {"threshold": float(rebate.get("threshold", 0)),
+                       "amount": float(rebate.get("amount", 0))},
+            "tier": tier,
+            "tier_rate": TIER_RATE.get(tier, 1.0),
+            "rule_order": "先满减，再乘会员折扣"}
+
+
+def _tool_quote_calc(args):
+    """旧接口，保留给 calc agent 显式要「只算小计」的场景。"""
+    items = args.get("items") or []
+    return {"subtotal": round(sum(float(i["price"]) * int(i["qty"]) for i in items), 2)}
+
+
+def _tool_kb_search_all(args):
+    """按主题返回**全部**历史版本，让模型自己比 version。
+
+    不能在这里挑最高版本 —— 那就是把答案算好了。
+    """
+    topic = args.get("topic", "")
+    docs = HARD_KB.get(topic)
+    if not docs:
+        raise KeyError("没有该主题的文档：%s" % topic)
+    return {"topic": topic, "docs": [dict(d) for d in docs]}
+
+
+def _tool_tier_lookup(args):
+    return {"customer_id": args.get("customer_id"),
+            "tier": HARD_ORDERS.get(args.get("order_id"), {}).get("tier", "none")}
+
+
+TOOLS.update({
+    "order.get_quote_order": {"fn": _tool_get_quote_order, "args": ["order_id"],
+                              "out_required": ["order_id", "items", "rebate", "tier"]},
+    "pricing.quote": {"fn": _tool_quote, "args": ["items", "rebate", "tier"],
+                      "out_required": ["subtotal", "tier_rate"]},
+    "pricing.subtotal": {"fn": _tool_quote_calc, "args": ["items"],
+                         "out_required": ["subtotal"]},
+    "kb.search_all": {"fn": _tool_kb_search_all, "args": ["topic"],
+                      "out_required": ["docs"]},
+    "crm.tier": {"fn": _tool_tier_lookup, "args": ["order_id", "customer_id"],
+                 "out_required": ["tier"]},
+})
+
+ANSWER_STEP.update({"calc": 9, "xref": 5})
+
+
+def hard_cases():
+    """hard suite 只用于评测，不进训练集（训练集保持 dev 划分不变）。
+
+    每个任务额外带一条 `fault_type="none"` 的对照 —— 那是**纯能力基线**：
+    没有任何故障时模型能不能算对。这个数字最重要：如果基线就不是 100%，
+    说明题目确实难住了模型，而不是恢复机制出了问题。
+    """
+    faults = {
+        "calc": ["tool_timeout", "tool_exception", "missing_field",
+                 "silent_corruption", "format_violation"],
+        "xref": ["tool_timeout", "retrieval_failure", "stale_data",
+                 "missing_field", "format_violation"],
+    }
+    out = []
+    for agent, fts in faults.items():
+        for t in hard_tasks(agent):
+            out.append({"agent_type": agent, "task_id": t["task_id"],
+                        "fault_type": "none", "seed": 7})
+            for ft in fts:
+                out.append({"agent_type": agent, "task_id": t["task_id"],
+                            "fault_type": ft, "seed": 7})
+    return out
+
+
+def hard_target(agent_type, fault_type):
+    """hard 任务的故障落点：calc 要在计价步打，xref 要在检索步打。"""
+    if fault_type == "silent_corruption":
+        return 4                      # pricing.quote 那一步
+    if fault_type in ("format_violation", "premature_termination"):
+        return ANSWER_STEP[agent_type]
+    if fault_type == "context_loss":
+        return 3
+    return 2
+
+
+def hard_stats():
+    c = hard_cases()
+    return {"cases": len(c),
+            "per_agent": {a: sum(1 for x in c if x["agent_type"] == a) for a in HARD_AGENTS}}

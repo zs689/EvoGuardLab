@@ -10,6 +10,8 @@
 其中 success 只反映「拿到的数据是否够用」，**不反映答案是否正确**。
 答案对不对由 evaluate 模块用真值判定 —— 这是防泄漏的关键分工。
 """
+import re
+
 import sim
 
 
@@ -118,10 +120,105 @@ def planner_agent(ctx):
             "expect": sim.expected_answer("planner", key), "reason": ""}
 
 
+def calc_agent(ctx):
+    """多步计算：工具只给原料（小计、满减规则、会员折扣率），总额要模型自己算。
+
+    与 order_agent 的关键差别：order_agent 里 `pricing.calc_total` 直接把 total
+    算好了，模型只是搬运工；这里**没有任何一步给出总额**，模型必须：
+      1) 判断小计够不够满减门槛
+      2) 先减、再乘会员折扣率（顺序反了结果不一样）
+      3) 自己写进答案
+    这才是真正会答错的题。
+    """
+    oid = ctx.task["task_id"]
+    o = sim.HARD_ORDERS[oid]
+
+    ctx.model("规划：取明细 -> 报价 -> 按规则算总额 -> 结算", tokens=56)
+
+    order = ctx.call("order.get_quote_order", {"order_id": oid})
+    if not isinstance(order, dict):
+        raise ctx.ToolError("invalid_output", "订单返回不是对象")
+
+    ctxo = ctx.context({"order_id": oid, "items": order.get("items")})
+    items = ctxo.get("items")
+    rebate = order.get("rebate") or o["rebate"]
+    tier = order.get("tier") or o["tier"]
+    if not items:
+        return {"success": False, "answer": None,
+                "expect": sim.expected_hard_total(oid),
+                "reason": "上下文缺少明细"}
+
+    quote = ctx.call("pricing.quote", {"items": items, "rebate": rebate, "tier": tier})
+    if not isinstance(quote, dict) or "subtotal" not in quote:
+        return {"success": False, "answer": None,
+                "expect": sim.expected_hard_total(oid), "reason": "没有拿到报价原料"}
+
+    ctxo2 = ctx.context({"quote": quote, "rule": "先满减，再乘会员折扣"})
+    q = ctxo2.get("quote") or {}
+    subtotal = q.get("subtotal")
+    if not isinstance(subtotal, (int, float)):
+        return {"success": False, "answer": None,
+                "expect": sim.expected_hard_total(oid), "reason": "报价里没有小计"}
+
+    # 把原料原样交给模型，总额由模型自己算（这里不替它算）
+    ctx.model("计算：按规则算出应付总额")
+    ans = ctx.answer(
+        "上下文：订单 %s\n"
+        "小计 %s 元｜满减规则：满 %s 减 %s 元｜会员等级 %s，折扣率 %s\n"
+        "规则顺序：先满减，再乘会员折扣。\n"
+        "请自己计算后输出 JSON：{\"order_id\": \"订单号\", \"total\": 应付总额（保留两位小数）}"
+        % (oid, subtotal, sim.HARD_ORDERS[oid]["rebate"]["threshold"],
+           sim.HARD_ORDERS[oid]["rebate"]["amount"], q.get("tier"),
+           q.get("tier_rate")),
+        {"order_id": oid, "total": None})     # 不喂答案：None 就是"你自己算"
+    return {"success": True, "answer": ans,
+            "expect": sim.expected_hard_total(oid), "reason": ""}
+
+
+def xref_agent(ctx):
+    """跨文档冲突：检索返回同一主题的**全部版本**，生效条款要模型自己比版本号。
+
+    以前 kb_agent 只拿到 1-2 份文档，模型抄最近那份就对。
+    这里故意返回三份不同版本，且真值只认 version 最高的那份 ——
+    不比较版本号就会答成 7 天或 15 天。
+    """
+    topic = ctx.task["task_id"]
+
+    ctx.model("规划：检索主题下的全部文档版本", tokens=48)
+
+    res = ctx.call("kb.search_all", {"topic": topic})
+    docs = res.get("docs") if isinstance(res, dict) else None
+    if not docs:
+        return {"success": False, "answer": None,
+                "expect": sim.expected_answer("xref", topic), "reason": "检索没有返回文档"}
+
+    ctxo = ctx.context({"topic": topic, "docs": docs})
+    visible = ctxo.get("docs") or []
+    if not visible:
+        return {"success": False, "answer": None,
+                "expect": sim.expected_answer("xref", topic), "reason": "上下文里没有文档"}
+
+    listing = "; ".join("[%s v%s] %s" % (d.get("doc_id"), d.get("version"), d.get("text"))
+                        for d in visible)
+    ctx.model("比较：找出生效版本（版本号最高者为准）")
+    ans = ctx.answer(
+        "上下文文档（同一主题的多个版本）：%s\n"
+        "问题：%s\n"
+        "判定规则：同一主题以版本号最高的文档为准。\n"
+        "请输出 JSON：{\"text\": 生效条款原文, \"cited\": [生效文档号]}"
+        % (listing, topic),
+        {"text": "", "cited": []})            # 不喂答案
+    return {"success": bool(ans.get("text")), "answer": ans,
+            "expect": sim.expected_answer("xref", topic),
+            "reason": "" if ans.get("text") else "没有给出结论"}
+
+
 AGENTS = {
     "order": order_agent,
     "kb": kb_agent,
     "planner": planner_agent,
+    "calc": calc_agent,
+    "xref": xref_agent,
 }
 
 
@@ -158,11 +255,24 @@ def is_correct(agent_type, answer, expect):
     """用真值判对错 —— 只有 evaluate 会调用它。"""
     if not isinstance(answer, dict) or expect is None:
         return False
-    if agent_type == "order":
+    if agent_type in ("order", "calc"):
         t = _num(answer.get("total"))
         return t is not None and abs(t - expect["total"]) < 0.02
     if agent_type == "kb":
         return _contains_bounded(answer.get("text") or "", expect["must"])
+    if agent_type == "xref":
+        # 两个都要对：条款必须是最新版的，引用的文档号也必须是那一份。
+        # 只对一半说明它蒙对了数字但没真正比版本 —— 那不算会做这道题。
+        text_ok = _contains_bounded(answer.get("text") or "", expect["must"])
+        # cited 要做「提取文档号」而不是精确相等：模型很自然会把版本号一起写进来
+        # （"KB-25 v5"），精确匹配会把做对的判成错的 —— 这个 bug 真踩过，
+        # 三条 xref 基线里两条因此被误判。
+        cited_ids = set()
+        for x in answer.get("cited") or []:
+            m = re.search(r"KB-\d+", str(x))
+            if m:
+                cited_ids.add(m.group(0))
+        return bool(text_ok and expect["doc"] in cited_ids)
     if agent_type == "planner":
         return list(answer.get("steps") or []) == expect["steps"]
     return False

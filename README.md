@@ -15,8 +15,8 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（32 个：24 个核心 + 8 个评测口径）
-python -m unittest tests.test_core tests.test_judgeability -v
+# 2) 回归测试（43 个：24 核心 + 9 评测口径 + 10 难度组）
+python -m unittest tests.test_core tests.test_judgeability tests.test_hard_tasks -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
 python ai-service/api/app.py           # http://127.0.0.1:8770
@@ -88,6 +88,32 @@ Web 看板是**原生 HTML/CSS/JS 单文件**，不引 CDN、不需要 Node 构�
 - **技能必须有作用域**：复合学到的链不能挂到单故障的键上，否则单故障用例会被套上多出来的一步
   （实测打挂 6 个用例）。现在技能带 `scope`，第 1 轮优先单故障技能、第 2 轮起优先多故障技能。
 
+### 难度组：第一次真正测到模型（工具只给原料）
+
+上面 204 例是**抽取式**任务 —— 工具把答案算好了，模型只要搬运，所以 936 次调用 0 次答错。
+那测的是恢复机制，不是模型。所以另开一组 `--suite hard`，把工具从「给答案」改成「给原料」：
+
+- `calc`：只给小计 + 满减门槛 + 会员折扣率，**不给总额**；模型必须按「先满减、再乘折扣」自己算。
+- `xref`：同一主题返回**三份不同版本**的文档，真值只认版本号最高那份；不比版本就会答成旧条款。
+
+| 指标 | 结果 |
+|---|---|
+| 纯能力基线（无故障，36 run） | **33.3%**（6 题只对 2 题） |
+| A 无恢复 | 5.6% |
+| B 固定规则 | 11.1% |
+| C 用经验不严格验证 | 22.2% |
+| D 完整闭环 | **22.2%** |
+
+三条读法：
+
+- **基线就是天花板**：没有任何故障时模型也只有 33.3%，因为 4 道题它真不会。
+  `calc` 三题全错，而且错法各不相同 —— 一题先乘折扣再满减（3820 vs 3724）、
+  一题直接把小计当总额（2855）、一题明明没到门槛却减了 100（650 vs 750）。
+- **恢复机制在这组上是真的有用**：5.6% → 22.2%，翻了 4 倍，但封顶在基线的 2/3 ——
+  剩下 1/3 是模型本身不会，恢复再好也救不回来。这个分解比 97.1% 有信息量。
+- **C = D 在这里打平不算治理无效**：难度组的 agent（`calc` / `xref`）在技能库里没有对应条目，
+  两套库都查不到 → C/D 都退化成规则表。这是设计使然，报告里写明了。
+
 ### 三个必须讲清楚的解释
 
 - **C = D = 100% 不代表「严格验证没用」**。规则表已覆盖全部单故障，技能在那上面增益为 0，
@@ -142,7 +168,8 @@ EvoGuardLab/
 ├── frontend/index.html      BoardUI 风格看板（双主题，零依赖）
 ├── tests/
 │   ├── test_core.py         24 个测试（对抗性投毒 / 策略链 / 不变量 / 技能定序与作用域）
-│   └── test_judgeability.py 8 个测试（可评口径：业务失败 vs 服务抖动）
+│   ├── test_judgeability.py 9 个测试（可评口径：业务失败 vs 服务抖动）
+│   └── test_hard_tasks.py   10 个测试（难度组真值可独立算 / 判定不误杀）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
@@ -226,6 +253,8 @@ python ai-service/real_model_train.py            # → data/library_d.db / libra
 python ai-service/real_model_bench.py --fresh    # 换过技能库就必须 --fresh，脚本会拦
 # 4. 归因：C/D 到底命中了哪条技能（解释数字用，不跑模型）
 python ai-service/real_model_attribution.py
+# 5. 难度组（多步计算 / 跨文档冲突），单独落盘到 experiments/real_model/hard/
+python ai-service/real_model_bench.py --suite hard --fresh
 ```
 
 产物：`experiments/real_model/{runs.jsonl, metrics.json, report.md, attribution.md}`，

@@ -109,6 +109,11 @@ def build_cases(suite):
     if suite in ("composite", "all"):
         for c in sim.composite_cases("test"):
             out.append(dict(c, suite="composite"))
+    if suite in ("hard", "all"):
+        # 难度组：多步计算 + 跨文档冲突。工具只给原料，答案要模型自己算/自己比。
+        # 单独成组而不是改现有 204 例 —— 改了就没法和历史数字比。
+        for c in sim.hard_cases():
+            out.append(dict(c, suite="hard"))
     return out
 
 
@@ -135,7 +140,7 @@ def load_checkpoint(fresh):
     return done
 
 
-def prepare_db():
+def prepare_db(db_path=None):
     """准备评测用的技能库，两种设置，报告里必须写清楚用的是哪一套。
 
     设置 A（双库，`real_model_train.py` 跑过就用这个）：
@@ -148,9 +153,10 @@ def prepare_db():
         从 mock 库复制 active 技能到一个库，C/D 共用。
         这时 C 与 D 的差别只剩「匹配条件宽不宽」，不是「验证严不严」。
     """
-    if os.path.exists(DB):
-        os.remove(DB)
-    store = core.Store(DB, fast=True)
+    db_path = db_path or DB
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    store = core.Store(db_path, fast=True)
     experience.ensure_schema(store)
     skills.ensure_schema(store)
 
@@ -384,7 +390,84 @@ def aggregate(done, cases, suite):
             "by_fault": by_fault, "D_failures": fails}
 
 
-def write_outputs(meta, single, composite, control, done, elapsed):
+def write_hard_report(meta, hard, done, elapsed):
+    """难度组单独出报告。
+
+    为什么不复用主报告的排版：主报告是「单故障 / 复合 / 难度」三段的固定结构，
+    只跑难度组时前两段全是 0 用例，会写成「0.0%」，读者会当成坏结果。
+    """
+    base = [r for k, r in done.items() if k.split("|")[3] == "none"]
+    base_ok = sum(1 for r in base if r["success"])
+    L = ["# 难度组评测报告（工具只给原料）", ""]
+    L.append("> 由 `ai-service/real_model_bench.py --suite hard` 生成。")
+    L.append("> 模型 `%s` ｜ 后端 `%s` ｜ 代码指纹 `%s`" % (
+        meta["model"], meta["backend"], meta["code_sha256"]))
+    L.append("")
+    L.append("## 一、这一组为什么存在")
+    L.append("")
+    L.append("原来的 204 例是**抽取式**任务：工具把答案算好了（`pricing.calc_total` 直接返回总额），")
+    L.append("模型只要搬运，所以 936 次调用 0 次答错 —— 那测的是恢复机制，不是模型。")
+    L.append("这一组把工具从「给答案」改成「给原料」：")
+    L.append("")
+    L.append("- `calc`：只返回小计、满减规则、会员折扣率，**不返回总额**。")
+    L.append("  模型必须自己判断是否达门槛，并按「先满减、再乘折扣」的顺序算 —— 顺序反了结果不同。")
+    L.append("- `xref`：同一主题返回**三份不同版本**的文档，真值只认版本号最高的那份。")
+    L.append("  不比较版本就会答成旧条款。")
+    L.append("")
+    L.append("| 项 | 值 |")
+    L.append("|---|---|")
+    L.append("| 用例数 | %d |" % hard.get("cases", 0))
+    L.append("| 完成 run 数 | %d |" % len(done))
+    L.append("| 总耗时 | %.1f 秒 |" % elapsed)
+    L.append("| 模型调用 | %d |" % hard.get("model_calls", 0))
+    L.append("")
+    L.append("## 二、纯能力基线：没有任何故障时，模型能不能做对")
+    L.append("")
+    L.append("这是最关键的对照。基线就不是 100% 的话，说明题目确实难住了模型 ——")
+    L.append("后面所有恢复机制的数字都要放在这个天花板下看。")
+    L.append("")
+    L.append("| 指标 | 值 |")
+    L.append("|---|---|")
+    L.append("| 无故障用例 | %d |" % len(base))
+    L.append("| 做对 | **%d**（%s%%） |" % (base_ok, pct(base_ok, len(base))))
+    L.append("")
+    L.append("## 三、四组对照（%d 用例）" % hard.get("cases", 0))
+    L.append("")
+    L.append("| 模式 | 成功/可评 | 不可评 | 成功率 |")
+    L.append("|---|---|---|---|")
+    for m in MODES:
+        r = hard["modes"][m]
+        L.append("| %s | %d/%d | %d | **%s%%** |"
+                 % (m, r["ok"], r["ok"] + r["failed"], r["unjudgeable"], r["rate"]))
+    L.append("")
+    L.append("> 这一组**没有 mock 基线**：mock 后端不会做算术、也不会比版本号，")
+    L.append("> 跑出来必然是 0%，拿它当基线只会误导。")
+    L.append("")
+    by = hard.get("by_fault") or {}
+    if by:
+        L.append("## 四、按故障类型（D 模式）")
+        L.append("")
+        L.append("| 故障 | 成功/可评 | 成功率 |")
+        L.append("|---|---|---|")
+        for f, b in sorted(by.items()):
+            judgeable = b["ok"] + b.get("failed", 0)
+            L.append("| %s | %d/%d | %s%% |"
+                     % (f, b["ok"], judgeable, pct(b["ok"], judgeable)))
+        L.append("")
+    L.append("## 五、读这组数字的规矩")
+    L.append("")
+    L.append("1. **先看基线**。基线是天，恢复机制只能把结果拉向基线，不可能越过它。")
+    L.append("2. **C 与 D 在这一组打平不代表治理无效**：难度组的 agent（`calc` / `xref`）没有对应技能，")
+    L.append("   两套库里都查不到，所以 C/D 实际都退化成规则表 —— 这是设计使然，要如实写。")
+    L.append("3. **故障类型之间不可比**：`retrieval_failure` 有恢复策略，`silent_corruption` 在数值场景下")
+    L.append("   只能靠独立验算，两者天花板本来就不同。")
+    L.append("")
+    with open(REPORT, "w", encoding="utf-8") as f:
+        f.write("\n".join(L))
+
+
+def write_outputs(meta, single, composite, control, done, elapsed, hard=None,
+                  hard_only=False):
     n_total = sum(len([1 for k in done if k.endswith("|" + m)]) for m in MODES)
     metrics = {
         "meta": meta,
@@ -393,6 +476,7 @@ def write_outputs(meta, single, composite, control, done, elapsed):
         "runs_completed": len(done),
         "single": single,
         "composite": composite,
+        "hard": hard,
         "grammar_control": control,
         "mock_baseline": {
             "source": "experiments/metrics.json（mock 闭环）",
@@ -402,6 +486,10 @@ def write_outputs(meta, single, composite, control, done, elapsed):
     }
     with open(METRICS, "w", encoding="utf-8") as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
+
+    if hard_only:
+        write_hard_report(meta, hard or {}, done, elapsed)
+        return metrics
 
     L = ["# 真实模型全量评测报告", ""]
     L.append("> 由 `ai-service/real_model_bench.py` 自动生成，数字全部来自本次运行。")
@@ -425,12 +513,20 @@ def write_outputs(meta, single, composite, control, done, elapsed):
                  % (sk.get("d"), sk.get("c")))
     else:
         L.append("| 技能库 | 单库（mock 迁移 %d 条，C/D 共用） |" % sk.get("shared", 0))
-    L.append("| 单故障用例 | %d |" % single["cases"])
-    L.append("| 复合故障用例 | %d |" % composite["cases"])
+    if single["cases"]:
+        L.append("| 单故障用例 | %d |" % single["cases"])
+    if composite["cases"]:
+        L.append("| 复合故障用例 | %d |" % composite["cases"])
+    if hard:
+        L.append("| 难度组用例 | %d |" % hard["cases"])
     L.append("| 完成 run 数 | %d |" % len(done))
     L.append("| 总耗时 | %.1f 秒 |" % elapsed)
-    L.append("| 模型调用次数 | %d |" % (single["model_calls"] + composite["model_calls"]))
+    _calls = single["model_calls"] + composite["model_calls"] + (hard["model_calls"] if hard else 0)
+    L.append("| 模型调用次数 | %d |" % _calls)
     L.append("")
+    has_llm_fail = sum(
+        (x["modes"][m].get("failures_with_llm_error") or 0)
+        for x in [single, composite] + ([hard] if hard else []) for m in MODES)
     L.append("## 二、四组对照（单故障，%d 用例）" % single["cases"])
     L.append("")
     L.append("| 模式 | 成功/可评 | 不可评 | 成功率 | 老口径(成功/总数) | mock 基线 | 差 |")
@@ -467,6 +563,39 @@ def write_outputs(meta, single, composite, control, done, elapsed):
     L.append("> **没有**测过复合的 A/B/C/D 四组对照，所以这里不填 mock 基线 —— ")
     L.append("> 填 0 会被误读成「mock 测出来是 0%」。")
     L.append("")
+    if hard:
+        L.append("## 三b、难度组（%d 用例）：工具只给原料，答案要模型自己算" % hard["cases"])
+        L.append("")
+        L.append("前两组是**抽取式**任务：工具把答案算好了，模型只要搬运，所以在它们上面")
+        L.append("模型几乎不会答错 —— 那测的是恢复机制，不是模型能力。这一组把工具从")
+        L.append("「给答案」改成「给原料」：")
+        L.append("")
+        L.append("- `calc`：只返回小计/满减规则/会员折扣率，**不返回总额**；模型必须按")
+        L.append("  「先满减、再乘折扣」的顺序自己算（顺序反了结果不同）。")
+        L.append("- `xref`：同一主题返回三份不同版本的文档，真值只认**版本号最高**的那份；")
+        L.append("  不比较版本就会答成 7 天或 15 天。")
+        L.append("")
+        L.append("| 模式 | 成功/可评 | 不可评 | 成功率 |")
+        L.append("|---|---|---|---|")
+        for m in MODES:
+            r = hard["modes"][m]
+            L.append("| %s | %d/%d | %d | **%s%%** |"
+                     % (m, r["ok"], r["ok"] + r["failed"], r["unjudgeable"], r["rate"]))
+        L.append("")
+        L.append("> 这一组**没有 mock 基线**：mock 后端不会做算术、也不会比版本号，")
+        L.append("> 跑出来必然是 0%，拿它当基线只会误导。")
+        L.append("")
+        by = hard["by_fault"]
+        if by:
+            L.append("按故障类型（D）：")
+            L.append("")
+            L.append("| 故障 | 成功/可评 | 成功率 |")
+            L.append("|---|---|---|")
+            for f, b in sorted(by.items()):
+                judgeable = b["ok"] + b.get("failed", 0)
+                L.append("| %s | %d/%d | %s%% |"
+                         % (f, b["ok"], judgeable, pct(b["ok"], judgeable)))
+            L.append("")
     L.append("## 四、模型行为（这才是真实模型评测的重点）")
     L.append("")
     L.append("- 单故障：`bad_model_output` %d 次，LLM 错误 %s" % (
@@ -555,7 +684,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--backend", default=os.environ.get("AGENTLAB_LLM", "ollama"))
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--suite", default="all", choices=["single", "composite", "all"])
+    ap.add_argument("--suite", default="all",
+                    choices=["single", "composite", "hard", "all"])
     ap.add_argument("--fresh", action="store_true")
     ap.add_argument("--skip-control", action="store_true")
     args = ap.parse_args()
@@ -565,6 +695,21 @@ def main():
     except Exception:
         pass
     os.makedirs(OUT, exist_ok=True)
+
+    # 难度组单独落盘、单独建库。
+    # 为什么必须隔离：write_outputs 会把 metrics.json 整个重写，跑子集 suite 时
+    # 单故障/复合两段会变成 n=0，把主结果写坏；而且 prepare_db 会清库，
+    # 把之前 936 个 run 的明细（attribution 要读）一起清掉。
+    hard_only = args.suite == "hard"
+    if hard_only:
+        global CHECKPOINT, REPORT, METRICS
+        hdir = os.path.join(OUT, "hard")
+        os.makedirs(hdir, exist_ok=True)
+        CHECKPOINT = os.path.join(hdir, "runs.jsonl")
+        REPORT = os.path.join(hdir, "report.md")
+        METRICS = os.path.join(hdir, "metrics.json")
+    db_path = os.path.join(ROOT, "data", "real_model_hard.db") if hard_only else DB
+
     os.environ["AGENTLAB_LLM"] = args.backend
     os.environ.setdefault("AGENTLAB_LLM_MODEL", "qwen3:4b")
     gateway.reset_cache()
@@ -596,7 +741,7 @@ def main():
               "experiments/real_model/archive_runN/", flush=True)
         return 2
 
-    store, skillset = prepare_db()
+    store, skillset = prepare_db(db_path)
     meta["skillset"] = skillset
     if skillset["kind"] == "two_libs":
         print("[√] 双库就绪：D 用严格库 %d 条（%s）｜ C 用放宽库 %d 条（%s）"
@@ -656,8 +801,10 @@ def main():
 
     single_cases = [c for c in cases if c["suite"] == "single"]
     comp_cases = [c for c in cases if c["suite"] == "composite"]
+    hard_cases = [c for c in cases if c["suite"] == "hard"]
     single = aggregate(done, single_cases, "single")
     composite = aggregate(done, comp_cases, "composite")
+    hard = aggregate(done, hard_cases, "hard") if hard_cases else None
 
     control = None
     if not args.skip_control:
@@ -665,14 +812,19 @@ def main():
         control = grammar_control(args)
 
     elapsed = time.time() - t_start
-    m = write_outputs(meta, single, composite, control, done, elapsed)
+    m = write_outputs(meta, single, composite, control, done, elapsed, hard,
+                      hard_only=hard_only)
     print("== 真实模型全量评测完成 ==", flush=True)
-    for suite, ag in (("单故障", single), ("复合故障", composite)):
+    rows = [("单故障", single), ("复合故障", composite)]
+    if hard:
+        rows.append(("难度组", hard))
+    for suite, ag in rows:
         print("  %s：" % suite + " / ".join(
             "%s %s%%" % (k, ag["modes"][k]["rate"]) for k in MODES), flush=True)
     print("  run 数 %d ｜ 耗时 %.1fs ｜ 模型调用 %d"
-          % (len(done), elapsed, single["model_calls"] + composite["model_calls"]),
-          flush=True)
+          % (len(done), elapsed,
+             single["model_calls"] + composite["model_calls"]
+             + (hard["model_calls"] if hard else 0)), flush=True)
     print("  报告 %s" % REPORT, flush=True)
     return 0
 
