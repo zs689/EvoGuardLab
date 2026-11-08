@@ -19,7 +19,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "ai-service"))
 
-from evoguard_inspect import loaders, report          # noqa: E402
+from evoguard_inspect import config, loaders, report   # noqa: E402
+from evoguard_inspect.rules import registry              # noqa: E402
 from evoguard_inspect.model import Step, Trace        # noqa: E402
 from evoguard_inspect.rules import trace_rules as R    # noqa: E402
 
@@ -44,8 +45,9 @@ class TestSyntheticHitsEveryRule(unittest.TestCase):
     def test_write_before_read(self):
         self.assertIn("write_before_read", self.hit)
 
-    def test_repeated_tool_call(self):
-        self.assertIn("repeated_tool_call", self.hit)
+    def test_loop_detected(self):
+        # 原名 repeated_tool_call，扩规则库时按「流程层」语义改名
+        self.assertIn("loop_detected", self.hit)
 
     def test_empty_answer(self):
         self.assertIn("empty_answer", self.hit)
@@ -148,7 +150,7 @@ class TestReportShape(unittest.TestCase):
         traces = load("trace_synthetic_bad.json")
         issues = R.check_all(traces)
         j = report.to_json(traces, issues)
-        self.assertEqual(j["traces"], 4)
+        self.assertEqual(j["traces"], 11, "合成夹具现在是 11 条轨迹")
         self.assertIn("by_severity", j["summary"])
         md = report.to_markdown(traces, issues)
         self.assertIn("Agent 离线检查报告", md)
@@ -158,6 +160,94 @@ class TestReportShape(unittest.TestCase):
         """零命中时必须说明「规则集覆盖不到的风险它报不出来」。"""
         md = report.to_markdown([], [])
         self.assertIn("不等于 Agent 没问题", md)
+
+
+class TestComplexAgent(unittest.TestCase):
+    """复杂 Agent 场景：多写操作、循环、PII、工具幻觉、token 爆炸、参数为空。
+
+    这些是「通用 Agent」才会遇到的形态，不是我这个 sim 特有的。
+    夹具里每条轨迹只坏一处，所以「命中」必须能对上具体那条。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cfg = config.load(os.path.join(FIX, "inspect_config.json"))
+        cls.traces = load("trace_synthetic_bad.json")
+        cls.issues = R.check_all(cls.traces, cls.cfg)
+        cls.by_trace = {}
+        for i in cls.issues:
+            cls.by_trace.setdefault(i["trace_id"], set()).add(i["rule_id"])
+
+    def _hit(self, tid, rid):
+        self.assertIn(rid, self.by_trace.get(tid, set()),
+                      "%s 应命中 %s，实际命中 %s" % (tid, rid, self.by_trace.get(tid)))
+
+    def test_pii_leak(self):
+        self._hit("t-pii-0005", "pii_leak")
+
+    def test_tool_name_unknown(self):
+        self._hit("t-badtool-0006", "tool_name_unknown")
+
+    def test_parallel_write_conflict(self):
+        self._hit("t-parallel-write-0007", "parallel_write_conflict")
+
+    def test_cycle_detected(self):
+        self._hit("t-cycle-0008", "cycle_detected")
+
+    def test_token_blowup(self):
+        self._hit("t-token-0009", "token_blowup")
+
+    def test_tool_arg_incomplete(self):
+        self._hit("t-argempty-0010", "tool_arg_incomplete")
+
+    def test_answer_schema_missing_with_config(self):
+        cfg = config.Config(expect_keys=["total"])
+        issues = R.check_all(self.traces, cfg)
+        ids = {i["rule_id"] for i in issues if i["trace_id"] == "t-schema-0011"}
+        self.assertIn("answer_schema_missing", ids)
+
+    def test_result_unused_does_not_flood(self):
+        """只有「产出了值却没被引用」才报 —— 第一版 11 条轨迹全命中，是没区分度。
+
+        回归断言：命中数不能超过轨迹数的一半，否则说明规则又变回噪音了。
+        """
+        n = len([i for i in self.issues if i["rule_id"] == "tool_result_unused"])
+        self.assertLessEqual(n, len(self.traces) // 2,
+                             "tool_result_unused 报了 %d 次，又开始刷屏了" % n)
+
+    def test_rule_library_shape(self):
+        """规则库必须分组、且每条都有误报说明 —— 没有它用户会把警告当铁证。"""
+        self.assertGreaterEqual(len(registry.RULES), 18)
+        for rid, m in registry.RULES.items():
+            self.assertIn(m["group"], registry.GROUPS, "%s 分组非法" % rid)
+            self.assertTrue(m["false_positive"], "%s 缺误报说明" % rid)
+            self.assertIn(m["severity"], ("error", "warn", "info"))
+
+    def test_group_filter(self):
+        only_flow = registry.select(groups=["flow"])
+        self.assertTrue(only_flow)
+        issues = R.check_all(self.traces, self.cfg, only_flow)
+        self.assertEqual({i["group"] for i in issues}, {"flow"})
+
+    def test_config_rejects_unknown_key(self):
+        """配置拼错的键必须报错，静默忽略会让人以为规则生效了。"""
+        import tempfile
+        fd, p = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        try:
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"write_tool": ["x"]}, f)   # 故意少个 s
+            with self.assertRaises(ValueError):
+                config.load(p)
+        finally:
+            os.unlink(p)
+
+    def test_write_detection_uses_config(self):
+        """写操作识别必须走配置：换个 Agent 工具名不一样，硬编码就没用了。"""
+        cfg = config.Config(write_tools=["billing.charge"], read_only_tools=["kb.search"])
+        self.assertTrue(cfg.is_write("billing.charge"))
+        self.assertFalse(cfg.is_write("kb.search"))
+        self.assertTrue(config.Config().is_write("order.settle"), "关键词兜底要生效")
 
 
 if __name__ == "__main__":

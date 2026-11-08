@@ -1,0 +1,34 @@
+{
+  "write_tools": [
+    "order.settle",
+    "refund.create"
+  ],
+  "write_hints": [
+    "settle",
+    "write",
+    "delete",
+    "update",
+    "create",
+    "refund",
+    "submit",
+    "send",
+    "pay",
+    "transfer"
+  ],
+  "read_only_tools": [
+    "kb.search",
+    "order.get_order",
+    "task.make_plan"
+  ],
+  "allowed_tools": [
+    "kb.search",
+    "order.get_order",
+    "order.settle",
+    "task.make_plan"
+  ],
+  "expect_keys": [],
+  "max_repeat": 3,
+  "token_budget": 2000,
+  "slow_step_ms": 30000,
+  "check_pii": true
+}

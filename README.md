@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（69 个：24 核心 + 9 评测口径 + 19 难度组 + 17 检查器）
+# 2) 回归测试（81 个：24 核心 + 9 评测口径 + 19 难度组 + 29 检查器）
 python -m unittest tests.test_core tests.test_judgeability \
     tests.test_hard_tasks tests.test_inspect -v
 
@@ -150,7 +150,10 @@ xref 的「比版本号而不是比命中位置」）—— 那是下一步，�
 
 ```bash
 cd ai-service
+python -m evoguard_inspect.cli --list-rules                      # 看规则库
 python -m evoguard_inspect.cli --trace trace.json --out ../experiments/inspect
+python -m evoguard_inspect.cli --trace t.json --config inspect.json   # 适配别的 Agent
+python -m evoguard_inspect.cli --trace t.json --group tool flow       # 只看某几组
 ```
 
 **输入格式**（自动识别，认不出就明确报错，不静默返回空）：
@@ -161,31 +164,48 @@ python -m evoguard_inspect.cli --trace trace.json --out ../experiments/inspect
 | LangSmith | `{"runs": [...]}` | `run_type` 为 `llm` / `tool` 的记录 |
 
 接 OTel 而不是给每个框架写适配器，是因为它是目前唯一被多框架同时采纳的标准。
-接住一个标准，等于接住大半个生态。
 
-**5 条规则**（全部确定性，不调用模型）：
+**规则库 19 条，分 5 组**（全部确定性，不调用模型）：
 
-| 规则 | 严重度 | 查什么 |
+| 分组 | 条数 | 查什么 |
 |---|---|---|
-| `empty_answer` | error | 宣称完成但没有产出答案 |
-| `error_swallowed` | error | 工具报错后没重试就给出了最终答案 |
-| `hallucinated_number` | warn | 答案里的数字不在任何**工具输出**里 |
-| `write_before_read` | warn | 第一次调用就是写操作，之前没读状态 |
-| `repeated_tool_call` | warn | 同工具同参数被调用 ≥3 次 |
+| `answer` 输出层 | 5 | 空答案、缺约定字段、数字/标识无出处、PII 泄漏 |
+| `tool` 工具层 | 6 | 报错被吞、零工具调用、参数为空、结果未被引用、参数与上游不符、工具名幻觉 |
+| `flow` 流程层 | 4 | 写前不读、同参数重试、A→B→A→B 循环、无有效结果就下定论 |
+| `resource` 资源层 | 2 | token 超预算、单步异常慢 |
+| `structure` 结构层 | 2 | 模型报错仍出答案、相邻两次写操作 |
+
+分组的用处是**排查顺序**：先看输出层（结论错了），再往工具层/流程层倒推原因。
+
+**泛用性靠配置，不靠改代码**（`--config`，JSON）：
+
+```json
+{"write_tools": ["order.settle"], "read_only_tools": ["kb.search"],
+ "allowed_tools": ["kb.search", "order.get_order"], "expect_keys": ["total"],
+ "max_repeat": 3, "token_budget": 20000, "slow_step_ms": 30000, "check_pii": true}
+```
+
+写操作识别、工具白名单、答案契约、预算阈值全部可配 —— 否则规则里写死「settle 是写操作」，
+换个 Agent 全是误报。配置写错键名会**直接报错**，不静默忽略。
 
 **怎么验证它不是摆设**（这一点比规则本身重要）：
 
 | 夹具 | 来源 | 期望 | 实测 |
 |---|---|---|---|
-| `trace_synthetic_bad.json` | 合成，四类错误各一条 | 5 条规则全命中 | 5/5 命中 |
+| `trace_synthetic_bad.json`（11 条轨迹） | 合成，每条只坏一处 | 各规则能对上具体那条 | 12 条规则命中 |
 | `trace_clean.json` | 真实成功轨迹 | 零命中 | 0 条 |
 | `trace_retry_ok.json` | 真实「工具报错后重试成功」 | **不许**报 `error_swallowed` | 未报 |
 | `trace_hallucination.json` | 真实工具输出幻觉 | 命中 `hallucinated_number` | 命中 |
 
 只测命中，规则可以乱报；只测不误报，规则可以什么都不报。所以两类一起测。
 
-**已知误报（报告里会逐条显示）**：`hallucinated_number` 抓不到「算出来的数字」
-（比如小计×折扣），所以它只报警不判错，必须人工核实。
+**误报是这类工具的头号死因，所以每条规则都必须写「什么时候会误报」**，
+报告会把它印在每条问题下面。没有误报说明的规则不允许入库（注册时直接抛错）。
+
+第一版 `tool_result_unused` 拿整个 JSON 的 token 做交集，11 条轨迹全命中 ——
+因为 JSON 的 key（items / docs / ok）本来就不会出现在答案里。这种规则没有区分度，
+只能制造噪音。改成「只看值、且要求返回有实质内容」后降到 5 条，并加了回归断言
+（命中数不得超过轨迹数一半）。
 
 ### 三个必须讲清楚的解释
 
@@ -243,7 +263,7 @@ EvoGuardLab/
 │   ├── test_core.py         24 个测试（对抗性投毒 / 策略链 / 不变量 / 技能定序与作用域）
 │   ├── test_judgeability.py 9 个测试（可评口径：业务失败 vs 服务抖动）
 │   ├── test_hard_tasks.py   19 个测试（真值可独立算 / 判定不误杀 / 训练集与评测集不相交）
-│   └── test_inspect.py      17 个测试（合成夹具全命中 / 干净轨迹零误报 / 两种格式）
+│   └── test_inspect.py      29 个测试（规则全命中 / 零误报 / 配置适配 / 分组过滤）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
