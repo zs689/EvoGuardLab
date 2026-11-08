@@ -40,10 +40,16 @@ class TestJudgeRun(unittest.TestCase):
         self.assertEqual(B.judge_run(row(success=False, err="ValueError: x")),
                          B.UNJUDGEABLE)
 
-    def test_llm_service_error_is_unjudgeable(self):
-        """模型服务报错、答案根本没产出 → 不可评。"""
+    def test_llm_service_error_still_counts_as_failure(self):
+        """模型报错但 run 跑完、有答案 → 仍算业务失败，不许剔出分母。
+
+        这条断言是改过方向的。第一版写成「有 E_LLM_* 就是不可评」，
+        结果实测 15 条失败被剔掉了分母 —— 而逐条查轨迹发现：
+        那些 run 全都有答案，失败原因在注入的故障上（规则表无策略、计划本身错），
+        模型那步报不报错结果都一样。用「服务抖了」洗白真实失败，比不修口径更糟。
+        """
         self.assertEqual(B.judge_run(row(success=False, llm=["E_LLM_UNREACHABLE"])),
-                         B.UNJUDGEABLE)
+                         B.FAILED)
 
     def test_bad_model_output_still_counts(self):
         """模型吐出非 JSON 是模型质量问题，**不能**借「不可评」洗掉。"""
@@ -71,9 +77,9 @@ class TestAggregateRate(unittest.TestCase):
         return done, cases
 
     def test_unjudgeable_removed_from_denominator(self):
-        # 3 个成功 + 1 个业务失败 + 1 个服务挂了
+        # 3 个成功 + 1 个业务失败 + 1 个框架异常（run 没跑完）
         rows = [row(success=True), row(success=True), row(success=True),
-                row(success=False), row(success=False, llm=["E_LLM_DOWN"])]
+                row(success=False), row(success=False, err="ValueError: boom")]
         done, cases = self._done(rows)
         d = B.aggregate(done, cases, "single")["modes"]["D"]
         self.assertEqual(d["n"], 5)
@@ -83,6 +89,16 @@ class TestAggregateRate(unittest.TestCase):
         self.assertEqual(d["rate"], 75.0, "可评口径 = 3/(3+1)")
         self.assertEqual(d["rate_raw"], 60.0, "老口径 = 3/5，保留做对比")
         self.assertEqual(d["judgeable_rate"], 80.0)
+
+    def test_llm_error_not_removed_but_counted(self):
+        """伴随模型报错的失败仍进分母，但要单独计数供审计。"""
+        rows = [row(success=True), row(success=False, llm=["E_LLM_HTTP"])]
+        done, cases = self._done(rows)
+        d = B.aggregate(done, cases, "single")["modes"]["D"]
+        self.assertEqual(d["failed"], 1)
+        self.assertEqual(d["unjudgeable"], 0, "模型报错不算不可评")
+        self.assertEqual(d["rate"], 50.0)
+        self.assertEqual(d["failures_with_llm_error"], 1, "必须留下审计痕迹")
 
     def test_all_judgeable_when_no_service_errors(self):
         rows = [row(success=True), row(success=False)]

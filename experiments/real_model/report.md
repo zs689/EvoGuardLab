@@ -25,15 +25,19 @@
 
 | 模式 | 成功/可评 | 不可评 | 成功率 | 老口径(成功/总数) | mock 基线 | 差 |
 |---|---|---|---|---|---|---|
-| A | 0/200 | 4 | **0.0%** | 0.0% | 0.0% | 0.0 pp |
-| B | 54/201 | 3 | **26.9%** | 26.5% | 26.5% | 0.4 pp |
+| A | 0/204 | 0 | **0.0%** | 0.0% | 0.0% | 0.0 pp |
+| B | 54/204 | 0 | **26.5%** | 26.5% | 26.5% | 0.0 pp |
 | C | 204/204 | 0 | **100.0%** | 100.0% | 100.0% | 0.0 pp |
-| D | 198/201 | 3 | **98.5%** | 97.1% | 100.0% | -1.5 pp |
+| D | 198/204 | 0 | **97.1%** | 97.1% | 100.0% | -2.9 pp |
 
-> **口径**：成功率的分母只算「可评」的 run，即剔掉**框架异常**与**模型服务报错（E_LLM_*）导致答案根本没产出**的样本。
-> 这类 run 说明的是「评测条件受损」，不是「Agent 质量下降」；混进分母会把服务抖动写成模型退化（本项目真踩过：Ollama 挂掉时 grammar 对照被算成「0/6 严格 JSON」）。
-> `bad_model_output`（模型吐出非 JSON）**不**算不可评 —— 那是模型质量问题，必须计分。
-> 全量可评率：单故障 **98.8%**、复合 **95.8%**。
+> **口径**：只有**框架异常**（run 根本没跑完）才判不可评、剔出分母。
+> 模型报错（`E_LLM_*`）**不剔** —— 只要 run 跑完、有答案，就计失败。
+> 这一条是查出来的，不是拍出来的：本轮 15 条失败伴随模型报错，逐条看轨迹后发现它们全都有答案，
+> 失败原因在注入的故障上（如 `incorrect_planning` 让工具返回倒序计划、规则表又无策略 → 转人工），
+> 模型那步报不报错结果都一样。把这类剔出分母，等于用「服务抖了一下」洗白真实失败。
+> 伴随模型报错的失败条数单独记在 `failures_with_llm_error`（本轮 D 为 3 条），**不动分母**。
+> `bad_model_output`（模型吐出非 JSON）一律计分 —— 那是模型质量问题，不许剔。
+> 全量可评率：单故障 **100.0%**、复合 **100.0%**（本轮无框架异常）。
 
 ## 三、复合故障（30 用例）
 
@@ -41,7 +45,7 @@
 |---|---|---|---|---|
 | A | 0/30 | 0 | **0.0%** | 0.0% |
 | B | 0/30 | 0 | **0.0%** | 0.0% |
-| C | 0/25 | 5 | **0.0%** | 0.0% |
+| C | 0/30 | 0 | **0.0%** | 0.0% |
 | D | 30/30 | 0 | **100.0%** | 100.0% |
 
 > mock 闭环在复合故障上只测过 **A / 最优单策略 / 两步链 / D** 四组
@@ -72,11 +76,11 @@
 | Agent | 任务 | 故障 | 定性 | 诊断链 | 恢复链 | 答案 |
 |---|---|---|---|---|---|---|
 | planner | release | incorrect_planning | failed | incorrect_planning | human_takeover | {'steps': ['灰度发布', '生成变更说明', '跑回归测试', '冻结代码']} |
-| planner | refund | incorrect_planning | unjudgeable | incorrect_planning | human_takeover | {'steps': ['财务退款', '生成退货单', '确认退货原因', '核对订单']} |
-| planner | procurement | incorrect_planning | unjudgeable | incorrect_planning | human_takeover | {'steps': ['下单验收', '提交审批', '三家比价', '汇总需求']} |
+| planner | refund | incorrect_planning | failed | incorrect_planning | human_takeover | {'steps': ['财务退款', '生成退货单', '确认退货原因', '核对订单']} |
+| planner | procurement | incorrect_planning | failed | incorrect_planning | human_takeover | {'steps': ['下单验收', '提交审批', '三家比价', '汇总需求']} |
 | planner | incident | incorrect_planning | failed | incorrect_planning | human_takeover | {'steps': ['复盘归档', '定位根因', '止血', '确认故障范围']} |
 | planner | audit | incorrect_planning | failed | incorrect_planning | human_takeover | {'steps': ['整改跟踪', '出具报告', '抽样检查', '准备资料']} |
-| planner | training | incorrect_planning | unjudgeable | incorrect_planning | human_takeover | {'steps': ['归档成绩', '组织考核', '邀请讲师', '确定课表']} |
+| planner | training | incorrect_planning | failed | incorrect_planning | human_takeover | {'steps': ['归档成绩', '组织考核', '邀请讲师', '确定课表']} |
 
 ## 六、按故障类型看 D 成功率（可评口径）
 
@@ -84,7 +88,7 @@
 |---|---|---|---|
 | context_loss | 18/18 | 0 | 100.0% |
 | format_violation | 18/18 | 0 | 100.0% |
-| incorrect_planning | 0/3 | 3 | 0.0% |
+| incorrect_planning | 0/6 | 0 | 0.0% |
 | invalid_json | 18/18 | 0 | 100.0% |
 | missing_field | 18/18 | 0 | 100.0% |
 | premature_termination | 18/18 | 0 | 100.0% |

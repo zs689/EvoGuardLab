@@ -70,19 +70,21 @@ PASSED, FAILED, UNJUDGEABLE = "passed", "failed", "unjudgeable"
 def judge_run(r):
     """给 run 定性：passed / failed / unjudgeable。
 
-    failed      = 业务失败：评测条件完好，产出就是不对，必须计入分母。
-    unjudgeable = 评测条件受损：
-                  a) 框架抛异常（err 非空）——评测没跑完；
-                  b) 模型服务报错（E_LLM_*）——答案根本没产出。
+    **只有「框架异常」算不可评**（`error` 非空 = run 根本没跑完，无法评判）。
 
-    刻意**不**把 bad_model_output 算成 unjudgeable：模型输出了非 JSON 是模型质量问题，
-    必须计分，否则「格式违规」这个故障类型会被自动洗白。
+    刻意**不**把 E_LLM_* 算进来。这一版改过两次，原因是实测数据打脸：
+    有 15 条失败伴随模型报错，但逐条看轨迹后发现它们**都有答案**、
+    且失败原因在注入的故障上（比如 `incorrect_planning` 让工具返回倒序计划，
+    规则表又没有对应策略 → human_takeover；模型那步报没报错，结果都一样）。
+    把这类剔出分母，等于用「服务抖了一下」洗白真实失败 —— 这是最典型的
+    指标自欺，比不修口径坏得多。
+
+    模型报错的数量单独统计（`failures_with_llm_error`）供审计，但**不动分母**。
+    `bad_model_output`（模型吐出非 JSON）同样计 failed，那是模型质量问题。
     """
     if r.get("success"):
         return PASSED
     if r.get("error"):
-        return UNJUDGEABLE
-    if r.get("llm_errors"):
         return UNJUDGEABLE
     return FAILED
 
@@ -295,14 +297,14 @@ def grammar_control(args):
         out["strict_ok"] += 1 if ok else 0
         out["latency_ms_total"] += lat
         out["samples"].append({"strict": ok, "latency_ms": lat, "head": head})
-    out["strict_rate"] = pct(out["strict_ok"], out["n"])
     out["avg_latency_ms"] = round(out["latency_ms_total"] / max(1, out["n"]), 1)
-    # 调用失败 ≠ 输出不严格。服务挂掉时「0/6 严格 JSON」是个假结论，
-    # 必须先扣掉不可评的次数，剩下的才是「模型真的没按格式输出」。
+    # 调用失败 ≠ 输出不严格。服务挂掉时「0/6 严格 JSON」是个假结论。
+    # 如果**全部**调用都失败，这一批就根本没有数据，不能输出任何比率（输出 0% 会被当成结论）。
     call_err = sum(out["errors"].values())
     out["call_errors"] = call_err
     out["judgeable"] = out["n"] - call_err
-    out["strict_rate"] = pct(out["strict_ok"], out["judgeable"])
+    out["valid"] = out["judgeable"] > 0
+    out["strict_rate"] = pct(out["strict_ok"], out["judgeable"]) if out["valid"] else None
     out["strict_rate_all"] = pct(out["strict_ok"], out["n"])
     out["error_rate"] = pct(call_err, out["n"])
     return out
@@ -317,11 +319,16 @@ def aggregate(done, cases, suite):
         verdicts = [judge_run(r) for r in rows]
         unj = sum(1 for v in verdicts if v == UNJUDGEABLE)
         fail = sum(1 for v in verdicts if v == FAILED)
+        # 审计用：失败里有多少条伴随模型报错。**不影响分母** ——
+        # 只要 run 跑完了、有答案，就得算失败（见 judge_run 的注释）。
+        with_llm = sum(1 for r in rows
+                       if judge_run(r) == FAILED and r.get("llm_errors"))
         res[m] = {
             "n": n,
             "ok": ok,
             "failed": fail,
             "unjudgeable": unj,
+            "failures_with_llm_error": with_llm,
             # 主口径：只在「可评」的样本上算成功率。
             # rate_raw 是老口径（ok/n），保留下来做对比，让读者自己看到差异有多大。
             "rate": pct(ok, ok + fail),
@@ -435,13 +442,15 @@ def write_outputs(meta, single, composite, control, done, elapsed):
             m, r["ok"], r["ok"] + r["failed"], r["unjudgeable"], r["rate"],
             r["rate_raw"], mk[m], round(r["rate"] - mk[m], 1)))
     L.append("")
-    L.append("> **口径**：成功率的分母只算「可评」的 run，"
-             "即剔掉**框架异常**与**模型服务报错（E_LLM_*）导致答案根本没产出**的样本。")
-    L.append("> 这类 run 说明的是「评测条件受损」，不是「Agent 质量下降」；"
-             "混进分母会把服务抖动写成模型退化（本项目真踩过："
-             "Ollama 挂掉时 grammar 对照被算成「0/6 严格 JSON」）。")
-    L.append("> `bad_model_output`（模型吐出非 JSON）**不**算不可评 —— 那是模型质量问题，必须计分。")
-    L.append("> 全量可评率：单故障 **%s%%**、复合 **%s%%**。" % (
+    L.append("> **口径**：只有**框架异常**（run 根本没跑完）才判不可评、剔出分母。")
+    L.append("> 模型报错（`E_LLM_*`）**不剔** —— 只要 run 跑完、有答案，就计失败。")
+    L.append("> 这一条是查出来的，不是拍出来的：本轮 15 条失败伴随模型报错，逐条看轨迹后发现它们全都有答案，")
+    L.append("> 失败原因在注入的故障上（如 `incorrect_planning` 让工具返回倒序计划、规则表又无策略 → 转人工），")
+    L.append("> 模型那步报不报错结果都一样。把这类剔出分母，等于用「服务抖了一下」洗白真实失败。")
+    L.append("> 伴随模型报错的失败条数单独记在 `failures_with_llm_error`（本轮 D 为 %d 条），**不动分母**。"
+             % single["modes"]["D"].get("failures_with_llm_error", 0))
+    L.append("> `bad_model_output`（模型吐出非 JSON）一律计分 —— 那是模型质量问题，不许剔。")
+    L.append("> 全量可评率：单故障 **%s%%**、复合 **%s%%**（本轮无框架异常）。" % (
         single.get("judgeable_rate"), composite.get("judgeable_rate")))
     L.append("")
     L.append("## 三、复合故障（%d 用例）" % composite["cases"])
@@ -470,16 +479,21 @@ def write_outputs(meta, single, composite, control, done, elapsed):
     if control:
         L.append("### 无 grammar 约束对照（%d 次独立调用）" % control["n"])
         L.append("")
-        L.append("| 指标 | 值 |")
-        L.append("|---|---|")
-        L.append("| 严格 JSON 成功率（可评口径） | **%s%%**（%d/%d） |" % (
-            control["strict_rate"], control["strict_ok"],
-            control.get("judgeable", control["n"])))
-        L.append("| 调用失败（不计入分母） | %d 次 %s |" % (
-            control.get("call_errors", 0), control["errors"] or ""))
-        L.append("| 老口径（成功/总调用） | %s%% |" % control.get("strict_rate_all",
-                                                                control["strict_rate"]))
-        L.append("| 平均延迟 | %s ms |" % control["avg_latency_ms"])
+        if control.get("valid") is False:
+            L.append("**本批次无效**：%d 次调用全部失败（%s）。"
+                     "不能据此得出「严格 JSON 成功率 0%%」—— 那是服务没起来，不是模型不守格式。"
+                     % (control["n"], control["errors"]))
+        else:
+            L.append("| 指标 | 值 |")
+            L.append("|---|---|")
+            L.append("| 严格 JSON 成功率（可评口径） | **%s%%**（%d/%d） |" % (
+                control["strict_rate"], control["strict_ok"],
+                control.get("judgeable", control["n"])))
+            L.append("| 调用失败（不计入分母） | %d 次 %s |" % (
+                control.get("call_errors", 0), control["errors"] or ""))
+            L.append("| 老口径（成功/总调用） | %s%% |" % control.get("strict_rate_all",
+                                                                    control["strict_rate"]))
+            L.append("| 平均延迟 | %s ms |" % control["avg_latency_ms"])
         L.append("")
         L.append("> 这一组是必需的：`format=json` 的 grammar 约束**从模型侧消除了自然格式违规**，")
         L.append("> 所以主实验里 `format_violation` 只能靠注入产生，不能声称测到了模型真实犯错率。")

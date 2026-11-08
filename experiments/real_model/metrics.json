@@ -57,7 +57,7 @@
       "c_path": "library_c.db"
     }
   },
-  "finished_at": 1794098733.862,
+  "finished_at": 1794099196.558,
   "elapsed_s": 654.6,
   "runs_completed": 936,
   "single": {
@@ -67,26 +67,29 @@
       "A": {
         "n": 204,
         "ok": 0,
-        "failed": 200,
-        "unjudgeable": 4,
+        "failed": 204,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 4,
         "rate": 0.0,
         "rate_raw": 0.0,
-        "judgeable_rate": 98.0
+        "judgeable_rate": 100.0
       },
       "B": {
         "n": 204,
         "ok": 54,
-        "failed": 147,
-        "unjudgeable": 3,
-        "rate": 26.9,
+        "failed": 150,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 3,
+        "rate": 26.5,
         "rate_raw": 26.5,
-        "judgeable_rate": 98.5
+        "judgeable_rate": 100.0
       },
       "C": {
         "n": 204,
         "ok": 204,
         "failed": 0,
         "unjudgeable": 0,
+        "failures_with_llm_error": 0,
         "rate": 100.0,
         "rate_raw": 100.0,
         "judgeable_rate": 100.0
@@ -94,15 +97,16 @@
       "D": {
         "n": 204,
         "ok": 198,
-        "failed": 3,
-        "unjudgeable": 3,
-        "rate": 98.5,
+        "failed": 6,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 3,
+        "rate": 97.1,
         "rate_raw": 97.1,
-        "judgeable_rate": 98.5
+        "judgeable_rate": 100.0
       }
     },
-    "judgeable_rate": 98.8,
-    "unjudgeable": 10,
+    "judgeable_rate": 100.0,
+    "unjudgeable": 0,
     "errors": {},
     "llm_errors": {
       "E_LLM_HTTP": 16
@@ -194,8 +198,8 @@
       "incorrect_planning": {
         "n": 6,
         "ok": 0,
-        "failed": 3,
-        "unjudgeable": 3
+        "failed": 6,
+        "unjudgeable": 0
       }
     },
     "D_failures": [
@@ -216,7 +220,7 @@
         "agent": "planner",
         "task": "refund",
         "fault": "incorrect_planning",
-        "verdict": "unjudgeable",
+        "verdict": "failed",
         "root_causes": [
           "incorrect_planning"
         ],
@@ -229,7 +233,7 @@
         "agent": "planner",
         "task": "procurement",
         "fault": "incorrect_planning",
-        "verdict": "unjudgeable",
+        "verdict": "failed",
         "root_causes": [
           "incorrect_planning"
         ],
@@ -268,7 +272,7 @@
         "agent": "planner",
         "task": "training",
         "fault": "incorrect_planning",
-        "verdict": "unjudgeable",
+        "verdict": "failed",
         "root_causes": [
           "incorrect_planning"
         ],
@@ -288,6 +292,7 @@
         "ok": 0,
         "failed": 30,
         "unjudgeable": 0,
+        "failures_with_llm_error": 0,
         "rate": 0.0,
         "rate_raw": 0.0,
         "judgeable_rate": 100.0
@@ -297,6 +302,7 @@
         "ok": 0,
         "failed": 30,
         "unjudgeable": 0,
+        "failures_with_llm_error": 0,
         "rate": 0.0,
         "rate_raw": 0.0,
         "judgeable_rate": 100.0
@@ -304,24 +310,26 @@
       "C": {
         "n": 30,
         "ok": 0,
-        "failed": 25,
-        "unjudgeable": 5,
+        "failed": 30,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 5,
         "rate": 0.0,
         "rate_raw": 0.0,
-        "judgeable_rate": 83.3
+        "judgeable_rate": 100.0
       },
       "D": {
         "n": 30,
         "ok": 30,
         "failed": 0,
         "unjudgeable": 0,
+        "failures_with_llm_error": 0,
         "rate": 100.0,
         "rate_raw": 100.0,
         "judgeable_rate": 100.0
       }
     },
-    "judgeable_rate": 95.8,
-    "unjudgeable": 5,
+    "judgeable_rate": 100.0,
+    "unjudgeable": 0,
     "errors": {},
     "llm_errors": {
       "E_LLM_DOWN": 4,
