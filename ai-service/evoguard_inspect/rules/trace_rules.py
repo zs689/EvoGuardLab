@@ -244,20 +244,27 @@ def rule_tool_result_unused(trace, cfg=DEFAULT):
 def rule_dependency_mismatch(trace, cfg=DEFAULT):
     out = []
     tools = trace.tools()
+    # 合法来源不止「上一个工具」：用户问题里的词、模型 prompt 里的约束，
+    # 都可以直接变成下游参数（搜索词最典型）。漏掉这一层，
+    # 每个带检索的 Agent 都会被误报一次。
+    oracle = " ".join([str(getattr(trace, "task", "") or "")]
+                      + [c.text() for c in trace.chats()]
+                      + [json.dumps(c.args, ensure_ascii=False)
+                         for c in trace.chats() if c.args])
     for i, s in enumerate(tools):
         if not isinstance(s.args, dict) or not s.args:
             continue
-        before = " ".join(t.text() for t in tools[:i])
-        if not before:
+        before = " ".join(t.text() for t in tools[:i]) + " " + oracle
+        if not before.strip():
             continue
         for k, v in s.args.items():
             if not isinstance(v, str) or len(v) < 4:
                 continue
             if v not in before:
                 out.append(_issue("dependency_mismatch", trace, step=s,
-                                  detail="%s 的参数 %s=%r 在上游输出里找不到"
+                                  detail="%s 的参数 %s=%r 在工具输出、用户问题与模型输入里都找不到"
                                          % (s.tool or s.name, k, v[:40]),
-                                  fix="参数要从上游结果里取；构造型参数请在 Agent 里显式记录来源"))
+                                  fix="参数要从上游结果或用户输入里取；构造型参数请在 Agent 里显式记录来源"))
                 break
     return out
 

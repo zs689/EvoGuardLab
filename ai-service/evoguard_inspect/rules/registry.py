@@ -42,6 +42,11 @@ def meta_of(rule_id):
 
 def select(groups=None, only=None, skip=None):
     """按分组 / 白名单 / 黑名单挑规则，给 CLI 的 --group/--only/--skip 用。"""
+    return [RULES[rid]["fn"] for rid in select_ids(groups, only, skip)]
+
+
+def select_ids(groups=None, only=None, skip=None):
+    """与 select 同条件，但返回规则 id —— 覆盖统计要按 id 报。"""
     out = []
     for rid, m in RULES.items():
         if groups and m["group"] not in groups:
@@ -50,5 +55,6 @@ def select(groups=None, only=None, skip=None):
             continue
         if skip and rid in skip:
             continue
-        out.append(m["fn"])
+        out.append(rid)
     return out
+

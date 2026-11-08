@@ -318,5 +318,100 @@ class TestCaseRules(unittest.TestCase):
                 self.assertTrue(i["detail"], "%s 缺事实描述" % i["rule_id"])
 
 
+class TestCoverageAndExitCodes(unittest.TestCase):
+    """P0 07 / 第 9 章：零命中不等于检查通过，退出码要能分开三种结果。"""
+
+    def _trace(self, **kw):
+        steps = [Step(seq=1, kind="chat", name="model", tokens=120, ts=1000.0,
+                      raw={"input": "查一下发票时限"}),
+                 Step(seq=2, kind="tool", name="kb.search", tool="kb.search",
+                      args={"q": "发票时限"}, result="发票时限为 30 天",
+                      tokens=0, ts=1001.0),
+                 Step(seq=3, kind="tool", name="crm.get", tool="crm.get",
+                      args={"id": "C1"}, result="客户 C1 已建档", ts=1002.0),
+                 Step(seq=4, kind="chat", name="model", tokens=80, ts=1003.0,
+                      raw={"input": "汇总"})]
+        base = dict(trace_id="t1", agent="demo", task="查发票时限",
+                    steps=steps, answer={"text": "30 天"}, meta={}, source="test")
+        base.update(kw)
+        return Trace(**base)
+
+    def _cfg(self, **kw):
+        from evoguard_inspect.config import DEFAULTS
+        d = dict(DEFAULTS)
+        d.update({"expect_keys": ["text"], "allowed_tools": ["kb.search", "crm.get"]})
+        d.update(kw)
+        return config.Config(**d)
+
+    def test_requires_table_only_names_real_rules(self):
+        from evoguard_inspect import coverage
+        unknown = set(coverage.TRACE_REQUIRES) - set(registry.RULES)
+        self.assertFalse(unknown, "条件表里出现未注册规则：%s" % unknown)
+
+    def test_zero_hits_with_skipped_rules_is_not_pass(self):
+        from evoguard_inspect import coverage
+        tr = self._trace()
+        cov = coverage.analyze([tr], [], config.load(None))
+        self.assertGreater(cov["skipped_rules"], 0)
+        self.assertEqual(cov["verdict"], "COVERAGE_LIMITED",
+                         "有规则没执行时不能报「通过」")
+
+    def test_all_runnable_and_clean_is_pass(self):
+        from evoguard_inspect import coverage
+        tr = self._trace()
+        cov = coverage.analyze([tr], [], self._cfg())
+        self.assertEqual(cov["runnable_rules"], cov["total_rules"],
+                         "补齐配置与轨迹字段后应全部可执行：%s"
+                         % [r["rule_id"] for r in cov["rules"] if not r["runnable"]])
+        self.assertEqual(cov["verdict"], "PASS")
+
+    def test_hit_forces_runnable_and_flags_table(self):
+        from evoguard_inspect import coverage
+        tr = self._trace()
+        # tool_name_unknown 需要配置里的 allowed_tools；这里不配 → 条件表判它不可执行。
+        fake = [{"rule_id": "tool_name_unknown", "severity": "warn", "group": "tool",
+                 "trace_id": "t1", "detail": "x"}]
+        cov = coverage.analyze([tr], fake, config.load(None))
+        row = [r for r in cov["rules"] if r["rule_id"] == "tool_name_unknown"][0]
+        self.assertTrue(row["runnable"], "命中了就说明它跑了，不能记成跳过")
+        self.assertTrue(cov["table_warnings"], "条件表与行为不一致必须报出来")
+
+    def test_empty_input_verdict(self):
+        from evoguard_inspect import coverage
+        cov = coverage.analyze([], [], config.load(None))
+        self.assertEqual(cov["verdict"], "EMPTY_INPUT")
+
+    def test_parse_failure_is_reported_not_swallowed(self):
+        good = os.path.join(FIX, "trace_retry_ok.json")
+        bad = os.path.join(FIX, "does_not_exist.json")
+        traces, failures = report.inspect_files_safe([good, bad])
+        self.assertEqual(len(traces), 1)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("does_not_exist", failures[0]["path"])
+
+    def test_cli_exit_codes(self):
+        from evoguard_inspect import cli
+        bad = os.path.join(FIX, "trace_synthetic_bad.json")
+        good = os.path.join(FIX, "trace_retry_ok.json")
+        devnull = open(os.devnull, "w", encoding="utf-8")
+        old = sys.stdout
+        try:
+            sys.stdout = devnull
+            self.assertEqual(cli.main(["--trace", good]), 0)
+            self.assertEqual(cli.main(["--trace", bad, "--fail-on", "error"]), 3,
+                             "发现问题超过阈值要给 CI 一个非 0 退出码")
+            self.assertEqual(cli.main(["--trace", bad]), 0,
+                             "不指定 --fail-on 时不应因为「有问题」就失败")
+            self.assertEqual(cli.main(["--trace", os.path.join(FIX, "nope.json")]), 2,
+                             "输入解析失败必须是 2")
+            self.assertEqual(cli.main(["--trace", good,
+                                       "--trace", os.path.join(FIX, "nope.json"),
+                                       "--strict-input"]), 2,
+                             "--strict-input 下部分失败也要报 2")
+        finally:
+            sys.stdout = old
+            devnull.close()
+
+
 if __name__ == "__main__":
     unittest.main()

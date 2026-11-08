@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（176 个：55 核心 + 9 评测口径 + 19 难度组 + 34 检查器 + 23 静态 + 36 技能验证/晋升）
+# 2) 回归测试（183 个：55 核心 + 9 评测口径 + 19 难度组 + 41 检查器 + 23 静态 + 36 技能验证/晋升）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -159,7 +159,21 @@ python -m evoguard_inspect.cli --trace t.json --config inspect.json   # 适配�
 python -m evoguard_inspect.cli --trace t.json --group tool flow       # 只看某几组
 python -m evoguard_inspect.cli --agent agent.json --out ../experiments/inspect  # 静态检查
 python -m evoguard_inspect.cli --agent repo/ --split-dir        # 扫真实代码仓库
+python -m evoguard_inspect.cli --trace t.json --fail-on error   # CI：有 error 就退出码 3
 ```
+
+**退出码**（三种结果必须分得开，否则 CI 没法用）：
+
+| 码 | 含义 |
+|---|---|
+| 0 | 跑完了，没有达到 `--fail-on` 阈值的发现 |
+| 2 | 输入解析失败（文件不存在 / 空文件 / 格式不认识）；`--strict-input` 下部分失败也算 |
+| 3 | 跑完了，但发现数达到 `--fail-on error\|warn\|info` 指定级别 |
+
+**零命中 ≠ 检查通过**：报告里有「规则适用性」一节，写清选中多少条、可执行多少条、
+跳过的规则与原因（缺 token 用量 / 缺时间戳 / 配置没声明 `expect_keys` 等）。
+只有全部规则都具备输入条件且零命中，结论才写「通过」；否则写「覆盖有限」。
+这一条比多写几条规则重要 —— 一张写着 0 的体检单，如果一半项目没做，它比不做更有欺骗性。
 
 **输入格式**（自动识别，认不出就明确报错，不静默返回空）：
 
@@ -319,7 +333,7 @@ EvoGuardLab/
 │   ├── test_core.py         55 个测试（对抗性投毒 / 策略链 / 完整回滚 / 经验溯源 / 基线冻结）
 │   ├── test_judgeability.py 9 个测试（可评口径：业务失败 vs 服务抖动）
 │   ├── test_hard_tasks.py   19 个测试（真值可独立算 / 判定不误杀 / 训练集与评测集不相交）
-│   ├── test_inspect.py      34 个测试（规则全命中 / 零误报 / 配置适配 / 事故模式）
+│   ├── test_inspect.py      41 个测试（规则全命中 / 零误报 / 配置适配 / 事故模式 / 覆盖率与退出码）
 │   ├── test_static.py       23 个测试（静态规则 / 框架写法适配 / 低置信度噪音治理）
 │   └── test_skill_validation.py 36 个测试（成对负迁移 / 样本充分性 / 晋升门禁 / 严格库链路）
 ├── scripts/check_model.py   本地模型就绪探针

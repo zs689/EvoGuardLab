@@ -1,0 +1,942 @@
+{
+  "version": 2,
+  "traces": 17,
+  "trace_ids": [
+    "t-swallow-0001",
+    "t-writefirst-0002",
+    "t-repeat-0003",
+    "t-empty-0004",
+    "t-pii-0005",
+    "t-badtool-0006",
+    "t-parallel-write-0007",
+    "t-cycle-0008",
+    "t-token-0009",
+    "t-argempty-0010",
+    "t-schema-0011",
+    "t-liereport-0012",
+    "t-retrystorm-0013",
+    "t-stall-0014",
+    "t-writetimeout-0015",
+    "t-permanenterr-0016",
+    "t-propagation-0017"
+  ],
+  "issues": [
+    {
+      "rule_id": "hallucinated_number",
+      "group": "answer",
+      "title": "答案里出现工具没返回过的数字",
+      "severity": "warn",
+      "trace_id": "t-swallow-0001",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 3,
+      "step_name": "chat synthetic",
+      "detail": "这些数字在任何工具输出里都找不到：999.0",
+      "fix": "要求 Agent 只引用工具返回的数值；",
+      "false_positive": "**数字可能是算出来的**（如 小计×折扣）或来自 prompt 常量 —— 所以这条只报警不判错，必须人工核实一次。"
+    },
+    {
+      "rule_id": "error_swallowed",
+      "group": "tool",
+      "title": "工具报错后仍然给出了最终答案",
+      "severity": "error",
+      "trace_id": "t-swallow-0001",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "order.get_order",
+      "detail": "工具 order.get_order 报错(timeout)，之后没有重试就给出了答案",
+      "fix": "失败分支要显式降级或重试；把工具错误写进答案，别静默吞掉",
+      "false_positive": "该工具本来就允许失败（可选增强），且答案不依赖它。"
+    },
+    {
+      "rule_id": "premature_finish",
+      "group": "flow",
+      "title": "没有任何有效工具结果就下定论",
+      "severity": "error",
+      "trace_id": "t-swallow-0001",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 3,
+      "step_name": "chat synthetic",
+      "detail": "答案已产出，但全程没有一个成功的工具结果",
+      "fix": "拿不到数据时应当明说「查不到」而不是给结论",
+      "false_positive": "任务允许零工具（纯知识问答）；或工具结果确实为空且 Agent 如实说了「查不到」。"
+    },
+    {
+      "rule_id": "hallucinated_number",
+      "group": "answer",
+      "title": "答案里出现工具没返回过的数字",
+      "severity": "warn",
+      "trace_id": "t-writefirst-0002",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 2,
+      "step_name": "chat synthetic",
+      "detail": "这些数字在任何工具输出里都找不到：100.0",
+      "fix": "要求 Agent 只引用工具返回的数值；",
+      "false_positive": "**数字可能是算出来的**（如 小计×折扣）或来自 prompt 常量 —— 所以这条只报警不判错，必须人工核实一次。"
+    },
+    {
+      "rule_id": "write_before_read",
+      "group": "flow",
+      "title": "写操作发生在读取之前",
+      "severity": "warn",
+      "trace_id": "t-writefirst-0002",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "order.settle",
+      "detail": "第一次调用就是写操作 order.settle，之前没有任何读取",
+      "fix": "写之前先读一次当前状态，或确认入参已含前置信息",
+      "false_positive": "写操作本身幂等、或入参已包含全部前置信息。"
+    },
+    {
+      "rule_id": "hallucinated_number",
+      "group": "answer",
+      "title": "答案里出现工具没返回过的数字",
+      "severity": "warn",
+      "trace_id": "t-repeat-0003",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 5,
+      "step_name": "chat synthetic",
+      "detail": "这些数字在任何工具输出里都找不到：7",
+      "fix": "要求 Agent 只引用工具返回的数值；",
+      "false_positive": "**数字可能是算出来的**（如 小计×折扣）或来自 prompt 常量 —— 所以这条只报警不判错，必须人工核实一次。"
+    },
+    {
+      "rule_id": "loop_detected",
+      "group": "flow",
+      "title": "同一工具同参数被反复调用",
+      "severity": "warn",
+      "trace_id": "t-repeat-0003",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 4,
+      "step_name": "kb.search",
+      "detail": "kb.search 用同一组参数被调用 4 次（阈值 3）",
+      "fix": "加去重/缓存；轮询类工具要显式标 polling 语义",
+      "false_positive": "该工具用于轮询等待（如查任务状态），重复是设计如此。"
+    },
+    {
+      "rule_id": "empty_answer",
+      "group": "answer",
+      "title": "宣称完成但没有产出答案",
+      "severity": "error",
+      "trace_id": "t-empty-0004",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": null,
+      "step_name": null,
+      "detail": "答案为空：'{}'",
+      "fix": "检查 Agent 的收尾分支；空答案不要按成功上报",
+      "false_positive": "流式输出被截断、或答案写在别的字段里（非 answer/completion）。"
+    },
+    {
+      "rule_id": "dependency_mismatch",
+      "group": "tool",
+      "title": "下游工具的参数不是上游返回的值",
+      "severity": "warn",
+      "trace_id": "t-empty-0004",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "task.make_plan",
+      "detail": "task.make_plan 的参数 goal_key='release' 在工具输出、用户问题与模型输入里都找不到",
+      "fix": "参数要从上游结果或用户输入里取；构造型参数请在 Agent 里显式记录来源",
+      "false_positive": "参数可能是模型构造的（拼接字符串、换算单位），不一定是直接拷贝。"
+    },
+    {
+      "rule_id": "pii_leak",
+      "group": "answer",
+      "title": "答案里出现未脱敏的个人信息",
+      "severity": "error",
+      "trace_id": "t-pii-0005",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": null,
+      "step_name": null,
+      "detail": "检出：手机号(138***)",
+      "fix": "输出前做脱敏；日志与答案分开处理",
+      "false_positive": "如果被检 Agent 本身就在处理这些数据（如客服工单），需要按合规要求豁免。"
+    },
+    {
+      "rule_id": "tool_name_unknown",
+      "group": "tool",
+      "title": "调用了工具清单里不存在的工具",
+      "severity": "warn",
+      "trace_id": "t-badtool-0006",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "weather.get",
+      "detail": "weather.get 不在允许的工具清单里（共 1 次）",
+      "fix": "在工具注册层做白名单；未知工具直接拒绝",
+      "false_positive": "未配置 allowed_tools 时本条不生效；清单本身也可能过期。"
+    },
+    {
+      "rule_id": "parallel_write_conflict",
+      "group": "structure",
+      "title": "相邻两步都是写操作",
+      "severity": "error",
+      "trace_id": "t-parallel-write-0007",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 3,
+      "step_name": "order.settle",
+      "detail": "连续两次写操作：order.settle → order.settle",
+      "fix": "写操作之间插入状态读取或幂等键；确认是否需要串行化",
+      "false_positive": "写操作之间本来就不需要读（如批量创建）；也可能是设计如此的流水线。"
+    },
+    {
+      "rule_id": "hallucinated_number",
+      "group": "answer",
+      "title": "答案里出现工具没返回过的数字",
+      "severity": "warn",
+      "trace_id": "t-cycle-0008",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 5,
+      "step_name": "chat synthetic",
+      "detail": "这些数字在任何工具输出里都找不到：5",
+      "fix": "要求 Agent 只引用工具返回的数值；",
+      "false_positive": "**数字可能是算出来的**（如 小计×折扣）或来自 prompt 常量 —— 所以这条只报警不判错，必须人工核实一次。"
+    },
+    {
+      "rule_id": "tool_result_unused",
+      "group": "tool",
+      "title": "工具返回了实质内容，但后续完全没引用",
+      "severity": "warn",
+      "trace_id": "t-cycle-0008",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "kb.search",
+      "detail": "kb.search 返回的 1 个值（如 1）在答案与后续调用里都没出现",
+      "fix": "确认这次调用是否必要；如果结果该影响答案，说明 Agent 漏读了",
+      "false_positive": "结果可能只用于「确认存在」；短的确认型返回（{\"ok\":true}）本条不判。"
+    },
+    {
+      "rule_id": "tool_result_unused",
+      "group": "tool",
+      "title": "工具返回了实质内容，但后续完全没引用",
+      "severity": "warn",
+      "trace_id": "t-cycle-0008",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 2,
+      "step_name": "order.get_order",
+      "detail": "order.get_order 返回的 1 个值（如 2）在答案与后续调用里都没出现",
+      "fix": "确认这次调用是否必要；如果结果该影响答案，说明 Agent 漏读了",
+      "false_positive": "结果可能只用于「确认存在」；短的确认型返回（{\"ok\":true}）本条不判。"
+    },
+    {
+      "rule_id": "tool_result_unused",
+      "group": "tool",
+      "title": "工具返回了实质内容，但后续完全没引用",
+      "severity": "warn",
+      "trace_id": "t-cycle-0008",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 3,
+      "step_name": "kb.search",
+      "detail": "kb.search 返回的 1 个值（如 3）在答案与后续调用里都没出现",
+      "fix": "确认这次调用是否必要；如果结果该影响答案，说明 Agent 漏读了",
+      "false_positive": "结果可能只用于「确认存在」；短的确认型返回（{\"ok\":true}）本条不判。"
+    },
+    {
+      "rule_id": "tool_result_unused",
+      "group": "tool",
+      "title": "工具返回了实质内容，但后续完全没引用",
+      "severity": "warn",
+      "trace_id": "t-cycle-0008",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 4,
+      "step_name": "order.get_order",
+      "detail": "order.get_order 返回的 1 个值（如 4）在答案与后续调用里都没出现",
+      "fix": "确认这次调用是否必要；如果结果该影响答案，说明 Agent 漏读了",
+      "false_positive": "结果可能只用于「确认存在」；短的确认型返回（{\"ok\":true}）本条不判。"
+    },
+    {
+      "rule_id": "cycle_detected",
+      "group": "flow",
+      "title": "工具调用陷入 A→B→A→B 循环",
+      "severity": "warn",
+      "trace_id": "t-cycle-0008",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 4,
+      "step_name": "order.get_order",
+      "detail": "检测到循环：kb.search → order.get_order 连续重复两轮",
+      "fix": "给循环加最大次数与退出条件；把「已经试过」写进上下文",
+      "false_positive": "工作流本身就是交替的（读→写→读→写），属于正常设计。"
+    },
+    {
+      "rule_id": "token_blowup",
+      "group": "resource",
+      "title": "单条轨迹 token 超预算",
+      "severity": "warn",
+      "trace_id": "t-token-0009",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": null,
+      "step_name": null,
+      "detail": "总 token 99000，预算 2000",
+      "fix": "压缩上下文、减少无效轮次；把预算写进 Agent 配置",
+      "false_positive": "任务本来就长（多轮对话、长文档总结）；预算需要按业务调整。"
+    },
+    {
+      "rule_id": "tool_arg_incomplete",
+      "group": "tool",
+      "title": "工具参数是空的或缺少关键项",
+      "severity": "warn",
+      "trace_id": "t-argempty-0010",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "kb.search",
+      "detail": "调用 kb.search 时参数为空",
+      "fix": "在工具 schema 层做必填校验；空参数直接拒绝",
+      "false_positive": "有些工具确实允许零参数（如 list_all）；这类工具需要单独豁免。"
+    },
+    {
+      "rule_id": "tool_result_unused",
+      "group": "tool",
+      "title": "工具返回了实质内容，但后续完全没引用",
+      "severity": "warn",
+      "trace_id": "t-schema-0011",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "order.get_order",
+      "detail": "order.get_order 返回的 1 个值（如 88.0）在答案与后续调用里都没出现",
+      "fix": "确认这次调用是否必要；如果结果该影响答案，说明 Agent 漏读了",
+      "false_positive": "结果可能只用于「确认存在」；短的确认型返回（{\"ok\":true}）本条不判。"
+    },
+    {
+      "rule_id": "error_swallowed",
+      "group": "tool",
+      "title": "工具报错后仍然给出了最终答案",
+      "severity": "error",
+      "trace_id": "t-liereport-0012",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "db.migrate",
+      "detail": "工具 db.migrate 报错(destructive operation failed)，之后没有重试就给出了答案",
+      "fix": "失败分支要显式降级或重试；把工具错误写进答案，别静默吞掉",
+      "false_positive": "该工具本来就允许失败（可选增强），且答案不依赖它。"
+    },
+    {
+      "rule_id": "tool_name_unknown",
+      "group": "tool",
+      "title": "调用了工具清单里不存在的工具",
+      "severity": "warn",
+      "trace_id": "t-liereport-0012",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "db.migrate",
+      "detail": "db.migrate 不在允许的工具清单里（共 1 次）",
+      "fix": "在工具注册层做白名单；未知工具直接拒绝",
+      "false_positive": "未配置 allowed_tools 时本条不生效；清单本身也可能过期。"
+    },
+    {
+      "rule_id": "premature_finish",
+      "group": "flow",
+      "title": "没有任何有效工具结果就下定论",
+      "severity": "error",
+      "trace_id": "t-liereport-0012",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 2,
+      "step_name": "chat synthetic",
+      "detail": "答案已产出，但全程没有一个成功的工具结果",
+      "fix": "拿不到数据时应当明说「查不到」而不是给结论",
+      "false_positive": "任务允许零工具（纯知识问答）；或工具结果确实为空且 Agent 如实说了「查不到」。"
+    },
+    {
+      "rule_id": "self_report_contradiction",
+      "group": "answer",
+      "title": "答案自称成功，但轨迹里的证据不支持",
+      "severity": "error",
+      "trace_id": "t-liereport-0012",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "db.migrate",
+      "detail": "答案自称完成/通过，但轨迹里有 1 个失败步骤且未恢复（最后：db.migrate，destructive operation failed）",
+      "fix": "不要采信 Agent 的自述；用工具返回状态和独立日志核对最终结论，失败步骤必须在答案里如实披露",
+      "false_positive": "成功词可能只是客套话；也可能 Agent 确实修复了，但轨迹没记录全。结论要以基础设施日志和状态为准，不能只凭这条规则定性。"
+    },
+    {
+      "rule_id": "error_swallowed",
+      "group": "tool",
+      "title": "工具报错后仍然给出了最终答案",
+      "severity": "error",
+      "trace_id": "t-retrystorm-0013",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 4,
+      "step_name": "kb.search",
+      "detail": "工具 kb.search 报错(upstream timeout)，之后没有重试就给出了答案",
+      "fix": "失败分支要显式降级或重试；把工具错误写进答案，别静默吞掉",
+      "false_positive": "该工具本来就允许失败（可选增强），且答案不依赖它。"
+    },
+    {
+      "rule_id": "loop_detected",
+      "group": "flow",
+      "title": "同一工具同参数被反复调用",
+      "severity": "warn",
+      "trace_id": "t-retrystorm-0013",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 4,
+      "step_name": "kb.search",
+      "detail": "kb.search 用同一组参数被调用 4 次（阈值 3）",
+      "fix": "加去重/缓存；轮询类工具要显式标 polling 语义",
+      "false_positive": "该工具用于轮询等待（如查任务状态），重复是设计如此。"
+    },
+    {
+      "rule_id": "premature_finish",
+      "group": "flow",
+      "title": "没有任何有效工具结果就下定论",
+      "severity": "error",
+      "trace_id": "t-retrystorm-0013",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 5,
+      "step_name": "chat synthetic",
+      "detail": "答案已产出，但全程没有一个成功的工具结果",
+      "fix": "拿不到数据时应当明说「查不到」而不是给结论",
+      "false_positive": "任务允许零工具（纯知识问答）；或工具结果确实为空且 Agent 如实说了「查不到」。"
+    },
+    {
+      "rule_id": "retry_storm",
+      "group": "flow",
+      "title": "同一个失败被连续重试，没有熔断",
+      "severity": "error",
+      "trace_id": "t-retrystorm-0013",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 4,
+      "step_name": "kb.search",
+      "detail": "连续 4 步报错、中间没有一次成功（阈值 3）",
+      "fix": "加运行时强制的熔断：连续失败计数达到上限就停止付费调用，成功才清零；配合指数退避与单次运行的费用上限",
+      "false_positive": "固定次数的重试本身是正确做法；外部服务持续故障也可能造成连续失败。本条只提示「连续失败没有触发停止」，是否已做退避/熔断要看配置和监控。"
+    },
+    {
+      "rule_id": "tool_name_unknown",
+      "group": "tool",
+      "title": "调用了工具清单里不存在的工具",
+      "severity": "warn",
+      "trace_id": "t-stall-0014",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "pipeline.next",
+      "detail": "pipeline.next 不在允许的工具清单里（共 3 次）",
+      "fix": "在工具注册层做白名单；未知工具直接拒绝",
+      "false_positive": "未配置 allowed_tools 时本条不生效；清单本身也可能过期。"
+    },
+    {
+      "rule_id": "premature_finish",
+      "group": "flow",
+      "title": "没有任何有效工具结果就下定论",
+      "severity": "error",
+      "trace_id": "t-stall-0014",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 4,
+      "step_name": "chat synthetic",
+      "detail": "答案已产出，但全程没有一个成功的工具结果",
+      "fix": "拿不到数据时应当明说「查不到」而不是给结论",
+      "false_positive": "任务允许零工具（纯知识问答）；或工具结果确实为空且 Agent 如实说了「查不到」。"
+    },
+    {
+      "rule_id": "silent_stall",
+      "group": "flow",
+      "title": "连续多步无有效产出、无报错、不终止",
+      "severity": "warn",
+      "trace_id": "t-stall-0014",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 3,
+      "step_name": "pipeline.next",
+      "detail": "连续 3 个工具步骤没有实质返回，也没报错或收尾",
+      "fix": "给循环加最大空转次数与显式超时；空结果要写日志并向上抛，不要让调用链静默挂起",
+      "false_positive": "轮询/等待类工具返回空是正常语义；流式响应的中间帧也可能是空。轮询工具应显式标注 polling 语义，本条对它不适用。"
+    },
+    {
+      "rule_id": "write_before_read",
+      "group": "flow",
+      "title": "写操作发生在读取之前",
+      "severity": "warn",
+      "trace_id": "t-writetimeout-0015",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "order.settle",
+      "detail": "第一次调用就是写操作 order.settle，之前没有任何读取",
+      "fix": "写之前先读一次当前状态，或确认入参已含前置信息",
+      "false_positive": "写操作本身幂等、或入参已包含全部前置信息。"
+    },
+    {
+      "rule_id": "parallel_write_conflict",
+      "group": "structure",
+      "title": "相邻两步都是写操作",
+      "severity": "error",
+      "trace_id": "t-writetimeout-0015",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 2,
+      "step_name": "order.settle",
+      "detail": "连续两次写操作：order.settle → order.settle",
+      "fix": "写操作之间插入状态读取或幂等键；确认是否需要串行化",
+      "false_positive": "写操作之间本来就不需要读（如批量创建）；也可能是设计如此的流水线。"
+    },
+    {
+      "rule_id": "write_timeout_ambiguous",
+      "group": "structure",
+      "title": "写操作超时后又用同样参数重试",
+      "severity": "warn",
+      "trace_id": "t-writetimeout-0015",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 2,
+      "step_name": "order.settle",
+      "detail": "order.settle 第 1 步超时后，第 2 步用完全相同的参数再次调用",
+      "fix": "写工具带幂等键（idempotency_key / request_id）；超时后先查状态再决定是否重试，不要盲重试",
+      "false_positive": "调用方可能带了幂等键，或第一次确实没执行成功（这时重试是对的）。本条是提示「需要确认」，不是判定「一定重复了」。"
+    },
+    {
+      "rule_id": "retry_on_permanent_error",
+      "group": "tool",
+      "title": "把永久性错误当成瞬时故障继续重试",
+      "severity": "warn",
+      "trace_id": "t-permanenterr-0016",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 1,
+      "step_name": "kb.search",
+      "detail": "第 1 步是永久性错误（401 unauthorized: invalid api key），第 2 步仍重复调用 kb.search",
+      "fix": "在工具层标注 error_type；permanent / input_error 直接停止并把错误回传给模型修正参数，只有 transient 才重试",
+      "false_positive": "错误信息措辞可能含糊；也可能重试期间权限被修复、资源被创建出来了。以错误码为准，不要只看文本。"
+    },
+    {
+      "rule_id": "tool_result_unused",
+      "group": "tool",
+      "title": "工具返回了实质内容，但后续完全没引用",
+      "severity": "warn",
+      "trace_id": "t-propagation-0017",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 3,
+      "step_name": "order.get_order",
+      "detail": "order.get_order 返回的 2 个值（如 10.0）在答案与后续调用里都没出现",
+      "fix": "确认这次调用是否必要；如果结果该影响答案，说明 Agent 漏读了",
+      "false_positive": "结果可能只用于「确认存在」；短的确认型返回（{\"ok\":true}）本条不判。"
+    },
+    {
+      "rule_id": "dependency_mismatch",
+      "group": "tool",
+      "title": "下游工具的参数不是上游返回的值",
+      "severity": "warn",
+      "trace_id": "t-propagation-0017",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 2,
+      "step_name": "order.get_order",
+      "detail": "order.get_order 的参数 order_id='A1001' 在工具输出、用户问题与模型输入里都找不到",
+      "fix": "参数要从上游结果或用户输入里取；构造型参数请在 Agent 里显式记录来源",
+      "false_positive": "参数可能是模型构造的（拼接字符串、换算单位），不一定是直接拷贝。"
+    },
+    {
+      "rule_id": "hallucination_propagation",
+      "group": "structure",
+      "title": "下游步骤用了上游没有出处的值",
+      "severity": "warn",
+      "trace_id": "t-propagation-0017",
+      "agent": "synthetic-agent",
+      "task": "",
+      "step_seq": 2,
+      "step_name": "order.get_order",
+      "detail": "order.get_order 的参数引用了 A1001，但前面 1 个工具输出里都没有它",
+      "fix": "跨 Agent 传递的值要带来源标记；关键字段在交接处做一次存在性校验，别把上游文本直接当结构化事实",
+      "false_positive": "标识可能来自用户输入但任务字段没记全，也可能是合法常量或按规则生成的编号。只查 ID 形态、不查普通数字，就是为了压低这类误报。"
+    }
+  ],
+  "summary": {
+    "by_severity": {
+      "warn": 26,
+      "error": 13
+    },
+    "by_rule": {
+      "hallucinated_number": 4,
+      "error_swallowed": 3,
+      "premature_finish": 4,
+      "write_before_read": 2,
+      "loop_detected": 2,
+      "empty_answer": 1,
+      "dependency_mismatch": 2,
+      "pii_leak": 1,
+      "tool_name_unknown": 3,
+      "parallel_write_conflict": 2,
+      "tool_result_unused": 6,
+      "cycle_detected": 1,
+      "token_blowup": 1,
+      "tool_arg_incomplete": 1,
+      "self_report_contradiction": 1,
+      "retry_storm": 1,
+      "silent_stall": 1,
+      "write_timeout_ambiguous": 1,
+      "retry_on_permanent_error": 1,
+      "hallucination_propagation": 1
+    },
+    "by_group": {
+      "answer": 7,
+      "tool": 16,
+      "flow": 11,
+      "structure": 4,
+      "resource": 1
+    }
+  },
+  "parse_failures": [],
+  "coverage": {
+    "verdict": "FINDINGS",
+    "total_rules": 25,
+    "runnable_rules": 24,
+    "skipped_rules": 1,
+    "runnable_ratio": 0.96,
+    "traces": 17,
+    "traces_with": {
+      "answer": 17,
+      "tools": 17,
+      "tools_multi": 3,
+      "tool_text": 14,
+      "chats": 17,
+      "tokens": 1,
+      "ts": 17
+    },
+    "config": {
+      "config:expect_keys": false,
+      "config:allowed_tools": true,
+      "config:pii": true
+    },
+    "table_warnings": [],
+    "rules": [
+      {
+        "rule_id": "empty_answer",
+        "group": "answer",
+        "severity": "error",
+        "requires": [],
+        "applicable_traces": 17,
+        "hits": 1,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "answer_schema_missing",
+        "group": "answer",
+        "severity": "warn",
+        "requires": [
+          "config:expect_keys"
+        ],
+        "applicable_traces": 0,
+        "hits": 0,
+        "runnable": false,
+        "skipped_because": [
+          "配置未声明 expect_keys"
+        ]
+      },
+      {
+        "rule_id": "unsupported_entity",
+        "group": "answer",
+        "severity": "warn",
+        "requires": [
+          "answer",
+          "tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "hallucinated_number",
+        "group": "answer",
+        "severity": "warn",
+        "requires": [
+          "answer",
+          "tool_text"
+        ],
+        "applicable_traces": 14,
+        "hits": 4,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "pii_leak",
+        "group": "answer",
+        "severity": "error",
+        "requires": [
+          "answer",
+          "config:pii"
+        ],
+        "applicable_traces": 17,
+        "hits": 1,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "error_swallowed",
+        "group": "tool",
+        "severity": "error",
+        "requires": [
+          "tools",
+          "answer"
+        ],
+        "applicable_traces": 17,
+        "hits": 3,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "tool_never_called",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "chats"
+        ],
+        "applicable_traces": 17,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "tool_arg_incomplete",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 1,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "tool_result_unused",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "tools",
+          "answer"
+        ],
+        "applicable_traces": 17,
+        "hits": 6,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "dependency_mismatch",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 2,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "tool_name_unknown",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "tools",
+          "config:allowed_tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 3,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "write_before_read",
+        "group": "flow",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 2,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "loop_detected",
+        "group": "flow",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 2,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "cycle_detected",
+        "group": "flow",
+        "severity": "warn",
+        "requires": [
+          "tools_multi"
+        ],
+        "applicable_traces": 3,
+        "hits": 1,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "premature_finish",
+        "group": "flow",
+        "severity": "error",
+        "requires": [
+          "answer",
+          "tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 4,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "token_blowup",
+        "group": "resource",
+        "severity": "warn",
+        "requires": [
+          "tokens"
+        ],
+        "applicable_traces": 1,
+        "hits": 1,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "slow_step",
+        "group": "resource",
+        "severity": "info",
+        "requires": [
+          "ts"
+        ],
+        "applicable_traces": 17,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "model_error_ignored",
+        "group": "structure",
+        "severity": "error",
+        "requires": [
+          "chats",
+          "answer"
+        ],
+        "applicable_traces": 17,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "parallel_write_conflict",
+        "group": "structure",
+        "severity": "error",
+        "requires": [
+          "tools_multi"
+        ],
+        "applicable_traces": 3,
+        "hits": 2,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "self_report_contradiction",
+        "group": "answer",
+        "severity": "error",
+        "requires": [
+          "answer",
+          "tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 1,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "retry_storm",
+        "group": "flow",
+        "severity": "error",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 1,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "silent_stall",
+        "group": "flow",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 1,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "write_timeout_ambiguous",
+        "group": "structure",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 1,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "retry_on_permanent_error",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 17,
+        "hits": 1,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "hallucination_propagation",
+        "group": "structure",
+        "severity": "warn",
+        "requires": [
+          "tools_multi"
+        ],
+        "applicable_traces": 3,
+        "hits": 1,
+        "runnable": true,
+        "skipped_because": []
+      }
+    ]
+  },
+  "verdict": "FINDINGS"
+}

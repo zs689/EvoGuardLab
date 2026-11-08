@@ -21,6 +21,26 @@ def inspect_files(paths, fmt=None):
     return traces
 
 
+def inspect_files_safe(paths, fmt=None):
+    """逐个文件加载，失败的记下来继续 —— 一份坏输入不该让其余轨迹白跑。
+
+    但也不能静默：空文件 / 认不出格式都算解析失败，报告和退出码都要反映。
+    """
+    traces, failures = [], []
+    for p in paths:
+        try:
+            got = loaders.load_file(p, fmt)
+        except Exception as e:
+            failures.append({"path": p, "error": "%s: %s" % (type(e).__name__, str(e))})
+            continue
+        if not got:
+            failures.append({"path": p,
+                             "error": "解析出 0 条轨迹（空文件或格式不匹配）"})
+            continue
+        traces.extend(got)
+    return traces, failures
+
+
 def summarize(issues):
     by_sev, by_rule, by_group = {}, {}, {}
     for i in issues:
@@ -31,16 +51,22 @@ def summarize(issues):
     return by_sev, by_rule, by_group
 
 
-def to_json(traces, issues):
+def to_json(traces, issues, coverage=None, parse_failures=None):
     by_sev, by_rule, by_group = summarize(issues)
-    return {
-        "version": 1,
+    data = {
+        "version": 2,
         "traces": len(traces),
         "trace_ids": [t.trace_id for t in traces],
         "issues": issues,
         "summary": {"by_severity": by_sev, "by_rule": by_rule,
                     "by_group": by_group},
+        "parse_failures": list(parse_failures or []),
     }
+    if coverage is not None:
+        # verdict 单独给一个字段：外部工具靠它判断「没发现问题」和「没查成」。
+        data["coverage"] = coverage
+        data["verdict"] = coverage.get("verdict")
+    return data
 
 
 GROUP_DESC = {
@@ -52,11 +78,15 @@ GROUP_DESC = {
 }
 
 
-def to_markdown(traces, issues, path_note=""):
+def to_markdown(traces, issues, path_note="", coverage=None, parse_failures=None):
     by_sev, by_rule, by_group = summarize(issues)
     L = ["# Agent 离线检查报告", ""]
     L.append("> 检查器：EvoGuard inspect（确定性规则，不调用模型）  ")
     L.append("> 输入：%d 条轨迹%s" % (len(traces), ("（" + path_note + "）") if path_note else ""))
+    if parse_failures:
+        L.append("> **有 %d 个输入没能解析**：%s —— 结论只覆盖解析成功的部分。"
+                 % (len(parse_failures), "；".join(
+                     "%s（%s）" % (f["path"], f["error"][:80]) for f in parse_failures)))
     L.append("")
     L.append("## 一、总览")
     L.append("")
@@ -112,6 +142,12 @@ def to_markdown(traces, issues, path_note=""):
     L.append("2. 规则只看轨迹，**看不到 Agent 的 prompt 与配置** —— 那属于静态检查。")
     L.append("3. `warn` 级别需要人工核实，尤其 `hallucinated_number`（数字可能是算出来的）。")
     L.append("")
+    if coverage is not None:
+        from . import coverage as cov
+        L.append("## 四、规则适用性")
+        L.append("")
+        L.extend(cov.render(coverage)[2:])     # 复用同一段生成逻辑，标题只留一个
+        L.append("")
     return "\n".join(L)
 
 
@@ -124,18 +160,19 @@ STATIC_GROUP_DESC = {
 STATIC_ORDER = ["prompt", "tool", "config"]
 
 
-def write_static(out_dir, defs, issues):
+def write_static(out_dir, defs, issues, parse_failures=None):
     """静态检查只读定义，所以报告必须把「置信度」写出来 —— 仓库扫描是猜的。"""
     os.makedirs(out_dir, exist_ok=True)
     by_sev, by_rule, by_group = summarize(issues)
     data = {
-        "version": 1,
+        "version": 2,
         "agents": [{"name": d.name, "source": d.source, "kind": d.source_kind,
                     "confidence": d.confidence, "tools": len(d.tools),
                     "prompt_chars": len(d.system_prompt), "notes": d.notes}
                    for d in defs],
         "issues": issues,
         "summary": {"by_severity": by_sev, "by_rule": by_rule, "by_group": by_group},
+        "parse_failures": list(parse_failures or []),
     }
     j = os.path.join(out_dir, "static.json")
     with open(j, "w", encoding="utf-8") as f:
@@ -215,12 +252,13 @@ def write_static(out_dir, defs, issues):
     return j, m
 
 
-def write(out_dir, traces, issues, path_note=""):
+def write(out_dir, traces, issues, path_note="", coverage=None, parse_failures=None):
     os.makedirs(out_dir, exist_ok=True)
     j = os.path.join(out_dir, "inspect.json")
     m = os.path.join(out_dir, "inspect.md")
     with open(j, "w", encoding="utf-8") as f:
-        json.dump(to_json(traces, issues), f, ensure_ascii=False, indent=2)
+        json.dump(to_json(traces, issues, coverage, parse_failures), f,
+                  ensure_ascii=False, indent=2)
     with open(m, "w", encoding="utf-8") as f:
-        f.write(to_markdown(traces, issues, path_note))
+        f.write(to_markdown(traces, issues, path_note, coverage, parse_failures))
     return j, m
