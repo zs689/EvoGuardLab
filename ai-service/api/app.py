@@ -87,6 +87,18 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        # 传统 IT 安全的基本输出侧约束：不让浏览器「猜」内容类型、
+        # 不允许被内嵌、不允许把本域当脚本源执行。
+        # 这些不是锦上添花 —— 少了 nosniff，一个 JSON 接口里的
+        # 用户可控字符串就可能被浏览器当 HTML 解析。
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy",
+                         "default-src 'self'; img-src 'self' data:; "
+                         "style-src 'self' 'unsafe-inline'; "
+                         "script-src 'self' 'unsafe-inline'; "
+                         "frame-ancestors 'none'; base-uri 'none'")
         self.end_headers()
         try:
             self.wfile.write(body)

@@ -1,0 +1,23 @@
+{
+  "mode": "audit",
+  "scan_ms": {
+    "1000": 0.044,
+    "10000": 0.31,
+    "50000": 1.843
+  },
+  "runtime": {
+    "runs": 30,
+    "avg_run_ms": 1.15,
+    "scan_calls_per_run": 4.0,
+    "avg_scan_us": 12.7,
+    "est_added_ms_per_run": 0.0508,
+    "overhead_pct": 4.403,
+    "real_model_ref_ms": 627.0,
+    "overhead_pct_real": 0.0081
+  },
+  "notes": [
+    "scan 是纯正则 + 前置子串过滤，无第三方依赖、不联网。",
+    "mock 每次运行只有 1.15ms，所以 51µs 的相对开销被放大到 4.4%；真实模型每次运行约 627ms，同样的 51µs 占 0.008%。",
+    "这里只算安全层自身耗时，不含 enforce 模式下包裹/转义带来的字符串复制。"
+  ]
+}

@@ -303,9 +303,9 @@ class TestCaseRules(unittest.TestCase):
         self.assertNotIn("self_report_contradiction", ids)
 
     def test_rule_library_shape(self):
-        """扩库后 25 条轨迹规则 / 20 条静态规则，且每条都有误报说明。"""
+        """扩库后 31 条轨迹规则 / 20 条静态规则，且每条都有误报说明。"""
         from evoguard_inspect.static import rules as SR
-        self.assertEqual(len(registry.RULES), 25)
+        self.assertEqual(len(registry.RULES), 31)
         self.assertEqual(len(SR.RULES), 20)
         for rid, m in list(registry.RULES.items()) + list(SR.RULES.items()):
             self.assertTrue(m["false_positive"], "%s 缺误报说明" % rid)
@@ -430,6 +430,48 @@ class TestCoverageAndExitCodes(unittest.TestCase):
             cli.main(["--trace", os.path.join(FIX, "trace_retry_ok.json"),
                       "--trace", os.path.join(FIX, "trace_synthetic_bad.json")])
         self.assertIn("18 条轨迹", buf.getvalue())
+
+
+class TestSecurityRules(unittest.TestCase):
+    """攻击面规则：六类特征必须全部抓到，正常轨迹一条都不许报。"""
+
+    SEC = ("injection_in_tool_output", "tool_not_allowed", "data_exfiltration",
+           "secret_in_tool_args", "dangerous_shell_command", "xss_in_answer")
+
+    def _cfg(self):
+        from evoguard_inspect.config import DEFAULTS
+        d = dict(DEFAULTS)
+        d.update({"allowed_tools": ["kb.search"], "expect_keys": []})
+        return config.Config(**d)
+
+    def test_all_six_security_rules_fire(self):
+        tr = load("trace_attack.json")[0]
+        issues = R.check_all([tr], self._cfg())
+        hit = {i["rule_id"] for i in issues}
+        missing = [r for r in self.SEC if r not in hit]
+        self.assertEqual(missing, [], "这几条安全规则没抓到：%s" % missing)
+        for i in issues:
+            if i["rule_id"] in self.SEC:
+                self.assertEqual(i["group"], "security")
+                self.assertTrue(i["fix"], "%s 缺修复建议" % i["rule_id"])
+                self.assertTrue(i["detail"])
+
+    def test_normal_traces_have_no_security_findings(self):
+        """误报是这类规则的死因：正常轨迹一条安全告警都不该有。
+
+        白名单按轨迹自己用到的工具生成 —— 否则「工具不在白名单」这条
+        会因为测试配置写窄了而误报，那是测试的错，不是规则的错。
+        """
+        from evoguard_inspect.config import DEFAULTS
+        for name in ("trace_retry_ok.json", "trace_synthetic_bad.json"):
+            tr = load(name)[0]
+            d = dict(DEFAULTS)
+            d["allowed_tools"] = sorted({s.tool or s.name for s in tr.tools()})
+            cfg = config.Config(**d)
+            issues = R.check_all([tr], cfg)
+            sec = [i for i in issues if i["rule_id"] in self.SEC]
+            self.assertEqual(sec, [], "%s 出现安全误报：%s"
+                             % (name, [i["rule_id"] for i in sec]))
 
 
 if __name__ == "__main__":

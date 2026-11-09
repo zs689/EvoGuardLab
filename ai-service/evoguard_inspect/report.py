@@ -75,6 +75,7 @@ GROUP_DESC = {
     "flow": "流程层：步骤顺序 / 循环 / 过早收尾",
     "resource": "资源层：token 与耗时",
     "structure": "结构层：多 Agent / 并行 / 错误传播",
+    "security": "攻击面：注入 / 越权 / 外带 / 凭据 / 命令执行 / 输出侧 XSS",
 }
 
 
@@ -98,7 +99,7 @@ def to_markdown(traces, issues, path_note="", coverage=None, parse_failures=None
     if by_group:
         L.append("| 分组 | 条数 | 说明 |")
         L.append("|---|---|---|")
-        for g in ("answer", "tool", "flow", "resource", "structure"):
+        for g in ("answer", "tool", "flow", "resource", "structure", "security"):
             if g in by_group:
                 L.append("| %s | %d | %s |" % (g, by_group[g], GROUP_DESC.get(g, "")))
         L.append("")

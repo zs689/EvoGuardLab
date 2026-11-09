@@ -13,6 +13,7 @@ GROUPS = {
     "flow": "流程层：步骤顺序 / 循环 / 过早收尾",
     "resource": "资源层：token 与耗时",
     "structure": "结构层：多 Agent / 并行 / 错误传播",
+    "security": "攻击面：注入 / 越权 / 外带 / 凭据 / 命令执行 / 输出侧 XSS",
 }
 
 RULES = {}       # id -> meta（含 fn）

@@ -309,3 +309,44 @@ P0 06 冻结可复现基线：把报告 / metrics.json / runs.jsonl / C 与 D �
 
 - 真实模型全量重训 + 评测（本轮只做了 mock 验证，未跑 Qwen）。
 - 39 条「guard 基线成功不足」需要换 guard 故障类型或补更多 dev 任务，而不是放宽门槛。
+
+## 2026-11-09：安全层（输入/输出校验、防火墙检测、最小权限、多 Agent 互信）
+
+### 做了什么
+
+- 新增 `ai-service/evoguard/security.py`：24 个检测器（注入 / 外带 / 凭据 / PII /
+  危险命令 / XSS）+ 输出编码（html/json/text）+ 不可信内容包裹 + 最小权限白名单 +
+  对端校验 + 事件落库（`security_events` 表）。
+- 运行时 4 个钩子：`run_once`（输入）、`Ctx.call` 入口（最小权限）、`Ctx.call` 出口（工具返回扫描）、
+  `Ctx.answer`（模型输出扫描）。**三种模式** off / audit / enforce，默认 audit：
+  只检测只记账，不改任何内容，历史实验数字仍然可比。
+- 检查器新增 `security` 分组 6 条轨迹规则：`injection_in_tool_output`、`tool_not_allowed`、
+  `data_exfiltration`、`secret_in_tool_args`、`dangerous_shell_command`、`xss_in_answer`。
+  **复用运行时同一套检测器**，不另抄正则 —— 离线报告和运行时拦截必须看同一组特征。
+- API 边界加安全头：`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、
+  `Referrer-Policy: no-referrer`、CSP。
+- 多 Agent：`check_peer` + `guard_peer_message`（未声明对端消息一律当不可信数据）。
+  **如实说明**：本仓库运行时是单 Agent，没有 handoff 路径，这层目前是库级能力 + 离线规则。
+
+### 验证
+
+- 全量 **216 个测试**通过（56 核心 + 9 + 19 + 44 检查器 + 27 静态 + 36 技能 + 25 安全）。
+- `tests/test_security.py` 25 项：14 类攻击逐一命中、5 条正常业务文本零误报、
+  每条发现都带误报说明、前置过滤表不许漏、编码/包裹/结构保持、最小权限与对端校验、
+  三模式行为差异、事件落库、运行时 audit 不改结果 / enforce 拒绝越权工具。
+- `tests/test_inspect.py` 新增：攻击夹具六条安全规则全部命中；正常轨迹（含 17 条合成坏轨迹）
+  零安全误报。
+- 延迟：1 KB 0.044ms / 10 KB 0.31ms / 50 KB 1.84ms；真实运行约 4 次扫描 ≈ **51µs/run**，
+  对真实模型（627ms/run）是 **0.008%**。预算断言 10KB < 1.5ms。
+  数据 `experiments/p0_09_20261109/security_bench.json`。
+- 攻击报告 `experiments/p0_09_20261109/attack_report/`：11 个发现（5 error），
+  security 组 7 条。
+
+### 仍未完成 / 不能宣称的
+
+- **不能说「已防住注入」**：特征匹配，换说法、拆字、base64、多语言混写都能绕过。
+- 审批与沙箱仍是**声明**：静态规则只检查「有没有写」，运行时不强制执行。
+- `api/app.py` 加的是安全头，不是 WAF：没有限流、认证、租户隔离。
+- 多 Agent 只到库级：没有消息签名与消息级权限。
+- enforce 模式会改变行为（包裹工具结果可能降低答对率），上线前要先有误报数据；
+  当前所有实验数字都来自 audit。

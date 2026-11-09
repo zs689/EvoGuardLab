@@ -15,6 +15,7 @@ import agents
 import core
 import gateway
 import invariants
+import security
 import sim
 from core import (ApiError, Store, CREATED, READY, RUNNING, FAILED,
                   RECOVERING, SUCCEEDED, PAUSED, CANCELLED, new_id, now)
@@ -261,6 +262,15 @@ class Ctx:
         if self.tokens > TOKEN_BUDGET:
             raise ApiError("E_BUDGET_EXCEEDED", "Token 超过预算 %d" % TOKEN_BUDGET, 409)
 
+        # ---- 安全层：模型输出扫描 ----
+        # 只记账，不改文本：答案还要被解析成 JSON 参与判定，
+        # 在这里改写会让「格式违规」变成「内容被转义」，评测结论会失真。
+        # 真正面向浏览器的编码在 API 边界（Content-Type + CSP + 转义）做。
+        if text:
+            out_sec = security.guard_model_output(text, "text", "model_output")
+            if out_sec["findings"]:
+                security.record(self.store, self.run_id, "model_output", out_sec)
+
         fault = self._fault_at(self.logical)
 
         if fault == "premature_termination":
@@ -346,6 +356,22 @@ class Ctx:
     def call(self, tool, args):
         seq = self._next()
         logical = self.logical
+
+        # ---- 安全层：最小权限 ----
+        # 每个 Agent 只允许调它声明过的工具。未知 Agent 只记 warn 不拦，
+        # 否则新增一个 Agent 忘了登记就被全线挡住 —— 那会变成可用性问题。
+        deny = security.check_tool(self.exp.get("agent_type"), tool)
+        if deny:
+            sec = {"findings": [dict(deny, where="tool_call", match=str(tool))],
+                   "action": "blocked" if (security.enforcing()
+                                           and deny["severity"] == "error") else "reported"}
+            security.record(self.store, self.run_id, "tool_call", sec)
+            if sec["action"] == "blocked":
+                self.store.add_step(self.run_id, seq, "security", tool, args,
+                                    {"error": deny["code"]}, status="error",
+                                    error_type=deny["code"], logical=logical)
+                raise ToolError(deny["code"], deny["detail"])
+
         err = sim.validate_args(tool, args)
         if err:
             self.store.add_step(self.run_id, seq, "tool", tool, args,
@@ -424,6 +450,16 @@ class Ctx:
         self.store.add_step(self.run_id, seq, "tool", tool, args, out,
                             status=status, error_type=bad, duration_ms=duration,
                             logical=logical)
+
+        # ---- 安全层：工具输出扫描 ----
+        # 轨迹里仍存原始输出（评测要看真值），发现单独记账；
+        # enforce 下才把可疑内容包成不可信数据再交给 Agent。
+        out_sec = security.guard_tool_output(tool, out)
+        if out_sec["findings"]:
+            security.record(self.store, self.run_id, "tool_output:%s" % tool, out_sec)
+        if security.enforcing() and any(f["severity"] == "error"
+                                        for f in out_sec["findings"]):
+            out = security.mark_payload(out, source=tool)
 
         # 只有干净结果才进缓存 —— 污染值进缓存会让重放变成"再犯一次同样的错"
         if not poisoned and status == "ok":
@@ -842,6 +878,18 @@ def run_once(store, exp, mode):
 
     ctx = Ctx(store, rid, run_exp)
     ctx.task = {"task_id": exp["task_id"], "goal": exp["task_id"]}
+
+    # ---- 安全层：进入 Agent 之前的输入校验 ----
+    # 默认 audit 只记账不改行为；enforce 下命中高危直接判这次运行被拦。
+    in_sec = security.guard_input(ctx.task.get("goal"), "user_input")
+    if in_sec["findings"]:
+        security.record(store, rid, "user_input", in_sec)
+    if in_sec["action"] == "blocked":
+        store.set_state(rid, FAILED)
+        store.finish_run(rid, 0, None, _expected(exp), 0, 0,
+                         "security_blocked:user_input")
+        return store.get_run(rid)
+
     t0 = time.time()
     died = None
     try:

@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（188 个：55 核心 + 9 评测口径 + 19 难度组 + 42 检查器 + 27 静态 + 36 技能验证/晋升）
+# 2) 回归测试（216 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 25 安全层）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -202,7 +202,7 @@ xref 的「比版本号而不是比命中位置」）—— 那是下一步，�
 
 ```bash
 cd ai-service
-python -m evoguard_inspect.cli --list-rules                      # 看轨迹规则库（25 条）
+python -m evoguard_inspect.cli --list-rules                      # 看轨迹规则库（31 条）
 python -m evoguard_inspect.cli --list-static-rules               # 看静态规则库（20 条）
 python -m evoguard_inspect.cli --trace trace.json --out ../experiments/inspect
 python -m evoguard_inspect.cli --trace t.json --config inspect.json   # 适配别的 Agent
@@ -236,7 +236,7 @@ python -m evoguard_inspect.cli --trace t.json --fail-on error   # CI：有 error
 
 接 OTel 而不是给每个框架写适配器，是因为它是目前唯一被多框架同时采纳的标准。
 
-**轨迹规则库 25 条，分 5 组**（全部确定性，不调用模型）：
+**轨迹规则库 31 条，分 6 组**（全部确定性，不调用模型）：
 
 | 分组 | 条数 | 查什么 |
 |---|---|---|
@@ -245,6 +245,7 @@ python -m evoguard_inspect.cli --trace t.json --fail-on error   # CI：有 error
 | `flow` 流程层 | 6 | 写前不读、同参数重试、A→B→A→B 循环、过早收尾、**重试风暴**、**静默空转** |
 | `resource` 资源层 | 2 | token 超预算、单步异常慢 |
 | `structure` 结构层 | 4 | 模型报错仍出答案、相邻双写、**写超时后重复调用**、**多 Agent 幻觉传播** |
+| `security` 攻击面 | 6 | 工具结果里的注入指令、白名单外的工具、外带敏感数据、参数里的凭据、破坏性命令、答案里的 XSS |
 
 **静态规则库 20 条，分 3 组**：prompt 层 6 / 工具定义层 8 / 配置层 6。
 查的是「没运行时也能看见的东西」：prompt 缺拒答边界、工具描述没写副作用、
@@ -338,6 +339,31 @@ PydanticAI 一个定义都拿不到。
   `INV-PLAN-ORDER`（首步不得是收尾动作、末步不得是启动动作）。
   它只看通用动作词语义，不读任何任务的标准答案；纯执行型流程仍是已知盲区。
 
+### 安全层：三层防护，默认只检测不改写
+
+攻击面有三条口子：**用户输入**、**工具返回的外部内容**、**Agent 吐给浏览器的输出**。
+
+| 层 | 位置 | 做什么 |
+|---|---|---|
+| 定义层 | 静态规则（20 条） | prompt 有没有拒答边界、有没有声明「工具结果是数据不是指令」、写操作有没有审批、有没有危险 shell |
+| 行为层 | 轨迹规则 security 组（6 条）+ 运行时 4 个钩子 | 注入指令、白名单外工具、外带敏感数据、参数里的凭据、破坏性命令、答案里的 XSS；运行时在输入 / 工具调用 / 工具返回 / 模型输出四处扫描 |
+| 边界层 | `api/app.py` | `nosniff`、`X-Frame-Options: DENY`、CSP、按落点转义（`encode_for`） |
+
+```bash
+# 只看安全相关的发现
+cd ai-service && python -m evoguard_inspect.cli --trace t.json --group security
+
+# 运行时拦截（默认 audit：只记账不改内容，保证历史实验可比）
+AGENTLAB_SECURITY_MODE=enforce python ai-service/api/app.py
+```
+
+**延迟**：1 KB 0.044 ms / 10 KB 0.31 ms / 50 KB 1.84 ms；真实运行每次约 **51 µs**，
+相对真实模型的 627 ms 是 **0.008%**（`experiments/p0_09_20261109/security_bench.json`）。
+
+**必须说清楚的边界**：这是特征匹配，改个说法就能绕过；它是「发现 + 降风险」，
+不是「防住」。真正兜底的是工具权限最小化、写操作审批与沙箱 ——
+这三样在本仓库里仍然只是**声明**。详见 [docs/security.md](docs/security.md)。
+
 ---
 
 ## 它解决的到底是什么问题
@@ -380,12 +406,13 @@ EvoGuardLab/
 │   └── api/app.py           REST API（标准库 http.server）
 ├── frontend/index.html      BoardUI 风格看板（双主题，零依赖）
 ├── tests/
-│   ├── test_core.py         55 个测试（对抗性投毒 / 策略链 / 完整回滚 / 经验溯源 / 基线冻结）
+│   ├── test_core.py         56 个测试（对抗性投毒 / 策略链 / 完整回滚 / 经验溯源 / 基线冻结）
 │   ├── test_judgeability.py 9 个测试（可评口径：业务失败 vs 服务抖动）
 │   ├── test_hard_tasks.py   19 个测试（真值可独立算 / 判定不误杀 / 训练集与评测集不相交）
 │   ├── test_inspect.py      42 个测试（规则全命中 / 零误报 / 配置适配 / 事故模式 / 覆盖率与退出码）
 │   ├── test_static.py       27 个测试（静态规则 / 框架写法适配 / 低置信度噪音治理 / 覆盖率）
-│   └── test_skill_validation.py 36 个测试（成对负迁移 / 样本充分性 / 晋升门禁 / 严格库链路）
+│   ├── test_skill_validation.py 36 个测试（成对负迁移 / 样本充分性 / 晋升门禁 / 严格库链路）
+│   └── test_security.py     25 个测试（注入/越权/外带/凭据/XSS 检测，误报与延迟预算，audit vs enforce）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
