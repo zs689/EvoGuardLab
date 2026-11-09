@@ -242,6 +242,67 @@ class TestRuntimeIntegration(unittest.TestCase):
             ctx.call("kb.search", {"query": "退款时效"})
 
 
+class TestPolicyRegistration(unittest.TestCase):
+    """接入别人的 Agent 时，策略必须显式登记；没登记时 enforce 要 fail-closed。"""
+
+    def tearDown(self):
+        os.environ.pop("AGENTLAB_SECURITY_MODE", None)
+        S._POLICY_EXTRA.clear()
+
+    def test_registered_policy_overrides_default(self):
+        S.register_policy("ext-agent", {"kb.search"})
+        self.assertEqual(S.allowed_tools("ext-agent"), {"kb.search"})
+        self.assertIsNone(S.check_tool("ext-agent", "kb.search"))
+        self.assertEqual(S.check_tool("ext-agent", "shell.exec")["code"],
+                         "tool_not_allowed")
+
+    def test_unknown_agent_is_warn_in_audit(self):
+        os.environ["AGENTLAB_SECURITY_MODE"] = "audit"
+        deny = S.check_tool("never-registered", "http.send")
+        self.assertEqual(deny["severity"], "warn")
+        res = S.guard_tool_args("never-registered", "http.send", {"url": "x"})
+        self.assertNotEqual(res["action"], "blocked", "audit 不能因为没登记就全拦")
+
+    def test_unknown_agent_is_denied_in_enforce(self):
+        """fail-closed：enforce 下「不知道它能干什么」不是放行理由。"""
+        os.environ["AGENTLAB_SECURITY_MODE"] = "enforce"
+        res = S.guard_tool_args("never-registered", "http.send", {"url": "x"})
+        self.assertEqual(res["action"], "blocked")
+        codes = {f["code"] for f in res["findings"]}
+        self.assertIn("tool_policy_missing", codes)
+
+
+class TestDefenseDemo(unittest.TestCase):
+    """演示脚本本身的安全边界必须是可验证的，不能只写在注释里。"""
+
+    def test_demo_never_executes_or_connects(self):
+        """用 AST 查真实的 import / 调用，而不是在字符串里数关键词 ——
+        注释和文档里出现「subprocess」是正常的（那是在声明不用它）。"""
+        import ast
+        path = os.path.join(ROOT, "scripts", "defense_demo.py")
+        with open(path, encoding="utf-8") as f:
+            src = f.read()
+        tree = ast.parse(src)
+
+        banned_mods = {"subprocess", "socket", "requests", "httpx", "aiohttp",
+                       "urllib", "http", "ftplib", "telnetlib", "paramiko"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    self.assertNotIn(a.name.split(".")[0], banned_mods,
+                                     "演示不允许 import %s" % a.name)
+            elif isinstance(node, ast.ImportFrom):
+                self.assertNotIn((node.module or "").split(".")[0], banned_mods,
+                                 "演示不允许 from %s import" % node.module)
+            elif isinstance(node, ast.Call):
+                fn = node.func
+                name = getattr(fn, "attr", None) or getattr(fn, "id", None)
+                self.assertNotIn(name, {"system", "popen", "spawn", "exec",
+                                        "execv", "system_call", "urlopen"},
+                                 "演示不允许调用 %s" % name)
+        self.assertIn("127.0.0.1:9", src, "外带目标必须是本机丢弃端口")
+
+
 class TestRuntimeEnforcement(unittest.TestCase):
     """从「检测」到「拦得住」：参数级拦截与写操作审批。"""
 

@@ -295,7 +295,27 @@ def wrap_untrusted(text, source="tool"):
 
 
 # ---------------- 最小权限 ----------------
+_POLICY_EXTRA = {}
+
+
+def register_policy(agent_type, tools, append=False):
+    """注册/覆盖某个 Agent 的工具白名单。
+
+    内置的 AGENT_TOOLS 只覆盖本仓库自己的 Agent。接入别人的 Agent 时，
+    必须显式登记它的工具面 —— 不登记就等于「不知道它能干什么」，
+    那种情况下 enforce 会按 fail-closed 处理（见 guard_tool_args）。
+    """
+    assert agent_type, "agent_type 不能为空"
+    if append:
+        _POLICY_EXTRA[agent_type] = set(allowed_tools(agent_type)) | set(tools or ())
+    else:
+        _POLICY_EXTRA[agent_type] = set(tools or ())
+    return sorted(_POLICY_EXTRA[agent_type])
+
+
 def allowed_tools(agent_type):
+    if agent_type in _POLICY_EXTRA:
+        return set(_POLICY_EXTRA[agent_type])
     return set(AGENT_TOOLS.get(agent_type or "", ()))
 
 
@@ -390,6 +410,8 @@ def mark_payload(payload, source="tool"):
 
 def guard_input(text, where="user_input"):
     """用户输入：先扫描；enforce 下命中高危直接拒绝。"""
+    if not enabled():
+        return {"text": _text(text), "findings": [], "action": "none"}
     findings = scan(text, where)
     action = _decide(findings)
     return {"text": _text(text), "findings": findings, "action": action}
@@ -397,6 +419,8 @@ def guard_input(text, where="user_input"):
 
 def guard_tool_output(tool, output, where="tool_output"):
     """工具返回：扫描 + enforce 下包裹成不可信数据。"""
+    if not enabled():
+        return {"text": _text(output), "findings": [], "action": "none"}
     findings = scan(output, where)
     action = _decide(findings)
     body = _text(output)
@@ -407,6 +431,8 @@ def guard_tool_output(tool, output, where="tool_output"):
 
 def guard_model_output(text, context="html", where="model_output"):
     """给出到用户/浏览器之前：扫描 + enforce 下按落点编码。"""
+    if not enabled():
+        return {"text": _text(text), "findings": [], "action": "none"}
     findings = scan(text, where)
     action = _decide(findings)
     body = _text(text)
@@ -421,8 +447,15 @@ def guard_tool_args(agent_type, tool, args, where="tool_call"):
     为什么必须在调用前拦：危险命令和外带一旦执行，事后检测只能看到结果，
     数据已经出门了。检测「发生过的攻击」和「阻止攻击」是两件事，这里做后者。
     """
+    if not enabled():
+        return {"text": _text(args), "findings": [], "action": "none"}
     findings = []
     deny = check_tool(agent_type, tool)
+    if deny and deny["code"] == "tool_policy_missing" and enforcing():
+        # fail-closed：enforce 模式下「不知道这个 Agent 能干什么」不能当放行理由。
+        # audit 仍只告警 —— 默认模式不能因为没登记就把现有流程全挡住。
+        deny = dict(deny, severity="error",
+                    detail=deny["detail"] + "；enforce 下按拒绝处理（fail-closed）")
     if deny:
         findings.append(dict(deny, where=where, match=str(tool),
                              false_positive="白名单配置漏写会误判"))

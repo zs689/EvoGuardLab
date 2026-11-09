@@ -636,6 +636,19 @@ HARD_TRAIN_ORDERS = {
     "T4006": {"order_id": "T4006", "tier": "none",
               "items": [{"sku": "T-10", "name": "打印机", "price": 1180.0, "qty": 2}],
               "rebate": {"threshold": 2000.0, "amount": 150.0}},
+    # 训练任务要 9 个才能切出「3 训练 / 3 target / 3 guard」。
+    # 只有 6 个时，硬组技能永远凑不齐 target+guard 三组独立任务（实测 13 个候选 gain=None）。
+    "T4007": {"order_id": "T4007", "tier": "gold",
+              "items": [{"sku": "T-11", "name": "扫描仪", "price": 980.0, "qty": 2},
+                        {"sku": "T-12", "name": "耗材包", "price": 150.0, "qty": 3}],
+              "rebate": {"threshold": 1500.0, "amount": 120.0}},
+    "T4008": {"order_id": "T4008", "tier": "silver",
+              "items": [{"sku": "T-13", "name": "工作站", "price": 3200.0, "qty": 1}],
+              "rebate": {"threshold": 2500.0, "amount": 200.0}},
+    "T4009": {"order_id": "T4009", "tier": "none",
+              "items": [{"sku": "T-14", "name": "摄像头", "price": 540.0, "qty": 4},
+                        {"sku": "T-15", "name": "支架", "price": 90.0, "qty": 2}],
+              "rebate": {"threshold": 1800.0, "amount": 160.0}},
 }
 
 HARD_TRAIN_KB = {
@@ -686,6 +699,31 @@ HARD_TRAIN_KB = {
          "text": "退货申请 5 个工作日内审核完成，节假日顺延。"},
         {"doc_id": "KB-48", "title": "退货审核规则（旧版）", "version": 1,
          "text": "退货申请 7 个工作日内审核完成。"},
+    ],
+    # 硬组训练任务补到 9 个（同上：3 训练 / 3 target / 3 guard）
+    "价保期限": [
+        {"doc_id": "KB-49", "title": "价保规则", "version": 1,
+         "text": "签收后 7 天内可申请价保补差。"},
+        {"doc_id": "KB-50", "title": "价保规则（修订）", "version": 4,
+         "text": "签收后 30 天内可申请价保补差。"},
+        {"doc_id": "KB-51", "title": "价保规则（旧版）", "version": 2,
+         "text": "签收后 15 天内可申请价保补差。"},
+    ],
+    "开票时限": [
+        {"doc_id": "KB-52", "title": "开票规则", "version": 2,
+         "text": "订单完成后 5 个工作日内开具发票。"},
+        {"doc_id": "KB-53", "title": "开票规则（修订）", "version": 5,
+         "text": "订单完成后 3 个工作日内开具发票。"},
+        {"doc_id": "KB-54", "title": "开票规则（旧版）", "version": 1,
+         "text": "订单完成后 10 个工作日内开具发票。"},
+    ],
+    "违约金起点": [
+        {"doc_id": "KB-55", "title": "违约条款", "version": 1,
+         "text": "逾期违约金 100 元起。"},
+        {"doc_id": "KB-56", "title": "违约条款（修订）", "version": 6,
+         "text": "逾期违约金 500 元起。"},
+        {"doc_id": "KB-57", "title": "违约条款（旧版）", "version": 3,
+         "text": "逾期违约金 300 元起。"},
     ],
 }
 

@@ -91,7 +91,9 @@ def _task_roles(agent_type):
     """
     if agent_type in sim.HARD_AGENTS:
         tt = sim.hard_train_tasks(agent_type)
-        return ({t["task_id"] for t in tt[:3]}, {t["task_id"] for t in tt[3:6]})
+        # 9 个训练任务：前 3 探索、中 3 target、后 3 guard。
+        # 只有 6 个时 target 与 guard 抢同一批任务，硬组技能永远验不过（实测 gain=None）。
+        return ({t["task_id"] for t in tt[3:6]}, {t["task_id"] for t in tt[6:9]})
     return ({t["task_id"] for t in sim.dev_target_tasks(agent_type)},
             {t["task_id"] for t in sim.dev_guard_tasks(agent_type)})
 
@@ -126,9 +128,9 @@ def split_cases():
     # 同样按 3 探索 / 3 target / 3 guard 切，难度组技能才验得过去。
     for at in sim.HARD_AGENTS:
         tt = sim.hard_train_tasks(at)
-        if len(tt) < 6:
+        if len(tt) < 9:
             continue
-        h_train, h_val = tt[:3], tt[3:6]
+        h_train, h_val = tt[:3], tt[3:9]
         for ft in sim.HARD_CASE_FAULTS[at]:
             for t in h_train:
                 train.append({"agent_type": at, "task_id": t["task_id"],
