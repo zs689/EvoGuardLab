@@ -1,0 +1,168 @@
+{
+  "baseline_commit": "7ab36e252d3b5d010a722ec737e4cefd44450e7a",
+  "config": {
+    "backend": "ollama",
+    "env_protocol": "evoguard-env-v1",
+    "inspect_config": {
+      "allowed_tools": [
+        "kb.search",
+        "order.get_order",
+        "order.settle",
+        "task.make_plan"
+      ],
+      "check_pii": true,
+      "expect_keys": [],
+      "max_repeat": 3,
+      "read_only_tools": [
+        "kb.search",
+        "order.get_order",
+        "task.make_plan"
+      ],
+      "slow_step_ms": 30000,
+      "token_budget": 2000,
+      "write_hints": [
+        "settle",
+        "write",
+        "delete",
+        "update",
+        "create",
+        "refund",
+        "submit",
+        "send",
+        "pay",
+        "transfer"
+      ],
+      "write_tools": [
+        "order.settle",
+        "refund.create"
+      ]
+    },
+    "json_grammar": true,
+    "limit": 0,
+    "max_evaluation_age_s": 86400,
+    "max_neg_transfer": 0.05,
+    "min_gain_pp": 15.0,
+    "min_validation_tasks": 3,
+    "model": "qwen3:4b",
+    "modes": [
+      "A",
+      "B",
+      "C",
+      "D"
+    ],
+    "promotion_protocol": "promotion-gate-v1",
+    "protocol": "evoguard-baseline-v1",
+    "skillset_kind": "two_libs",
+    "suite": "all",
+    "system_prompt_sha256": "8da48e6cbf348d7b",
+    "validation_protocol": "paired-v2"
+  },
+  "config_hash": "8fe5db473fd7b42821440b19d18fd12ef43d926ebecef489c26d1728df22f6da",
+  "created_at": "2026-11-09T03:37:21.079580+00:00",
+  "files": [
+    {
+      "bytes": 25460,
+      "kind": "code",
+      "path": "ai-service/evoguard/baseline.py",
+      "sha256": "073198b0bbfcb807b3268815aead03d2ff1a4f438bc0db53f1d53f9696d84cac"
+    },
+    {
+      "bytes": 17873,
+      "kind": "code",
+      "path": "ai-service/evoguard/core.py",
+      "sha256": "c69175975611d65cdd98330d1f9b2c9c51f6691a62e1e8f7c0df256dd80ebf66"
+    },
+    {
+      "bytes": 9587,
+      "kind": "code",
+      "path": "ai-service/evoguard/evaluate.py",
+      "sha256": "b7547629ccc64fab11bada34af61edcbfedb4f7a8ac0aa4154fda28ffc797bb9"
+    },
+    {
+      "bytes": 18651,
+      "kind": "code",
+      "path": "ai-service/evoguard/experience.py",
+      "sha256": "f919cd1d05e4830bc324f2dedc9a9d688fea24aa675046c75a2a5775acfd62e4"
+    },
+    {
+      "bytes": 14355,
+      "kind": "code",
+      "path": "ai-service/evoguard/gateway.py",
+      "sha256": "c8795eac6185f6f9254d41caaf8c79c203cf256ce450f1e2f09c975c44834445"
+    },
+    {
+      "bytes": 54509,
+      "kind": "code",
+      "path": "ai-service/evoguard/runtime.py",
+      "sha256": "93b4ece4f4d340fd8a8c7184d30a0b265aa736a9fbf53acb0aef04060b44d0a2"
+    },
+    {
+      "bytes": 45249,
+      "kind": "code",
+      "path": "ai-service/evoguard/sim.py",
+      "sha256": "4a3269382fe632bac12e9d9c66528e6c06c36e796ba9107ad02e4aa6b9906b54"
+    },
+    {
+      "bytes": 42548,
+      "kind": "code",
+      "path": "ai-service/evoguard/skills.py",
+      "sha256": "969b730a85445c3ddeec36e403e085b57e00a6e6e94e3569e0f6a7301abb4b31"
+    },
+    {
+      "bytes": 20856,
+      "kind": "code",
+      "path": "ai-service/evolution_bench.py",
+      "sha256": "8a0ed1977162d4f0b79baded7b47b89d31ba097c886c676bda89f8cf9aec6794"
+    },
+    {
+      "bytes": 48005,
+      "kind": "code",
+      "path": "ai-service/real_model_bench.py",
+      "sha256": "000d17a29f7a15ee66ba843f78cd082c2747d7dd6e299d1081e4b11057aa203d"
+    },
+    {
+      "bytes": 22236,
+      "kind": "code",
+      "path": "ai-service/real_model_train.py",
+      "sha256": "3356662830559d3d029dd5df760eaf8881d838d45c1f6aeccd9488a6ca1ec27a"
+    },
+    {
+      "bytes": 35363,
+      "kind": "metrics",
+      "path": "experiments/real_model_20261109/bench/metrics.json",
+      "sha256": "4ca9844b8f430193931358c790967721091b0b8f68383693afabf3f04a077268"
+    },
+    {
+      "bytes": 13054,
+      "kind": "report",
+      "path": "experiments/real_model_20261109/bench/report.md",
+      "sha256": "8147367526da0ce464b056f3a748ad9cb8ac66ac8afdfceeef4551b5b44b288f"
+    },
+    {
+      "bytes": 785413,
+      "kind": "runs",
+      "path": "experiments/real_model_20261109/bench/runs.jsonl",
+      "sha256": "821ca6af85e222d5f44d4c985bef4cc1d3b267d1a8691b2179d843050b2016e8"
+    }
+  ],
+  "fingerprint": "ba4cbc9c69ddfb3d5b4576e5abcfc333c60ff9f63f4e7f33a3695bfffbe44542",
+  "libraries": {
+    "C": {
+      "content_sha256": "6059ce30598e8c5453d3ec1178fef8e926433ec7fc30864f999e2909cb657118",
+      "file_sha256": "38067df3efe15950886a4b4d84138a0774c2ab4dc578eb71adeddfcca16be56a",
+      "path": "experiments/real_model_20261109/train/library_c.db",
+      "skills": 127
+    },
+    "D": {
+      "content_sha256": "3f1047997f8da77cbc2f80611bcd37bd2cf8dbe5859cddd8041ed9d9af47784d",
+      "file_sha256": "ad03d43ac7d489410b2267769b5878da53227307084d6badd76c4745d3620f2f",
+      "path": "experiments/real_model_20261109/train/library_d.db",
+      "skills": 11
+    }
+  },
+  "library_hash": "d6dea8be284d4aacb358c1092b338e59a763a5dd01fa4911f7eae69ffa8697d9",
+  "manifest_path": "experiments/real_model_20261109/bench/manifest.json",
+  "note": "真实模型全量评测（P0 06 冻结基线）",
+  "protocol": "evoguard-baseline-v1",
+  "run_dir": "experiments/real_model_20261109/bench"
+}

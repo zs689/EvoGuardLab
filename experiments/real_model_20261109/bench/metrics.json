@@ -1,0 +1,1350 @@
+{
+  "meta": {
+    "model": "qwen3:4b",
+    "backend": "ollama",
+    "provider_name": "ollama",
+    "json_grammar": true,
+    "think_disabled": true,
+    "base": "http://127.0.0.1:11434",
+    "system_prompt": "你是业务 Agent。只看用户给出的上下文回答，不要使用上下文以外的知识。只输出一个 JSON 对象，不要输出解释、不要复述要求、不要输出思考过程。",
+    "system_prompt_sha256": "8da48e6cbf348d7b",
+    "code_sha256": "ba2374a5f4feac8b",
+    "ollama_version": "0.40.15",
+    "dataset": {
+      "tasks": {
+        "order": 15,
+        "kb": 15,
+        "planner": 15
+      },
+      "cases": 510,
+      "dev_cases": 306,
+      "test_cases": 204,
+      "per_agent": {
+        "order": {
+          "tasks": 15,
+          "faults": 12,
+          "dev_cases": 108,
+          "test_cases": 72
+        },
+        "kb": {
+          "tasks": 15,
+          "faults": 11,
+          "dev_cases": 99,
+          "test_cases": 66
+        },
+        "planner": {
+          "tasks": 15,
+          "faults": 11,
+          "dev_cases": 99,
+          "test_cases": 66
+        }
+      },
+      "composite_patterns": 5,
+      "composite_test_cases": 30,
+      "hard": {
+        "cases": 36,
+        "per_agent": {
+          "calc": 18,
+          "xref": 18
+        }
+      }
+    },
+    "modes": [
+      "A",
+      "B",
+      "C",
+      "D"
+    ],
+    "started_at": 1794194760.582,
+    "skillset": {
+      "kind": "two_libs",
+      "d": 11,
+      "c": 127,
+      "d_path": "library_d.db",
+      "c_path": "library_c.db"
+    }
+  },
+  "finished_at": 1794195441.062,
+  "elapsed_s": 680.2,
+  "runs_completed": 1080,
+  "single": {
+    "suite": "single",
+    "cases": 204,
+    "modes": {
+      "A": {
+        "n": 204,
+        "ok": 0,
+        "failed": 204,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 3,
+        "rate": 0.0,
+        "rate_raw": 0.0,
+        "judgeable_rate": 100.0
+      },
+      "B": {
+        "n": 204,
+        "ok": 45,
+        "failed": 159,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 2,
+        "rate": 22.1,
+        "rate_raw": 22.1,
+        "judgeable_rate": 100.0
+      },
+      "C": {
+        "n": 204,
+        "ok": 169,
+        "failed": 35,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 2,
+        "rate": 82.8,
+        "rate_raw": 82.8,
+        "judgeable_rate": 100.0
+      },
+      "D": {
+        "n": 204,
+        "ok": 163,
+        "failed": 41,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 2,
+        "rate": 79.9,
+        "rate_raw": 79.9,
+        "judgeable_rate": 100.0
+      }
+    },
+    "judgeable_rate": 100.0,
+    "unjudgeable": 0,
+    "errors": {},
+    "llm_errors": {
+      "E_LLM_HTTP": 14
+    },
+    "bad_model_output": 0,
+    "model_calls": 810,
+    "avg_latency_ms": 561.2,
+    "total_latency_s": 458.0,
+    "avg_tokens": 97.6,
+    "by_fault": {
+      "tool_timeout": {
+        "n": 18,
+        "ok": 15,
+        "failed": 3,
+        "unjudgeable": 0
+      },
+      "tool_exception": {
+        "n": 18,
+        "ok": 15,
+        "failed": 3,
+        "unjudgeable": 0
+      },
+      "invalid_json": {
+        "n": 18,
+        "ok": 15,
+        "failed": 3,
+        "unjudgeable": 0
+      },
+      "missing_field": {
+        "n": 18,
+        "ok": 15,
+        "failed": 3,
+        "unjudgeable": 0
+      },
+      "silent_corruption": {
+        "n": 6,
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
+      },
+      "retrieval_failure": {
+        "n": 18,
+        "ok": 15,
+        "failed": 3,
+        "unjudgeable": 0
+      },
+      "context_loss": {
+        "n": 18,
+        "ok": 15,
+        "failed": 3,
+        "unjudgeable": 0
+      },
+      "process_interruption": {
+        "n": 18,
+        "ok": 15,
+        "failed": 3,
+        "unjudgeable": 0
+      },
+      "format_violation": {
+        "n": 18,
+        "ok": 16,
+        "failed": 2,
+        "unjudgeable": 0
+      },
+      "wrong_tool": {
+        "n": 6,
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
+      },
+      "tool_hallucination": {
+        "n": 18,
+        "ok": 15,
+        "failed": 3,
+        "unjudgeable": 0
+      },
+      "premature_termination": {
+        "n": 18,
+        "ok": 15,
+        "failed": 3,
+        "unjudgeable": 0
+      },
+      "stale_data": {
+        "n": 6,
+        "ok": 0,
+        "failed": 6,
+        "unjudgeable": 0
+      },
+      "incorrect_planning": {
+        "n": 6,
+        "ok": 0,
+        "failed": 6,
+        "unjudgeable": 0
+      }
+    },
+    "D_failures": [
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "tool_timeout",
+        "verdict": "failed",
+        "root_causes": [
+          "tool_timeout"
+        ],
+        "chain": [
+          "retry"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "tool_exception",
+        "verdict": "failed",
+        "root_causes": [
+          "tool_exception"
+        ],
+        "chain": [
+          "retry"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "invalid_json",
+        "verdict": "failed",
+        "root_causes": [
+          "invalid_json"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "missing_field",
+        "verdict": "failed",
+        "root_causes": [
+          "missing_field"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "retrieval_failure",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['证据1'], 'text': '自签收之日起 7 个工作日内可无理由退货，商品需保持完好。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "context_loss",
+        "verdict": "failed",
+        "root_causes": [
+          "context_loss"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "process_interruption",
+        "verdict": "failed",
+        "root_causes": [
+          "process_interruption"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "stale_data"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['上下文证据'], 'text': '运费险赔付首重15元，续重每公斤8元'}"
+      },
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "tool_hallucination",
+        "verdict": "failed",
+        "root_causes": [
+          "tool_hallucination"
+        ],
+        "chain": [
+          "cross_verify"
+        ],
+        "answer": "{'cited': ['上下文证据', '补充步骤 777'], 'text': '运费险赔付首重19元，续重每公斤12元'}"
+      },
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "premature_termination",
+        "verdict": "failed",
+        "root_causes": [
+          "premature_termination"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "{}"
+      },
+      {
+        "agent": "kb",
+        "task": "积分有效期多久",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "stale_data"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['证据1'], 'text': '购物积分自到账起 15 个月内有效，逾期自动清零。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "账期多少天",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "stale_data"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['证据1'], 'text': '签约企业客户享 33 天账期'}"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "tool_timeout",
+        "verdict": "failed",
+        "root_causes": [
+          "tool_timeout"
+        ],
+        "chain": [
+          "retry"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "tool_exception",
+        "verdict": "failed",
+        "root_causes": [
+          "tool_exception"
+        ],
+        "chain": [
+          "retry"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "invalid_json",
+        "verdict": "failed",
+        "root_causes": [
+          "invalid_json"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "missing_field",
+        "verdict": "failed",
+        "root_causes": [
+          "missing_field"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "retrieval_failure",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['证据1'], 'text': '自签收之日起 7 个工作日内可无理由退货，商品需保持完好。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "context_loss",
+        "verdict": "failed",
+        "root_causes": [
+          "context_loss"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "process_interruption",
+        "verdict": "failed",
+        "root_causes": [
+          "process_interruption"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "stale_data"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['证据1'], 'text': '电子发票在订单完成后 8 个工作日内开具，不支持修改抬头。 默认开具电子普通发票，专票需在 6 个工作日内申请。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "format_violation",
+        "verdict": "failed",
+        "root_causes": [
+          "format_violation"
+        ],
+        "chain": [
+          "reformat"
+        ],
+        "answer": "{}"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "tool_hallucination",
+        "verdict": "failed",
+        "root_causes": [
+          "tool_hallucination"
+        ],
+        "chain": [
+          "cross_verify"
+        ],
+        "answer": "{'cited': ['证据1', '补充步骤 777'], 'text': '电子发票在订单完成后 12 个工作日内开具，不支持修改抬头。 默认开具电子普通发票，专票需在 10 "
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "premature_termination",
+        "verdict": "failed",
+        "root_causes": [
+          "premature_termination"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "{}"
+      },
+      {
+        "agent": "kb",
+        "task": "安装要提前多久预约",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "stale_data"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['证据1'], 'text': '大件商品提供免费上门安装，需提前 51 小时预约。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "tool_timeout",
+        "verdict": "failed",
+        "root_causes": [
+          "tool_timeout"
+        ],
+        "chain": [
+          "retry"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "tool_exception",
+        "verdict": "failed",
+        "root_causes": [
+          "tool_exception"
+        ],
+        "chain": [
+          "retry"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "invalid_json",
+        "verdict": "failed",
+        "root_causes": [
+          "invalid_json"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "missing_field",
+        "verdict": "failed",
+        "root_causes": [
+          "missing_field"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "retrieval_failure",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['证据1'], 'text': '退货审核通过后 3 个工作日内原路退回，遇节假日顺延。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "context_loss",
+        "verdict": "failed",
+        "root_causes": [
+          "context_loss"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "process_interruption",
+        "verdict": "failed",
+        "root_causes": [
+          "process_interruption"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "stale_data"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['证据1'], 'text': '自签收之日起 10 个工作日内可无理由退货，商品需保持完好。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "format_violation",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{}"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "tool_hallucination",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['证据1', '补充步骤 777'], 'text': '自签收之日起 14 个工作日内可无理由退货，商品需保持完好。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "premature_termination",
+        "verdict": "failed",
+        "root_causes": [
+          "premature_termination"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "{}"
+      },
+      {
+        "agent": "planner",
+        "task": "pricing",
+        "fault": "incorrect_planning",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['发布价目表', '测算毛利', '核对竞品价', '拉取成本价']}"
+      },
+      {
+        "agent": "planner",
+        "task": "migration",
+        "fault": "incorrect_planning",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['校验一致性', '灰度迁移', '备份数据', '评估影响面']}"
+      },
+      {
+        "agent": "planner",
+        "task": "recall",
+        "fault": "incorrect_planning",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['出具召回报告', '回收入库', '通知客户', '圈定批次']}"
+      },
+      {
+        "agent": "planner",
+        "task": "sourcing",
+        "fault": "incorrect_planning",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['签框架协议', '比价定标', '询价', '收集供应商名单']}"
+      },
+      {
+        "agent": "planner",
+        "task": "settlement",
+        "fault": "incorrect_planning",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['开票寄送', '出具结算单', '确认差异', '核对账单']}"
+      },
+      {
+        "agent": "planner",
+        "task": "upgrade",
+        "fault": "incorrect_planning",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'steps': ['验证与观察', '窗口期升级', '制定回滚方案', '评估兼容性']}"
+      }
+    ]
+  },
+  "composite": {
+    "suite": "composite",
+    "cases": 30,
+    "modes": {
+      "A": {
+        "n": 30,
+        "ok": 0,
+        "failed": 30,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 0,
+        "rate": 0.0,
+        "rate_raw": 0.0,
+        "judgeable_rate": 100.0
+      },
+      "B": {
+        "n": 30,
+        "ok": 0,
+        "failed": 30,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 0,
+        "rate": 0.0,
+        "rate_raw": 0.0,
+        "judgeable_rate": 100.0
+      },
+      "C": {
+        "n": 30,
+        "ok": 0,
+        "failed": 30,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 2,
+        "rate": 0.0,
+        "rate_raw": 0.0,
+        "judgeable_rate": 100.0
+      },
+      "D": {
+        "n": 30,
+        "ok": 16,
+        "failed": 14,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 2,
+        "rate": 53.3,
+        "rate_raw": 53.3,
+        "judgeable_rate": 100.0
+      }
+    },
+    "judgeable_rate": 100.0,
+    "unjudgeable": 0,
+    "errors": {},
+    "llm_errors": {
+      "E_LLM_HTTP": 6
+    },
+    "bad_model_output": 0,
+    "model_calls": 108,
+    "avg_latency_ms": 776.0,
+    "total_latency_s": 93.1,
+    "avg_tokens": 60.3,
+    "by_fault": {
+      "missing_field+silent_corruption": {
+        "n": 6,
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
+      },
+      "wrong_tool+format_violation": {
+        "n": 6,
+        "ok": 6,
+        "failed": 0,
+        "unjudgeable": 0
+      },
+      "retrieval_failure+tool_hallucination": {
+        "n": 6,
+        "ok": 0,
+        "failed": 6,
+        "unjudgeable": 0
+      },
+      "stale_data+context_loss": {
+        "n": 6,
+        "ok": 0,
+        "failed": 6,
+        "unjudgeable": 0
+      },
+      "incorrect_planning+premature_termination": {
+        "n": 6,
+        "ok": 4,
+        "failed": 2,
+        "unjudgeable": 0
+      }
+    },
+    "D_failures": [
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "retrieval_failure+tool_hallucination",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['证据1', '补充步骤 777'], 'text': '自签收之日起 14 个工作日内可无理由退货，商品需保持完好。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "积分有效期多久",
+        "fault": "retrieval_failure+tool_hallucination",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['证据1', '补充步骤 777'], 'text': '自签收之日起 14 个工作日内可无理由退货，商品需保持完好。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "账期多少天",
+        "fault": "retrieval_failure+tool_hallucination",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['证据1', '补充步骤 777'], 'text': '自签收之日起 14 个工作日内可无理由退货，商品需保持完好。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "retrieval_failure+tool_hallucination",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['证据1', '补充步骤 777'], 'text': '自签收之日起 14 个工作日内可无理由退货，商品需保持完好。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "安装要提前多久预约",
+        "fault": "retrieval_failure+tool_hallucination",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['证据1', '补充步骤 777'], 'text': '自签收之日起 14 个工作日内可无理由退货，商品需保持完好。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "retrieval_failure+tool_hallucination",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['证据1', '补充步骤 777'], 'text': '退货审核通过后 10 个工作日内原路退回，遇节假日顺延。'}"
+      },
+      {
+        "agent": "kb",
+        "task": "运费险赔多少",
+        "fault": "stale_data+context_loss",
+        "verdict": "failed",
+        "root_causes": [
+          "context_loss"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "积分有效期多久",
+        "fault": "stale_data+context_loss",
+        "verdict": "failed",
+        "root_causes": [
+          "context_loss"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "账期多少天",
+        "fault": "stale_data+context_loss",
+        "verdict": "failed",
+        "root_causes": [
+          "context_loss"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "发票多久能重开",
+        "fault": "stale_data+context_loss",
+        "verdict": "failed",
+        "root_causes": [
+          "context_loss"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "安装要提前多久预约",
+        "fault": "stale_data+context_loss",
+        "verdict": "failed",
+        "root_causes": [
+          "context_loss"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "kb",
+        "task": "价保多久内有效",
+        "fault": "stale_data+context_loss",
+        "verdict": "failed",
+        "root_causes": [
+          "context_loss"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "planner",
+        "task": "pricing",
+        "fault": "incorrect_planning+premature_termination",
+        "verdict": "failed",
+        "root_causes": [
+          "premature_termination",
+          "unknown"
+        ],
+        "chain": [
+          "fallback_tool",
+          "cross_verify"
+        ],
+        "answer": "{}"
+      },
+      {
+        "agent": "planner",
+        "task": "sourcing",
+        "fault": "incorrect_planning+premature_termination",
+        "verdict": "failed",
+        "root_causes": [
+          "premature_termination",
+          "unknown"
+        ],
+        "chain": [
+          "fallback_tool",
+          "cross_verify"
+        ],
+        "answer": "{}"
+      }
+    ]
+  },
+  "hard": {
+    "suite": "hard",
+    "cases": 36,
+    "modes": {
+      "A": {
+        "n": 36,
+        "ok": 8,
+        "failed": 28,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 0,
+        "rate": 22.2,
+        "rate_raw": 22.2,
+        "judgeable_rate": 100.0
+      },
+      "B": {
+        "n": 36,
+        "ok": 16,
+        "failed": 20,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 0,
+        "rate": 44.4,
+        "rate_raw": 44.4,
+        "judgeable_rate": 100.0
+      },
+      "C": {
+        "n": 36,
+        "ok": 27,
+        "failed": 9,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 0,
+        "rate": 75.0,
+        "rate_raw": 75.0,
+        "judgeable_rate": 100.0
+      },
+      "D": {
+        "n": 36,
+        "ok": 25,
+        "failed": 11,
+        "unjudgeable": 0,
+        "failures_with_llm_error": 0,
+        "rate": 69.4,
+        "rate_raw": 69.4,
+        "judgeable_rate": 100.0
+      }
+    },
+    "judgeable_rate": 100.0,
+    "unjudgeable": 0,
+    "errors": {},
+    "llm_errors": {},
+    "bad_model_output": 0,
+    "model_calls": 140,
+    "avg_latency_ms": 484.0,
+    "total_latency_s": 69.7,
+    "avg_tokens": 172.1,
+    "by_fault": {
+      "none": {
+        "n": 6,
+        "ok": 5,
+        "failed": 1,
+        "unjudgeable": 0
+      },
+      "tool_timeout": {
+        "n": 6,
+        "ok": 5,
+        "failed": 1,
+        "unjudgeable": 0
+      },
+      "tool_exception": {
+        "n": 3,
+        "ok": 3,
+        "failed": 0,
+        "unjudgeable": 0
+      },
+      "missing_field": {
+        "n": 6,
+        "ok": 5,
+        "failed": 1,
+        "unjudgeable": 0
+      },
+      "silent_corruption": {
+        "n": 3,
+        "ok": 0,
+        "failed": 3,
+        "unjudgeable": 0
+      },
+      "premature_termination": {
+        "n": 6,
+        "ok": 5,
+        "failed": 1,
+        "unjudgeable": 0
+      },
+      "retrieval_failure": {
+        "n": 3,
+        "ok": 2,
+        "failed": 1,
+        "unjudgeable": 0
+      },
+      "stale_data": {
+        "n": 3,
+        "ok": 0,
+        "failed": 3,
+        "unjudgeable": 0
+      }
+    },
+    "D_failures": [
+      {
+        "agent": "calc",
+        "task": "H3001",
+        "fault": "silent_corruption",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'applied_order': ['rebate', 'discount'], 'order_id': 'H3001', 'total': 2587.2}"
+      },
+      {
+        "agent": "calc",
+        "task": "H3002",
+        "fault": "silent_corruption",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'applied_order': ['rebate', 'discount'], 'order_id': 'H3002', 'total': 1672.65}"
+      },
+      {
+        "agent": "calc",
+        "task": "H3003",
+        "fault": "silent_corruption",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'applied_order': ['rebate', 'discount'], 'order_id': 'H3003', 'total': 525.0}"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "none",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['KB-23 v1'], 'text': '自签收之日起 15 个工作日内可无理由退货。'}"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "tool_timeout",
+        "verdict": "failed",
+        "root_causes": [
+          "tool_timeout"
+        ],
+        "chain": [
+          "retry"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "retrieval_failure",
+        "verdict": "failed",
+        "root_causes": [
+          "retrieval_failure"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "{'cited': ['KB-24 v3'], 'text': '整机保修 12 个月'}"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['KB-23 v1'], 'text': '自签收之日起 15 个工作日内可无理由退货。'}"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "missing_field",
+        "verdict": "failed",
+        "root_causes": [
+          "missing_field"
+        ],
+        "chain": [
+          "fallback_tool"
+        ],
+        "answer": "None"
+      },
+      {
+        "agent": "xref",
+        "task": "退货期限",
+        "fault": "premature_termination",
+        "verdict": "failed",
+        "root_causes": [
+          "premature_termination"
+        ],
+        "chain": [
+          "replay_checkpoint"
+        ],
+        "answer": "{}"
+      },
+      {
+        "agent": "xref",
+        "task": "保修期限",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['KB-26 v1'], 'text': '整机保修 6 个月。'}"
+      },
+      {
+        "agent": "xref",
+        "task": "发票时限",
+        "fault": "stale_data",
+        "verdict": "failed",
+        "root_causes": [
+          "unknown"
+        ],
+        "chain": [
+          "human_takeover"
+        ],
+        "answer": "{'cited': ['KB-29 v1'], 'text': '电子发票在订单完成后 10 个工作日内开具。'}"
+      }
+    ]
+  },
+  "grammar_control": {
+    "n": 6,
+    "strict_ok": 0,
+    "errors": {},
+    "latency_ms_total": 58686,
+    "samples": [
+      {
+        "strict": false,
+        "latency_ms": 10800,
+        "head": "好的，我现在需要处理用户的这个请求。首先，用户给了一个上下文：“订单 A1001，计价工具返回总额 504.0。”然后要求输出一个JSON对"
+      },
+      {
+        "strict": false,
+        "latency_ms": 8769,
+        "head": "好的，我现在需要处理用户的这个查询。首先，用户给了一个上下文证据：“自签收之日起 7 个工作日内可无理由退货。”然后问题问的是“退货要几天内"
+      },
+      {
+        "strict": false,
+        "latency_ms": 9006,
+        "head": "好的，我现在需要处理用户的这个请求。用户给了一个上下文步骤：收集本周销售数据 / 核对异常订单 / 生成周报草稿 / 提交审核。然后要输出一"
+      },
+      {
+        "strict": false,
+        "latency_ms": 10849,
+        "head": "好的，我现在需要处理用户的这个请求。首先，用户给了一个上下文：“订单 A1002，计价工具返回总额 899.0。”然后要求输出一个JSON对"
+      },
+      {
+        "strict": false,
+        "latency_ms": 10857,
+        "head": "首先，用户要求我作为业务 Agent，只根据上下文证据来回答问题。上下文证据是：\"退货审核通过后 3 个工作日内原路退回。\" 问题：\"退款多"
+      },
+      {
+        "strict": false,
+        "latency_ms": 8405,
+        "head": "好的，我现在需要处理用户的这个请求。用户给了一个上下文步骤：冻结代码 / 跑回归测试 / 生成变更说明 / 灰度发布。然后要输出一个JSON"
+      }
+    ],
+    "avg_latency_ms": 9781.0,
+    "call_errors": 0,
+    "judgeable": 6,
+    "valid": true,
+    "strict_rate": 0.0,
+    "strict_rate_all": 0.0,
+    "error_rate": 0.0
+  },
+  "mock_baseline": {
+    "source": "experiments/metrics.json（mock 闭环）",
+    "four_groups": {
+      "A": 0.0,
+      "B": 26.5,
+      "C": 100.0,
+      "D": 100.0
+    },
+    "composite": {
+      "single": 0.0,
+      "chain": 100.0,
+      "D": 100.0
+    }
+  },
+  "baseline_protocol": "evoguard-baseline-v1",
+  "config_hash": "8fe5db473fd7b42821440b19d18fd12ef43d926ebecef489c26d1728df22f6da",
+  "library_hash": "d6dea8be284d4aacb358c1092b338e59a763a5dd01fa4911f7eae69ffa8697d9",
+  "libraries": {
+    "C": {
+      "content_sha256": "6059ce30598e8c5453d3ec1178fef8e926433ec7fc30864f999e2909cb657118",
+      "skills": 127,
+      "path": "E:\\agent\\EvoGuardLab\\experiments\\real_model_20261109\\train\\library_c.db"
+    },
+    "D": {
+      "content_sha256": "3f1047997f8da77cbc2f80611bcd37bd2cf8dbe5859cddd8041ed9d9af47784d",
+      "skills": 11,
+      "path": "E:\\agent\\EvoGuardLab\\experiments\\real_model_20261109\\train\\library_d.db"
+    }
+  },
+  "mixed_baseline": false
+}

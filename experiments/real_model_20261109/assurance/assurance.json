@@ -1,0 +1,453 @@
+{
+  "verdict": "FAIL",
+  "dimensions": {
+    "reliability": {
+      "verdict": "FAIL",
+      "findings": 893,
+      "by_severity": {
+        "error": 463,
+        "warn": 430
+      },
+      "by_rule": {
+        "empty_answer": 416,
+        "tool_result_unused": 215,
+        "cycle_detected": 117,
+        "hallucinated_number": 68,
+        "model_error_ignored": 47,
+        "loop_detected": 18,
+        "unsupported_entity": 12
+      },
+      "measured": "结论正确性、工具使用、流程、资源、结构（31 条规则中的 25 条）",
+      "not_measured": "语义正确性（规则只看证据是否自洽，不判断业务上对不对）；提示词层面的约束（属于静态检查）"
+    },
+    "security": {
+      "verdict": "LIMITED",
+      "findings": 0,
+      "by_severity": {},
+      "by_rule": {},
+      "measured": "间接注入、越权工具、数据外带、凭据出现在参数、危险命令、输出侧 XSS",
+      "not_measured": "检测基于特征，改写/编码/多语言混写可绕过；审批与沙箱只有声明，运行时不强制"
+    },
+    "operability": {
+      "verdict": "RISK",
+      "reasons": [
+        "92 条轨迹在模型报错后仍给出了答案（故障注入数据里属预期；真实数据里要查是不是降级）",
+        "模型步骤报错率 12%"
+      ],
+      "metrics": {
+        "traces": 1080,
+        "injected_traces": 1056,
+        "model_steps": 1058,
+        "model_error_steps": 124,
+        "model_error_rate": 0.117,
+        "tool_steps": 2708,
+        "tool_error_steps": 537,
+        "tool_error_rate": 0.198,
+        "budget_hits": 0,
+        "tool_p95_ms": 3000,
+        "model_error_with_answer": 92
+      },
+      "measured": "模型/工具报错率、预算触发、工具耗时 p95、报错后仍有答案的轨迹数",
+      "not_measured": "真实服务可用性（SLA）、并发与限流、成本曲线"
+    }
+  },
+  "coverage": {
+    "verdict": "FINDINGS",
+    "total_rules": 31,
+    "runnable_rules": 29,
+    "skipped_rules": 2,
+    "runnable_ratio": 0.935,
+    "traces": 1080,
+    "traces_with": {
+      "answer": 775,
+      "tools": 1080,
+      "tools_multi": 312,
+      "tool_text": 1080,
+      "chats": 795,
+      "tokens": 781,
+      "ts": 1080
+    },
+    "config": {
+      "config:expect_keys": false,
+      "config:allowed_tools": false,
+      "config:pii": true
+    },
+    "table_warnings": [],
+    "rules": [
+      {
+        "rule_id": "empty_answer",
+        "group": "answer",
+        "severity": "error",
+        "requires": [],
+        "applicable_traces": 1080,
+        "hits": 416,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "answer_schema_missing",
+        "group": "answer",
+        "severity": "warn",
+        "requires": [
+          "config:expect_keys"
+        ],
+        "applicable_traces": 0,
+        "hits": 0,
+        "runnable": false,
+        "skipped_because": [
+          "配置未声明 expect_keys"
+        ]
+      },
+      {
+        "rule_id": "unsupported_entity",
+        "group": "answer",
+        "severity": "warn",
+        "requires": [
+          "answer",
+          "tools"
+        ],
+        "applicable_traces": 775,
+        "hits": 12,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "hallucinated_number",
+        "group": "answer",
+        "severity": "warn",
+        "requires": [
+          "answer",
+          "tool_text"
+        ],
+        "applicable_traces": 775,
+        "hits": 68,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "pii_leak",
+        "group": "answer",
+        "severity": "error",
+        "requires": [
+          "answer",
+          "config:pii"
+        ],
+        "applicable_traces": 775,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "error_swallowed",
+        "group": "tool",
+        "severity": "error",
+        "requires": [
+          "tools",
+          "answer"
+        ],
+        "applicable_traces": 775,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "tool_never_called",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "chats"
+        ],
+        "applicable_traces": 795,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "tool_arg_incomplete",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "tool_result_unused",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "tools",
+          "answer"
+        ],
+        "applicable_traces": 775,
+        "hits": 215,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "dependency_mismatch",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "tool_name_unknown",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "tools",
+          "config:allowed_tools"
+        ],
+        "applicable_traces": 0,
+        "hits": 0,
+        "runnable": false,
+        "skipped_because": [
+          "配置未声明 allowed_tools"
+        ]
+      },
+      {
+        "rule_id": "write_before_read",
+        "group": "flow",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "loop_detected",
+        "group": "flow",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 1080,
+        "hits": 18,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "cycle_detected",
+        "group": "flow",
+        "severity": "warn",
+        "requires": [
+          "tools_multi"
+        ],
+        "applicable_traces": 312,
+        "hits": 117,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "premature_finish",
+        "group": "flow",
+        "severity": "error",
+        "requires": [
+          "answer",
+          "tools"
+        ],
+        "applicable_traces": 775,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "token_blowup",
+        "group": "resource",
+        "severity": "warn",
+        "requires": [
+          "tokens"
+        ],
+        "applicable_traces": 781,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "slow_step",
+        "group": "resource",
+        "severity": "info",
+        "requires": [
+          "ts"
+        ],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "model_error_ignored",
+        "group": "structure",
+        "severity": "error",
+        "requires": [
+          "chats",
+          "answer"
+        ],
+        "applicable_traces": 721,
+        "hits": 47,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "parallel_write_conflict",
+        "group": "structure",
+        "severity": "error",
+        "requires": [
+          "tools_multi"
+        ],
+        "applicable_traces": 312,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "self_report_contradiction",
+        "group": "answer",
+        "severity": "error",
+        "requires": [
+          "answer",
+          "tools"
+        ],
+        "applicable_traces": 775,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "retry_storm",
+        "group": "flow",
+        "severity": "error",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "silent_stall",
+        "group": "flow",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "write_timeout_ambiguous",
+        "group": "structure",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "retry_on_permanent_error",
+        "group": "tool",
+        "severity": "warn",
+        "requires": [
+          "tools"
+        ],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "hallucination_propagation",
+        "group": "structure",
+        "severity": "warn",
+        "requires": [
+          "tools_multi"
+        ],
+        "applicable_traces": 312,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "injection_in_tool_output",
+        "group": "security",
+        "severity": "error",
+        "requires": [],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "tool_not_allowed",
+        "group": "security",
+        "severity": "warn",
+        "requires": [],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "data_exfiltration",
+        "group": "security",
+        "severity": "error",
+        "requires": [],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "secret_in_tool_args",
+        "group": "security",
+        "severity": "error",
+        "requires": [],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "dangerous_shell_command",
+        "group": "security",
+        "severity": "error",
+        "requires": [],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      },
+      {
+        "rule_id": "xss_in_answer",
+        "group": "security",
+        "severity": "error",
+        "requires": [],
+        "applicable_traces": 1080,
+        "hits": 0,
+        "runnable": true,
+        "skipped_because": []
+      }
+    ]
+  },
+  "static": null,
+  "traces": 1080,
+  "note": "判定是「基于现有证据」的结论，不是概率保证。LIMITED 表示有规则因输入不足没执行，不能读成通过。"
+}
