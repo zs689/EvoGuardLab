@@ -827,6 +827,60 @@ SQLite 幂等闭环。
 停止条件 / 失败回退），在独立任务家族上做前后配对验证与公平消融；
 无稳定收益允许拒绝晋升并发布负结果。
 
+---
+
+## 2026-11-09（第六阶段）：阶段 D / E01 声明式条件技能骨架
+
+### 完成事项
+
+- 新增 `ai-service/evoguard/conditional_skill.py`：技能只有八项声明式字段
+  （id/name/applies_when/required_evidence/allowed_tools/decision_params/
+  stop_when/fallback），`schema_version=conditional-skill-v1`。
+- 外部执行器 `accept()` 强制边界：禁止字段（含嵌套）`code` / `exec` /
+  `evaluation_criteria` / `approval_status` / `system_policy` /
+  `set_allowed_tools` 等；禁止代码特征字符串（`import ` / `def ` / `exec(` /
+  `__` / `subprocess` …）；`decision_params` 只允许四个登记键；
+  `allowed_tools` 必须是冻结策略子集且**不得声明写工具**。
+- `execute()` 执行前**二次校验**，只做三种确定性选择（`max_version` 按文档版本、
+  `declared_order` 按声明业务顺序、`first`），不调用工具、不执行代码；
+  缺必需证据 / 无证据 / 超 `max_steps` 一律走 `fallback`。
+- `paired_check()`：同 task/seed 前后配对算 gain 与负迁移率；
+  **业务收益不能抵消未授权操作**（after 出现 `unauthorized`/`unsafe` 直接 REJECT，
+  哪怕 gain=1.0）；无稳定收益允许 REJECT 并发布负结果；无可配对用例给
+  `NEEDS_REVIEW` 且零分母 `None`。
+- 新增 `docs/conditional-skill-protocol.md`、`tests/test_conditional_skill.py`（21 项）。
+
+### 证据与数字
+
+- 全量回归 **351 项全绿**（330 + 21）；旧 `skills.py` 未改，330 项旧测试不受影响。
+- 21 项覆盖：合法技能接受、缺字段拒绝、禁止字段/嵌套拒绝、代码特征拒绝、
+  未登记参数拒绝、未知选择器拒绝、越权声明拒绝、写工具拒绝、指纹稳定、
+  三种选择器、缺证据/超步数回退、策略收紧后执行被拦、
+  配对验证的 PROMOTE / 越权覆盖收益 / 负迁移 / 负结果 / 零分母。
+
+### 仍不成立的主张（不能说）
+
+- ❌ 条件技能已经在独立任务家族上证明增量：只做了 `paired_check` 骨架，
+  没有 train/dev/validation/test 四组家族与真实数据集。
+- ❌ 存在公平消融的因果结论：C/D 还差匹配、容量、状态过滤，未消融。
+- ❌ 准确率 / 真实业务效果 / 防住注入 / 生产级：同前几轮，仍不成立。
+
+### 本轮没做（如实标注）
+
+- E02 的四组任务家族、真实 guard 与正常 guard、完整公平消融与回滚证据。
+- E03 经验适用范围登记（工具契约 / 数据版本 / 权限 / 有效期 / 撤销）、
+  结构过滤 + BM25、embedding 评估。
+- 云端 LoRA、完整多 Agent、向量数据库、双后端迁移按计划暂缓。
+- 未重跑 1080 run、未重训模型、未改冻结 manifest。
+
+### 下一项验收
+
+E02 在**独立任务家族**上证明增量：建 train / dev / validation / test 四组，
+用相同任务与 seed 做前后配对，同时检查正常 guard 与安全 guard；
+业务收益不能抵消未授权操作；没有稳定收益就拒绝候选、保留失败样本与解释，
+并发布负结果。之后才是 E03 与公平消融。
+
+
 
 
 

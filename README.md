@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（330 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 14 四模式对照 + 15 审批与结算 + 21 评测质量与 CI）
+# 2) 回归测试（351 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 14 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -412,6 +412,27 @@ cd ai-service && python -m evoguard_inspect.cli \
 **如实标注**：没有外部真实业务轨迹、没有独立标注者，这些数字仍不能叫准确率；
 CI 策略的阈值仍是工程经验值，尚未登记版本与开发集分布。
 
+### 条件决策技能（阶段 D / E01 骨架）
+
+`ai-service/evoguard/conditional_skill.py`：技能只有八项声明式字段，
+模型提出候选后由外部执行器校验 schema 与权限。
+
+- 禁止字段（含嵌套）与代码特征：不得改评测标准 / 审批状态 / 系统策略 / 允许工具集合，
+  **先不生成任意 Python 代码**。
+- `allowed_tools` 必须是冻结策略子集、不得声明写工具；执行前二次校验。
+- 确定性执行器只按 `max_version` / `declared_order` / `first` 选证据，
+  不调用工具、不执行代码；缺证据或超步数走失败回退。
+- `paired_check()` 做同 task/seed 前后配对：业务收益**不能抵消**未授权操作，
+  没有稳定收益允许拒绝晋升并发布负结果，零分母给 `None`。
+
+```bash
+python -m unittest tests.test_conditional_skill -q
+```
+
+协议与公平消融安排见 [docs/conditional-skill-protocol.md](docs/conditional-skill-protocol.md)。
+**未做**：四组任务家族、真实 guard 数据集、完整公平消融与回滚证据、
+E03 经验适用范围与检索改进；没有重跑 1080 run。
+
 ### 安全层：三层防护，默认只检测不改写
 
 攻击面有三条口子：**用户输入**、**工具返回的外部内容**、**Agent 吐给浏览器的输出**。
@@ -576,7 +597,8 @@ EvoGuardLab/
 │   ├── test_docs_consistency.py 12 个测试（当前口径 / 冻结历史不被改写）
 │   ├── test_mode_compare.py 14 个测试（审批开关反例 / 配置指纹 / 分母与 N/A / 冻结历史）
 │   ├── test_approval.py     15 个测试（5 个必须验收情形 / 统一门禁 / 进程重启 / 幂等）
-│   └── test_permission_and_ci.py 21 个测试（Q01–Q05：权限反例 / kappa / 维度覆盖 / CI 策略）
+│   ├── test_permission_and_ci.py 21 个测试（Q01–Q05：权限反例 / kappa / 维度覆盖 / CI 策略）
+│   └── test_conditional_skill.py 21 个测试（声明式 schema / 越权拒绝 / 确定性执行 / 配对验证）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── scripts/freeze_mode_compare.py  四模式配置冻结 + 逐 case 对照
 ├── scripts/real_settlement_demo.py 5 个审批与结算验收情形
@@ -585,7 +607,8 @@ EvoGuardLab/
 ├── ai-service/evoguard/approval.py     可恢复审批状态机 + 幂等结算账本
 ├── ai-service/evoguard/real_tasks.py   本地 HTTP 订单 + 沙箱规则 + 结算链
 ├── ai-service/evoguard_inspect/independent_labels.py  三种真值 + kappa 协议
-└── ai-service/evoguard_inspect/ci_policy.py           CI 发布策略
+├── ai-service/evoguard_inspect/ci_policy.py           CI 发布策略
+└── ai-service/evoguard/conditional_skill.py           声明式条件决策技能 + 配对验证骨架
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
 │   └── taxonomy.md          15 类故障与 MAST/TRAIL 分类法映射
