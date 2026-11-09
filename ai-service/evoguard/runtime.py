@@ -12,6 +12,7 @@ import re
 import time
 
 import agents
+import approval
 import core
 import gateway
 import invariants
@@ -112,10 +113,13 @@ class Ctx:
 
     def __init__(self, store, run_id, exp, start_seq=1, cache=None,
                  suppress=None, recovering=False, attempt=1, strategy=None,
-                 round_root_cause=None):
+                 round_root_cause=None, approval_gate=None):
         self.store = store
         self.run_id = run_id
         self.exp = exp
+        # 可恢复审批状态机（S04）。默认 None：历史实验行为完全不变，
+        # 294 项回归与冻结数字仍然可比；只有真实副作用任务才显式挂上。
+        self.approval_gate = approval_gate
         self.seq = start_seq - 1
         self.cache = dict(cache or {})
         self.suppress = set(suppress or [])
@@ -462,7 +466,48 @@ class Ctx:
                                 error_type="interrupted", logical=logical)
             raise Interrupted("%s 执行过程中断" % tool)
 
-        if tool in WRITE_TOOLS and self.recovering:
+        # ---- 统一写操作门禁（S04）：首次写入与恢复期重放写入走同一条路 ----
+        # 默认 approval_gate=None，历史实验行为完全不变；真实副作用任务显式挂上
+        # ApprovalGate 后，两种写入都必须经过可暂停、可恢复、一次性消费的审批。
+        if self.approval_gate is not None and tool in WRITE_TOOLS:
+            gate = self.approval_gate
+            write_kind = "首次写入" if not self.recovering else "恢复期重放写入"
+            try:
+                dec = gate.require(
+                    self.run_id, tool, args,
+                    allowed_tools=security.allowed_tools(self.exp.get("agent_type")),
+                    tool_contract={tool: {"side_effect": True}},
+                    first_write=not self.recovering)
+            except approval.ApprovalRequired as e:
+                self.store.add_step(
+                    self.run_id, seq, "security", tool, args,
+                    {"error": "approval_required", "request_id": e.request_id,
+                     "checkpoint_id": e.checkpoint_id},
+                    status="error", error_type="approval_required", logical=logical)
+                security.record_effect(
+                    self.store, self.run_id, "approval_gate", {}, tool=tool,
+                    override={"detected": True, "decision": security.DECISION_DENY,
+                              "action": "blocked", "attempted": True,
+                              "executed": True,
+                              "effect": security.EFFECT_CALL_STOPPED,
+                              "reason": "统一门禁：%s 暂停等待审批 request=%s，"
+                                        "工具未执行" % (write_kind, e.request_id)})
+                raise
+            except approval.ApprovalDenied as e:
+                self.store.add_step(
+                    self.run_id, seq, "security", tool, args,
+                    {"error": "approval_invalid", "request_id": e.request_id},
+                    status="error", error_type="approval_invalid", logical=logical)
+                raise ApiError("E_APPROVAL_INVALID", e.reason, 409)
+            security.record_effect(
+                self.store, self.run_id, "approval_gate", {}, tool=tool,
+                override={"detected": True, "decision": security.DECISION_ALLOW,
+                          "action": "approved", "attempted": True,
+                          "executed": True, "effect": "approval_consumed",
+                          "reason": "统一门禁：审批 %s 已一次性消费，允许执行%s"
+                                    % (dec["request_id"], write_kind)})
+
+        elif tool in WRITE_TOOLS and self.recovering:
             SIDE_EFFECT_COUNT["n"] += 1
             # enforce 模式下，AUTO_APPROVE 不再能默默放行写操作 ——
             # 否则「审批」只是一句配置，跟没有一样。

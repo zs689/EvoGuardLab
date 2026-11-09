@@ -700,4 +700,65 @@ P0 06 冻结可复现基线：把报告 / metrics.json / runs.jsonl / C 与 D �
 首次写入与重放写入必须走同一个执行门禁。之后才是会话 6 的本地 HTTP +
 SQLite 幂等闭环。
 
+---
+
+## 2026-11-09（第四阶段）：会话 5 + 6「审批状态机与真实副作用闭环」
+
+### 完成事项
+
+- 新增 `ai-service/evoguard/approval.py`：`approval_request` 绑定 run_id / 工具 /
+  规范化参数摘要 / 资源范围 / 候选版本 / 24h 有效期 / 批准人 / 一次性消费状态 /
+  权限指纹 / 检查点；状态 `pending → approved → consumed`，或 `rejected` / `expired`。
+  参数变化、权限变更、过期、拒绝、重复消费一律拒绝并留原因。
+  规范化把 `504` 与 `504.0`、键值顺序、字符串空白归一（实测踩过 int/float 不一致）。
+- `runtime.Ctx` 新增可选 `approval_gate`：**首次写入与恢复期重放写入走同一个执行门禁**，
+  补上旧实现只拦恢复期重放的缺口；暂停写 `effect=call_stopped`（含 request_id），
+  工具未执行。默认 `None`，历史行为与冻结数字不变（有专门一条回归守着）。
+- 新增 `ai-service/evoguard/real_tasks.py`：127.0.0.1 本地 HTTP 读测试订单 →
+  项目沙箱内 `tests/fixtures/settlement_rules.json` → 按规则算总额 →
+  过统一门禁 → 专用 SQLite 结算表（`idempotency_key` + `INSERT OR IGNORE`）。
+  不碰外部账号、真实支付、任意 shell 执行；`sim` 保留作快速回归。
+- 新增 `scripts/real_settlement_demo.py` 与 `docs/approval-protocol.md`；
+  `tests/test_approval.py` 15 项。产物 `experiments/real_settlement_v1/`。
+
+### 证据：计划「必须测试的情形」5/5 通过
+
+| 情形 | 结果 | 关键证据 |
+|---|---|---|
+| 首次写入没有审批 | 通过 | pending + request_id + checkpoint_id，`ledger.count=0` |
+| 审批前后参数变化 | 通过 | `E_APPROVAL_INVALID`，旧审批仍 `approved` 且未消费 |
+| 提交成功但响应丢失 | 通过 | `ResponseLost` 带幂等键，重试 `created=False`，`count=1` |
+| 拒绝与过期 | 通过 | `rejected` / `expired` + reason，工具未执行 |
+| 暂停后进程重启 | 通过 | 重开 Store 后 `resume()` 读回检查点与 approved，不重复写入 |
+
+额外：权限变更、重复消费、参数规范化、沙箱路径越界、
+首次/重放同一门禁、默认 runtime 行为不变，共 15 项回归全绿。
+
+- 全量回归 **309 项全绿**（294 + 15）。
+- 冻结 manifest 复核仍是「产物差异 0 处」，代码漂移 3 文件 →
+  历史证据未被改写，不能声称当前代码重跑出相同结果。
+
+### 仍不成立的主张（不能说）
+
+- ❌ 生产级审批工作流：无鉴权 / 多租户 / 审计访问控制 / 限流 / SLA。
+- ❌ 防住越权：白名单与权限契约由调用方传入，本模块只校验摘要没变。
+- ❌ 真实金融结算：回环测试服务 + 沙箱规则 + 专用 SQLite 表。
+- ❌ 与历史 1080 run 比大小；❌ 防住提示注入 / 完整沙箱 / 多 Agent 已验证。
+
+### 本轮没做（如实标注）
+
+- 会话 7（独立授权策略 + 外部轨迹小批量）未开始；Q02/Q03 仍未关闭。
+- 计划 §6「按技能 `safety` 声明决定审批」未做：`safety` 没参与门禁判定。
+- **首次写入审批在默认 runtime 里仍未启用**，只在显式挂 gate 的真实任务链上生效；
+  要在全部运行上启用需重跑实验并重算历史数字，不能悄悄改。
+- 2×2 消融、30+30 扩样、1080 run 重跑与公平消融未做。
+
+### 下一项验收（会话 7，阶段 C 前置）
+
+从事先冻结的 Agent 策略取白名单（不从已执行轨迹反推，Q02），
+补至少 30 条外部可授权轨迹并按任务约束独立标注（Q03）；
+按规则 / 严重级别 / 入口 / 任务家族报 TP/FP/FN 与适用率，零分母继续 null。
+之后再进入条件技能实验（阶段 D）。
+
+
 

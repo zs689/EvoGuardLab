@@ -1,0 +1,9 @@
+{
+  "version": "rules-v1",
+  "currency": "CNY",
+  "discount_threshold": 500.0,
+  "discount_rate": 0.1,
+  "max_total": 100000.0,
+  "allowed_order_prefix": "A",
+  "note": "项目沙箱内的测试规则文件，仅用于本地订单核对演示；不是真实业务政策"
+}

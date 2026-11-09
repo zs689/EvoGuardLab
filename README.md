@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（294 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 14 四模式对照）
+# 2) 回归测试（309 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 14 四模式对照 + 15 审批与结算）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -455,6 +455,34 @@ python scripts/freeze_mode_compare.py          # 默认写 experiments/mode_comp
 如实标注、不靠改措辞凑独立样本。口径与边界见
 [docs/mode-compare-protocol.md](docs/mode-compare-protocol.md)。
 
+### 审批状态机与真实副作用闭环（会话 5/6）
+
+`ai-service/evoguard/approval.py`：`approval_request` 绑定 run_id / 工具 /
+规范化参数摘要 / 资源范围 / 候选版本 / 24 小时有效期 / 批准人 / 一次性消费状态；
+暂停存检查点，批准后从原检查点续跑。参数变化、权限变更、过期、拒绝、重复消费
+一律拒绝并留原因。状态全在 SQLite，进程重启后重新打开即可恢复。
+
+`ai-service/evoguard/real_tasks.py`：127.0.0.1 本地 HTTP 读测试订单 →
+项目沙箱内规则文件 → 按规则算总额 → 过统一门禁 → 专用 SQLite 结算表（幂等键）。
+`runtime.Ctx` 挂上 `approval_gate` 后，**首次写入与恢复期重放写入走同一个执行门禁**；
+默认不挂，历史实验行为与冻结数字不变。
+
+| 计划「必须测试的情形」 | 结果 |
+|---|---|
+| 首次写入没有审批 | 通过：零落库副作用，状态可定位到 request + 检查点 |
+| 审批前后参数变化 | 通过：摘要不匹配，原审批不复用且未被消费 |
+| 提交成功但响应丢失 | 通过：同一幂等键重试仍只有一笔结算 |
+| 拒绝与过期 | 通过：任务不自动继续，事件有原因 |
+| 暂停后进程重启 | 通过：检查点与批准状态恢复，不重复写入 |
+
+```bash
+python scripts/real_settlement_demo.py     # 默认写 experiments/real_settlement_v1
+```
+
+边界：订单是回环测试服务、规则在项目沙箱内、结算只写专用表；不碰外部账号、
+真实支付、任意 shell 执行。`sim` 保留作快速回归。这不是生产级审批工作流
+（无鉴权 / 多租户 / 限流）。详见 [docs/approval-protocol.md](docs/approval-protocol.md)。
+
 **延迟**：1 KB 0.044 ms / 10 KB 0.31 ms / 50 KB 1.84 ms；真实运行每次约 **51 µs**，
 相对真实模型的 627 ms 是 **0.008%**（`experiments/p0_09_20261109/security_bench.json`）。
 
@@ -520,9 +548,13 @@ EvoGuardLab/
 │   ├── test_security_contract.py 8 个测试（S01 反例 / 六字段契约 / 真实执行点留痕）
 │   ├── test_defense_demo_v2.py 12 个测试（按后果计量 / 不虚报外泄 / 正常对照 / 输出隔离）
 │   ├── test_docs_consistency.py 12 个测试（当前口径 / 冻结历史不被改写）
-│   └── test_mode_compare.py 14 个测试（审批开关反例 / 配置指纹 / 分母与 N/A / 冻结历史）
+│   ├── test_mode_compare.py 14 个测试（审批开关反例 / 配置指纹 / 分母与 N/A / 冻结历史）
+│   └── test_approval.py     15 个测试（5 个必须验收情形 / 统一门禁 / 进程重启 / 幂等）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── scripts/freeze_mode_compare.py  四模式配置冻结 + 逐 case 对照
+├── scripts/real_settlement_demo.py 5 个审批与结算验收情形
+├── ai-service/evoguard/approval.py     可恢复审批状态机 + 幂等结算账本
+└── ai-service/evoguard/real_tasks.py   本地 HTTP 订单 + 沙箱规则 + 结算链
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
 │   └── taxonomy.md          15 类故障与 MAST/TRAIL 分类法映射
