@@ -17,12 +17,24 @@ KIND_MAP = {"model": KIND_CHAT, "tool": KIND_TOOL,
 
 def from_store(store, run_id=None):
     """从 core.Store 读 run（可指定），返回 Trace 列表。"""
-    traces = []
     with store.conn() as c:
+        return _read(c, run_id)
+
+
+def from_conn(conn, run_id=None):
+    """从裸 sqlite3 连接读（不依赖 core.Store，供 --trace xxx.db 直接用）。"""
+    return _read(conn, run_id)
+
+
+def _read(c, run_id=None):
+    traces = []
+    if True:
         if run_id:
             runs = c.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchall()
         else:
-            runs = c.execute("SELECT * FROM runs ORDER BY started_at DESC LIMIT 200").fetchall()
+            # 不设上限：静默截断会让人以为「全查过了」。
+            # 库太大时用 run_id 指定单条，或先用 SQL 筛出子集再导。
+            runs = c.execute("SELECT * FROM runs ORDER BY started_at").fetchall()
         for r in runs:
             r = dict(r)
             exp = c.execute("SELECT * FROM experiments WHERE id=?",
@@ -45,7 +57,8 @@ def from_store(store, run_id=None):
                     tool=(s.get("name") if kind == KIND_TOOL else None),
                     args=_loads(s.get("input")), result=_loads(s.get("output")),
                     status=("error" if s.get("error_type") else str(s.get("status") or "ok")),
-                    error=s.get("error_type"), tokens=int(s.get("tokens") or 0)))
+                    error=s.get("error_type"), tokens=int(s.get("tokens") or 0),
+                    ts=s.get("ts"), duration_ms=int(s.get("duration_ms") or 0)))
             traces.append(t)
     return traces
 

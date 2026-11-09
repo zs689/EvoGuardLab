@@ -4,10 +4,12 @@
 识别靠特征字段，不靠文件后缀 —— 用户从各种平台导出，后缀常常是 .json 就完事。
 """
 import json
+import sqlite3
 
+from . import evoguard as evoguard_loader
 from . import langsmith, otel
 
-FORMATS = ("otel", "langsmith")
+FORMATS = ("otel", "langsmith", "evoguard")
 
 
 def detect(doc):
@@ -25,7 +27,26 @@ def detect(doc):
     return None
 
 
+def _is_sqlite(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read(16) == b"SQLite format 3\x00"
+    except OSError:
+        return False
+
+
 def load_file(path, fmt=None):
+    # 本项目自己的运行库：按文件头判断，不看后缀。
+    # 「Agent 已经跑过了」最常见的情形就是手上有一个运行库，
+    # 要求用户先导成 JSON 才能检查，是没必要的门槛。
+    if fmt in (None, "evoguard") and _is_sqlite(path):
+        store = sqlite3.connect(path)
+        store.row_factory = sqlite3.Row
+        try:
+            return evoguard_loader.from_conn(store)
+        finally:
+            store.close()
+
     with open(path, encoding="utf-8") as f:
         doc = json.load(f)
     if fmt is None:

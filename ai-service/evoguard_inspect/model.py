@@ -12,10 +12,11 @@ class Step(object):
     """一步执行。kind 只有四种：chat（模型）/ tool（工具）/ context / other。"""
 
     __slots__ = ("seq", "kind", "name", "tool", "args", "result", "status",
-                 "error", "tokens", "ts", "raw")
+                 "error", "tokens", "ts", "duration_ms", "raw")
 
     def __init__(self, seq, kind, name, tool=None, args=None, result=None,
-                 status="ok", error=None, tokens=0, ts=None, raw=None):
+                 status="ok", error=None, tokens=0, ts=None, duration_ms=0,
+                 raw=None):
         self.seq = seq
         self.kind = kind
         self.name = name
@@ -26,6 +27,7 @@ class Step(object):
         self.error = error
         self.tokens = tokens
         self.ts = ts
+        self.duration_ms = duration_ms or 0
         self.raw = raw or {}
 
     def text(self):

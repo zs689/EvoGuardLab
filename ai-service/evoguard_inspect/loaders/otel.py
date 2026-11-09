@@ -121,6 +121,15 @@ def load(doc):
             ts = int(start) / 1e9 if start else None
         except Exception:
             ts = None
+        # 耗时：OTLP 的 endTimeUnixNano - startTimeUnixNano。
+        # 缺 end 就记 0（不当成「很快」）—— 可运行性统计要能区分「没记录」和「真快」。
+        dur_ms = 0
+        try:
+            end = sp.get("endTimeUnixNano")
+            if start and end:
+                dur_ms = max(0, int((int(end) - int(start)) / 1e6))
+        except Exception:
+            dur_ms = 0
 
         t.steps.append(Step(
             seq=len(t.steps) + 1, kind=kind, name=name, tool=tool,
@@ -128,7 +137,8 @@ def load(doc):
             status="error" if err else "ok", error=err,
             tokens=int(_attr(a, "gen_ai.usage.output_tokens",
                              "gen_ai.usage.completion_tokens", default=0) or 0),
-            ts=ts, raw={"span": sp.get("spanId"), "op": op}))
+            ts=ts, duration_ms=dur_ms,
+            raw={"span": sp.get("spanId"), "op": op}))
 
     for t in traces.values():
         t.steps.sort(key=lambda s: (s.ts if s.ts is not None else 0, s.seq))

@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（216 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 25 安全层）
+# 2) 回归测试（224 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 25 安全层 + 8 保障视图）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -342,6 +342,28 @@ PydanticAI 一个定义都拿不到。
   `INV-PLAN-ORDER`（首步不得是收尾动作、末步不得是启动动作）。
   它只看通用动作词语义，不读任何任务的标准答案；纯执行型流程仍是已知盲区。
 
+### 保障视图：一个 Agent 能不能放心跑
+
+**AI 保障 = 可靠 + 防护 + 可运行**。三个维度各自判定，不合成 0–100 分 ——
+分数会让人优化分数而不是优化系统。
+
+```bash
+cd ai-service
+python -m evoguard_inspect.cli --trace ../experiments/p0_09_20261109/audit_smoke/evolution.db \
+  --assurance --out ../experiments/assurance      # 直接读运行库（按文件头识别 SQLite）
+```
+
+| 维度 | 看什么 | 判定 |
+|---|---|---|
+| 可靠 | 结论有没有证据、流程/工具/资源是否乱 | 25 条轨迹规则 |
+| 防护 | 注入、越权、外带、凭据、危险命令、XSS | security 组 6 条 |
+| 可运行 | 模型/工具报错率、预算、耗时、报错后仍出答案 | 轨迹状态与 token |
+
+零命中但有用例没跑成 → 判 **覆盖有限**，不写「通过」；报告每维都写「测了什么 / 没测什么」，
+并标注数据里有多少条是故障注入（否则失败率会被当成线上失败率读）。详见 [docs/assurance.md](docs/assurance.md)。
+
+**退出码**：0 通过/有风险，3 不通过，2 输入解析失败。
+
 ### 安全层：三层防护，默认只检测不改写
 
 攻击面有三条口子：**用户输入**、**工具返回的外部内容**、**Agent 吐给浏览器的输出**。
@@ -415,7 +437,8 @@ EvoGuardLab/
 │   ├── test_inspect.py      42 个测试（规则全命中 / 零误报 / 配置适配 / 事故模式 / 覆盖率与退出码）
 │   ├── test_static.py       27 个测试（静态规则 / 框架写法适配 / 低置信度噪音治理 / 覆盖率）
 │   ├── test_skill_validation.py 36 个测试（成对负迁移 / 样本充分性 / 晋升门禁 / 严格库链路）
-│   └── test_security.py     25 个测试（注入/越权/外带/凭据/XSS 检测，误报与延迟预算，audit vs enforce）
+│   ├── test_security.py     25 个测试（注入/越权/外带/凭据/XSS 检测，误报与延迟预算，audit vs enforce）
+│   └── test_assurance.py    8 个测试（三维判定 / 覆盖有限不算通过 / 报错后仍有答案 / 不给分数）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析

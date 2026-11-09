@@ -133,6 +133,8 @@ def main(argv=None):
                     help="只跑这些分组：answer tool flow resource structure")
     ap.add_argument("--only", nargs="*", default=None, help="只跑这些规则 id")
     ap.add_argument("--skip", nargs="*", default=None, help="跳过这些规则 id")
+    ap.add_argument("--assurance", action="store_true",
+                    help="输出三维保障报告（可靠 / 防护 / 可运行）")
     ap.add_argument("--fail-on", default=None, choices=["info", "warn", "error"],
                     help="出现该级别及以上的发现时退出码 3（给 CI 卡质量用）")
     ap.add_argument("--strict-input", action="store_true",
@@ -195,6 +197,27 @@ def main(argv=None):
     issues = trace_rules.check_all(traces, cfg, rules)
     by_sev, by_rule, by_group = report.summarize(issues)
     cov = coverage.analyze(traces, issues, cfg, rule_ids)
+
+    if args.assurance:
+        from . import assurance
+        data = assurance.build(traces, issues, cfg, cov)
+        text = assurance.render(data)
+        if args.out:
+            os.makedirs(args.out, exist_ok=True)
+            j = os.path.join(args.out, "assurance.json")
+            m = os.path.join(args.out, "assurance.md")
+            with open(j, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            with open(m, "w", encoding="utf-8") as f:
+                f.write(text)
+            print("报告：%s" % m)
+            print("明细：%s" % j)
+        else:
+            print(text)
+        print("[保障] 总判定：%s" % assurance.VERDICT_CN[data["verdict"]])
+        if load_failures and args.strict_input:
+            return 2
+        return 3 if data["verdict"] in (assurance.FAIL,) else 0
 
     if args.json:
         print(json.dumps(report.to_json(traces, issues, cov, load_failures),

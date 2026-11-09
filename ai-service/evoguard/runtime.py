@@ -136,6 +136,9 @@ class Ctx:
         # 单策略就能解决复合故障，组合策略的增量是假的。
         self.round_root_cause = round_root_cause
         self.repairs = []          # 本轮真实做过的修复动作，写进轨迹备查
+        # 降级记录：模型不可用/报错后仍给出答案，必须留痕。
+        # 「跑完了、有答案、看起来成功」但其实是规则兜底 —— 这是最危险的一类静默失效。
+        self.degraded = []
 
     # ---- 内部 ----
     def _next(self):
@@ -257,6 +260,7 @@ class Ctx:
             err = e.code
             model_id = "unavailable"
             text = None
+            self.degraded.append(err)
 
         self.tokens += tokens or 0
         if self.tokens > TOKEN_BUDGET:
@@ -909,9 +913,13 @@ def run_once(store, exp, mode):
                                 result.get("expect"))
     status = SUCCEEDED if correct else FAILED
     store.set_state(rid, status)
+    reason = result.get("reason") or ""
+    if ctx.degraded:
+        # 不覆盖原有失败原因，追加即可 —— 两者可能同时成立
+        mark = "degraded:" + ",".join(sorted(set(ctx.degraded)))
+        reason = (reason + " | " if reason else "") + mark
     store.finish_run(rid, correct, result.get("answer"), result.get("expect"),
-                     ctx.tokens, int((time.time() - t0) * 1000),
-                     result.get("reason") or "")
+                     ctx.tokens, int((time.time() - t0) * 1000), reason)
 
     if status == FAILED and mode in ("B", "C", "D", "R"):
         _recover(store, exp, run_exp, rid, ctx, mode)
