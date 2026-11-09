@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（280 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性）
+# 2) 回归测试（294 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 14 四模式对照）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -426,6 +426,35 @@ python scripts/defense_demo.py --followup real     # 可选：本地真实模型
 执行模型下成立，报告把真实模型复核标为 N/A。旧 v1 的 `enforced=4 / leaked=3`
 是已知高估与虚报，冻结原件留在 `experiments/defense_demo/`，不再引用。
 
+### 四模式对照：先冻结配置，再看逐 case 结果
+
+只记 `mode` 一个字段解释不了结果：实测同一个 `enforce`、`AUTO_APPROVE=True`，
+仅 `AGENTLAB_ALLOW_AUTO_APPROVE` 从 0 改到 1，恢复期写操作就从
+`E_APPROVAL_REQUIRED` 变成真的落库。`scripts/freeze_mode_compare.py` 把全部有效开关
+（mode / wrap / auto_approve / allow_auto_approve / 工具白名单 / 工具契约 /
+输出落点 / 威胁模型版本 / 后续决策器）写成规范化配置并算 sha256 指纹，
+再跑四档模式，产出**逐 case 结果、明确分母**与 `manifest.json`
+（含攻击集 / 正常集内容指纹、独立授权策略、代码指纹）。
+
+| 模式 | 业务成功 | 攻击目标达成 | 真实阻断率 | 正常误阻断率 |
+|---|---|---|---|---|
+| off | 8/8 | 3 | 0.0 | 0.0 |
+| audit | 8/8 | 3 | 0.0 | 0.0 |
+| enforce | 6/8 | 0 | 1.0 | 0.0 |
+| enforce+wrap | 6/8 | 0 | 1.0 | 0.0 |
+
+⚠️ `enforce` 下业务 8/8→6/8 的两条下降**全部是攻击场景的工具调用被拒**，
+正常误阻断率仍是 0.0，不是「防护损失了 25% 业务」。审批与资源成本在演示引擎里
+拿不到，一律记 N/A 不写 0；审批开关的真实影响由真实 runtime 子实验单独验证。
+
+```bash
+python scripts/freeze_mode_compare.py          # 默认写 experiments/mode_compare_v2
+```
+
+**8 个场景**（4 攻击 + 4 正常）低于计划 §5 建议的 12 个工程冒烟起点，未扩到 30+30，
+如实标注、不靠改措辞凑独立样本。口径与边界见
+[docs/mode-compare-protocol.md](docs/mode-compare-protocol.md)。
+
 **延迟**：1 KB 0.044 ms / 10 KB 0.31 ms / 50 KB 1.84 ms；真实运行每次约 **51 µs**，
 相对真实模型的 627 ms 是 **0.008%**（`experiments/p0_09_20261109/security_bench.json`）。
 
@@ -490,8 +519,10 @@ EvoGuardLab/
 │   ├── test_labels.py       15 个测试（指标算法 / 空壳答案 / 中文改写 / 重放循环 / 标注集完整性）
 │   ├── test_security_contract.py 8 个测试（S01 反例 / 六字段契约 / 真实执行点留痕）
 │   ├── test_defense_demo_v2.py 12 个测试（按后果计量 / 不虚报外泄 / 正常对照 / 输出隔离）
-│   └── test_docs_consistency.py 12 个测试（当前口径 / 冻结历史不被改写）
+│   ├── test_docs_consistency.py 12 个测试（当前口径 / 冻结历史不被改写）
+│   └── test_mode_compare.py 14 个测试（审批开关反例 / 配置指纹 / 分母与 N/A / 冻结历史）
 ├── scripts/check_model.py   本地模型就绪探针
+├── scripts/freeze_mode_compare.py  四模式配置冻结 + 逐 case 对照
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
 │   └── taxonomy.md          15 类故障与 MAST/TRAIL 分类法映射

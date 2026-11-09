@@ -1,0 +1,65 @@
+{
+  "version": 4,
+  "session": "4（冻结安全配置并比较四模式）",
+  "threat_model_version": "threat-model-v1",
+  "attack_set_fingerprint": "d69f41e47f6f6a288959626c29653d0266a813d48973b7a6ca563a30b8db5bba",
+  "normal_set_fingerprint": "1a1d8a99d1cf81e861e45cba589392e5c271c3e6b27df3c0bfb1ebe616a38cda",
+  "independent_authorization_policy": "手写声明 support-agent 工具白名单 ['kb.search', 'order.get_order']；不从已执行轨迹反推（Q02）",
+  "security_modes": [
+    "off",
+    "audit",
+    "enforce",
+    "enforce+wrap"
+  ],
+  "config_fingerprints": {
+    "off": "83054074407bc3df528ee051018f162b6113949e45dc708fcf2d13a29c40f456",
+    "audit": "7526dafbfe1cb63d478cdea30f55a98b7356013e8ace407483a51d5c2213bfa2",
+    "enforce": "be2d2ce9838db747f5404e8c85fe4f67b7f03e0fa0b5dae27ab111416473a268",
+    "enforce+wrap": "f70caf5921e5f9992f0212d1d71fa276f64871200a5c7aa85f2d7c25717e7360"
+  },
+  "effective_wrap": {
+    "off": false,
+    "audit": false,
+    "enforce": false,
+    "enforce+wrap": true
+  },
+  "auto_approve": {
+    "off": "1",
+    "audit": "1",
+    "enforce": "1",
+    "enforce+wrap": "1"
+  },
+  "allow_auto_approve": {
+    "off": "0",
+    "audit": "0",
+    "enforce": "0",
+    "enforce+wrap": "0"
+  },
+  "effective_tool_contract": {
+    "kb.search": {
+      "side_effect": false,
+      "dangerous": false
+    },
+    "order.get_order": {
+      "side_effect": false,
+      "dangerous": false
+    },
+    "http.send": {
+      "side_effect": true,
+      "dangerous": false
+    },
+    "shell.exec": {
+      "side_effect": true,
+      "dangerous": true
+    }
+  },
+  "output_sink": "api/app.py: encode_for(html) + CSP/nosniff；本演示只核验 guard 返回值是否真的被采用",
+  "code_fingerprint": {
+    "ai-service/evoguard/security.py": "1ae688540d98e7a5f41203c8ba52d5aee90a829ac882630be45608da192ca63c",
+    "ai-service/evoguard/runtime.py": "42eabed2e0b24fc1f4d8e5b8c61db6db8d2dbabf9bfe9a789b1024cd89a1ed9c",
+    "scripts/defense_demo.py": "da660c6d7b92589bb62332acd2f79d194958ddb1eb83adc89915678493841815",
+    "scripts/freeze_mode_compare.py": "27840bc7c119608ca686ecb688a3b934b4cc936809b0d085c2bd4fb303041ed5"
+  },
+  "backend": "mock",
+  "note": "历史真实模型 metrics 未完整登记这些安全开关时，只能说明旧记录中的模型与技能条件，不能事后补猜成某种安全模式"
+}
