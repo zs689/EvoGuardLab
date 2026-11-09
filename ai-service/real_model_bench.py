@@ -699,12 +699,32 @@ def main():
     ap.add_argument("--library-dir",
                     help="技能库目录（含 library_c.db / library_d.db）。"
                          "默认 data/；要评测某次训练产物就指向它的输出目录")
+    ap.add_argument("--output-dir",
+                    help="新的隔离输出目录；已存在时拒绝覆盖（历史结果不动）")
     args = ap.parse_args()
 
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
+
+    # 重跑必须落新目录：experiments/real_model 是历史证据，覆盖掉就再也说不清
+    # 旧报告是哪次跑的。但「同一目录续跑」要允许 —— 断点续跑就是这个场景，
+    # 是否同一基线由后面的 check_resume 负责；这里只拒绝来历不明的非空目录。
+    if args.output_dir:
+        global OUT, CHECKPOINT, REPORT, METRICS
+        new_out = os.path.abspath(args.output_dir)
+        if os.path.exists(new_out) and os.listdir(new_out):
+            if not os.path.exists(os.path.join(new_out, "runs.jsonl")):
+                print("[×] 输出目录已存在且不含 runs.jsonl，拒绝当续跑目录用：%s"
+                      % new_out, flush=True)
+                return 4
+            print("[..] 目录里已有检查点，按续跑处理（指纹不符会被 check_resume 拒绝）",
+                  flush=True)
+        OUT = new_out
+        CHECKPOINT = os.path.join(OUT, "runs.jsonl")
+        REPORT = os.path.join(OUT, "report.md")
+        METRICS = os.path.join(OUT, "metrics.json")
     os.makedirs(OUT, exist_ok=True)
 
     # 显式技能库选择：训练产物在各自输出目录里，不指过来就永远只能跑到 data/ 那一份。
@@ -723,7 +743,6 @@ def main():
     # 把之前 936 个 run 的明细（attribution 要读）一起清掉。
     hard_only = args.suite == "hard"
     if hard_only:
-        global CHECKPOINT, REPORT, METRICS
         hdir = os.path.join(OUT, "hard")
         os.makedirs(hdir, exist_ok=True)
         CHECKPOINT = os.path.join(hdir, "runs.jsonl")
@@ -786,9 +805,17 @@ def main():
         "suite": args.suite, "limit": args.limit, "modes": list(MODES),
         "skillset_kind": skillset["kind"],
     })
-    lib_paths = ({"C": skillset["c_path"], "D": skillset["d_path"]}
+    # 注意：skillset 里的 c_path / d_path 是**文件名**（报告里给人看的），
+    # 算指纹必须用完整路径，否则 os.path.exists 判假 → 库集合为空 →
+    # library_hash 退化成 sha256("{}")，所有库看起来都一样，指纹等于没做。
+    lib_paths = ({"C": LIB_C, "D": LIB_D}
                  if skillset["kind"] == "two_libs" else {"SKILLS": db_path})
-    bl = baseline.hashes(cfg, {k: v for k, v in lib_paths.items() if v and os.path.exists(v)})
+    lib_paths = {k: v for k, v in lib_paths.items() if v and os.path.exists(v)}
+    if skillset["kind"] == "two_libs" and len(lib_paths) < 2:
+        print("[×] 技能库文件找不到（C=%s, D=%s），拒绝产出无法归因的报告。"
+              % (LIB_C, LIB_D), flush=True)
+        return 5
+    bl = baseline.hashes(cfg, lib_paths)
 
     done = load_checkpoint(args.fresh)
     if done:

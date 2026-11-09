@@ -226,6 +226,10 @@ def freeze(root, run_dir, *, config=None, libraries=None, note="",
     cfg = config if config is not None else default_config(root)
     cfg_hash = config_hash(cfg)
     lib_paths = libraries if libraries is not None else _find_libraries(root, run_dir)
+    if libraries is not None and not libraries:
+        # 显式传了空集合，几乎一定是路径算错（例如拿 basename 去 exists）。
+        # 静默写一个空库集合，指纹就退化成 sha256("{}")，等于没做指纹。
+        raise ValueError("技能库集合为空：检查传入的库路径是否存在")
     libs = {}
     for label, path in sorted(lib_paths.items()):
         if isinstance(path, dict) and "content_sha256" in path:

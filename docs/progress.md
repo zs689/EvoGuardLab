@@ -216,3 +216,61 @@ P0 06 冻结可复现基线：把报告 / metrics.json / runs.jsonl / C 与 D �
 - 规则适用性统计只覆盖候选集与实际行为，不覆盖「规则本身该不该存在」—— 需要外部标注才能判断。
 
 
+
+## 2026-11-09：门禁后真实模型全量重跑（1080 run）
+
+### 做了什么
+
+- 用真实模型（Qwen3 4B / Ollama）在隔离目录重跑训练与评测，验证 P0 01–06 在真实链路里是否成立：
+  - 训练：`experiments/real_model_20261108/train/`，dev 49 例、404 run、449 秒、41 个候选；
+    **严格晋升 0 条**，放宽库 41 条。
+  - 评测：`experiments/real_model_20261108/bench/`，270 例 × 4 模式 = **1080 run**、1036 次模型调用；
+    `baseline.py check` 通过（产物差异 0、代码漂移 0、分母自洽）。
+- 评测入口现在强制显式选库与显式输出目录：`--library-dir` / `--output-dir`，
+  产物里带 `config_hash` 与 `library_hash`（C 41 条、D 0 条）。
+
+### 结果（不加修饰）
+
+| 测试集 | A | B | C（不验证） | D（严格） |
+|---|---|---|---|---|
+| 单故障 204 | 0.0% | 26.5% | 100.0% | 94.1% |
+| 复合 30 | 0.0% | 0.0% | 0.0% | 0.0% |
+| 难度组 36 | 22.2% | 44.4% | 69.4% | 69.4% |
+
+**D 库是空的**，所以 D 的 94.1% 全部来自「查不到技能就退回按根因的固定策略表」。
+证据：`data/real_model.db` 里 D 模式的 `recoveries` 记录**没有 `skill_id`**（C 的有）。
+复合故障 D 0% 同因：链技能一条都没晋升。
+
+### 为什么一条都晋升不了
+
+`skills.evaluate` 给出的判决理由是：
+
+```
+['target has fewer than 3 independent tasks/families',
+ 'guard has fewer than 3 independent tasks/families',
+ 'guard has fewer than 3 baseline-success tasks/families']
+```
+
+`target_n = 1`、`guard_n = 2`（独立任务族 1）。数据集里每个 (agent, fault) 只有 1 个 dev 任务，
+而门槛要求 target / guard / guard 基线成功各 ≥ 3 个独立任务。**门槛是对的，数据不够。**
+
+后果要说清楚：历史那份「单故障 D 97.1% / 复合 100%」是**门禁前**直写库（38 条、不校验评估）
+跑出来的，与本次不是同一实验条件，不能混算；本次 C 100% > D 94.1% 也不能读成
+「不验证更好」—— 那是「有技能 vs 没技能」，不是「严 vs 松」。
+
+### 过程中修掉的两个真 bug
+
+1. **库指纹退化成空**：`--library-dir` 记录的是 `skillset["d_path"]`，而那是**文件名**不是完整路径，
+   `os.path.exists` 判假 → 库集合为空 → `library_hash` = `sha256("{}")`，所有库看起来一样，
+   指纹等于没做（第一轮结果就是这样，已删除重跑）。修法：改用 `LIB_C` / `LIB_D` 完整路径；
+   库文件缺失时直接拒绝出报告（退出码 5）；`baseline.freeze` 收到空库集合时抛错；
+   加回归测试 `test_freeze_rejects_empty_library_set`。
+2. **续跑守卫过严**：`--output-dir` 只要目录非空就拒绝，把「断点续跑」也挡了。
+   改成只拒绝**不含 `runs.jsonl`** 的非空目录；是否同一基线交给 `check_resume`。
+
+### 仍未完成
+
+- **数据集扩充**：每个 (agent, fault) 至少 3 个独立任务，才可能通过样本充分性门槛。
+  这是让 D 有意义的前置条件，不是可选项。
+- 复合故障的链式技能同样需要 ≥3 个独立任务才能验证。
+- 不要用下调 `MIN_VALIDATION_TASKS` 的方式让数字变好看。

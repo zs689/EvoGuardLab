@@ -24,8 +24,10 @@ python ai-service/api/app.py           # http://127.0.0.1:8770
 # 4) 可选：检查本地模型是否就绪
 python scripts/check_model.py --base http://127.0.0.1:11434/v1
 
-# 5) 真实模型全量评测（936 run，约 13 分钟，可断点续跑）
-python ai-service/real_model_bench.py
+# 5) 真实模型全量评测（936 run，可断点续跑；重跑必须落新目录）
+python ai-service/real_model_train.py --output-dir experiments/train_A          # 训练产物（含 C/D 库）
+python ai-service/real_model_bench.py --library-dir experiments/train_A \
+                                    --output-dir experiments/bench_A            # 评测指定库
 python ai-service/real_model_attribution.py   # 归因：C/D 命中了哪条技能
 
 # 6) 冻结 / 校验实验基线（产物哈希 + 技能库内容指纹 + 配置指纹 + 分母自洽）
@@ -91,6 +93,45 @@ Web 看板是**原生 HTML/CSS/JS 单文件**，不引 CDN、不需要 Node 构�
   mock 库里这条是有的 —— 说明 mock 的成功有虚高。
 - **技能必须有作用域**：复合学到的链不能挂到单故障的键上，否则单故障用例会被套上多出来的一步
   （实测打挂 6 个用例）。现在技能带 `scope`，第 1 轮优先单故障技能、第 2 轮起优先多故障技能。
+
+### 门禁上线后重跑（2026-11-09）：严格库为空，这不是代码 bug，是数据够不着门槛
+
+P0 01–06 把「成对验证 + 样本充分性 + 晋升门禁」补齐后，同一套训练流程重跑了一遍：
+
+- 训练：dev 49 例 → 41 个候选技能 → **严格晋升 0 条**，放宽库 41 条。
+- 评测：270 例 × 4 模式 = **1080 run**（204 单故障 + 30 复合 + 36 难度组），1036 次模型调用。
+- 产物：`experiments/real_model_20261108/{train,bench}/`，bench 带 manifest 与配置/库指纹
+  （C 41 条、D **0** 条），`baseline.py check` 通过。
+
+| 测试集 | A 无恢复 | B 固定规则 | C 不验证全放行 | D 完整闭环 |
+|---|---|---|---|---|
+| 单故障 204 例 | 0.0% | 26.5% | 100.0% | **94.1%** |
+| 复合故障 30 例 | 0.0% | 0.0% | 0.0% | **0.0%** |
+| 难度组 36 例 | 22.2% | 44.4% | 69.4% | **69.4%** |
+
+**这几个数字不能按「D 变差了」来读**，得先看清 D 库里有什么：
+
+- D 库 **0 条技能**。D 的 94.1% 全部来自「查不到技能就退回按根因的固定策略表」——
+  查库里的 `recoveries` 可以核实：D 的恢复记录**没有 `skill_id`**，C 的有。
+- 复合故障 D 0.0% 也是同一个原因：两步链技能一条都没晋升，第 2 轮起没有链可用。
+- 历史那份 97.1% / 复合 100% 是**门禁前**直写库（38 条、不校验评估）跑出来的，
+  与本轮不是同一个实验条件，不能混算。
+
+**为什么一条都晋升不了**：`skills.evaluate` 的判决理由写得很直白 ——
+
+```
+['target has fewer than 3 independent tasks/families',
+ 'guard has fewer than 3 independent tasks/families',
+ 'guard has fewer than 3 baseline-success tasks/families']
+```
+
+`target_n = 1`、`guard_n = 2`（且只有 1 个独立任务族）。数据集里每个 (agent, fault) 只有 **1 个**
+dev 任务，而门禁要求 target / guard / guard 基线成功各 ≥ 3 个独立任务。**门槛是对的，
+数据不够**。这也解释了一个反直觉现象：本轮 C（不验证）100% > D（严格）94.1% ——
+这里比的不是「严不严」，而是「有技能 vs 没技能」。
+
+要恢复可比性，下一步必须把数据集扩到每个 (agent, fault) ≥ 3 个独立任务，
+而不是下调 `MIN_VALIDATION_TASKS` 让数字好看。
 
 ### 难度组：第一次真正测到模型（算术交给工具，规则顺序交给模型）
 

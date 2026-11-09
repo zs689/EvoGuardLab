@@ -896,6 +896,12 @@ class TestBaseline(unittest.TestCase):
         bad2["composite"]["cases"] = 31
         self.assertFalse(baseline.check_denominators(bad2)["ok"])
 
+    def test_freeze_rejects_empty_library_set(self):
+        """显式传空库集合 = 路径算错。静默写下去，指纹就退化成 sha256("{}")。"""
+        with self.assertRaisesRegex(ValueError, "技能库集合为空"):
+            baseline.freeze(self.root, self.run, libraries={},
+                            manifest_path=os.path.join(self.root, "m", "empty.json"))
+
     def test_summarize_and_mode_section_use_one_source(self):
         summary = baseline.summarize(self.metrics)
         self.assertTrue(summary["denominators"]["ok"])
