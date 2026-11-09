@@ -119,7 +119,7 @@ class TestConfigFreeze(unittest.TestCase):
     def test_summary_recomputes_from_cases(self):
         fmc._verify(self.data["cases"], self.data["summary"])
         cases = self.data["cases"]
-        self.assertEqual(len(cases), 32)          # 4 模式 × 8 场景
+        self.assertEqual(len(cases), 48)          # 4 模式 × 12 条 case（6 场景 × 2）
         for mode, s in self.data["summary"].items():
             sub = [r for r in cases if r["mode"] == mode]
             self.assertEqual(s["planned"], len(sub))
@@ -166,17 +166,30 @@ class TestConfigFreeze(unittest.TestCase):
         self.assertTrue(find("enforce+wrap")["body_changed"])
 
     def test_business_drop_is_all_from_blocked_attacks(self):
-        """8/8 → 6/8 的下降必须全部来自攻击被拒，正常任务零误阻断。"""
+        """12/12 → 8/12 的下降必须全部来自攻击被拒，正常任务零误阻断。"""
         off, enf = self.data["summary"]["off"], self.data["summary"]["enforce"]
-        self.assertEqual(off["business_success"], 8)
-        self.assertEqual(enf["business_success"], 6)
+        self.assertEqual(off["planned"], 12)
+        self.assertEqual(off["business_success"], 12)
+        self.assertEqual(enf["business_success"], 8)
         self.assertEqual(enf["normal_false_blocked"], 0)
         dropped = [r for r in self.data["cases"]
                    if r["mode"] == "enforce" and not r["business_success"]]
-        self.assertEqual(len(dropped), 2)
+        self.assertEqual(len(dropped), 4)
         for r in dropped:
             self.assertEqual(r["kind"], "attack")
             self.assertTrue(r["call_blocked"])
+
+    def test_twelve_scenarios_and_six_independent_groups(self):
+        """§5 工程冒烟：12 条 case、6 个独立攻击向量组，不靠改措辞凑数。"""
+        sets = self.data["set_fingerprints"]
+        self.assertEqual(sets["scenario_count"], 6)
+        self.assertEqual(sets["attack_cases"], 6)
+        self.assertEqual(sets["normal_cases"], 6)
+        self.assertEqual(len(sets["independent_groups"]), 6)
+        self.assertIn("arg_secret", sets["independent_groups"])
+        self.assertIn("arg_exfil", sets["independent_groups"])
+        self.assertIn("已达到", sets["note"])
+        self.assertEqual(len(self.data["cases"]), 48)
 
     def test_frozen_history_untouched_and_overwrite_refused(self):
         frozen = os.path.join(ROOT, "experiments", "p0_09_20261109",

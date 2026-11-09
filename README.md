@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（351 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 14 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能）
+# 2) 回归测试（392 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 11 公平消融）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -485,12 +485,12 @@ python scripts/defense_demo.py --followup real     # 可选：本地真实模型
 
 | 模式 | 业务成功 | 攻击目标达成 | 真实阻断率 | 正常误阻断率 |
 |---|---|---|---|---|
-| off | 8/8 | 3 | 0.0 | 0.0 |
-| audit | 8/8 | 3 | 0.0 | 0.0 |
-| enforce | 6/8 | 0 | 1.0 | 0.0 |
-| enforce+wrap | 6/8 | 0 | 1.0 | 0.0 |
+| off | 12/12 | 5 | 0.0 | 0.0 |
+| audit | 12/12 | 5 | 0.0 | 0.0 |
+| enforce | 8/12 | 0 | 1.0 | 0.0 |
+| enforce+wrap | 8/12 | 0 | 1.0 | 0.0 |
 
-⚠️ `enforce` 下业务 8/8→6/8 的两条下降**全部是攻击场景的工具调用被拒**，
+⚠️ `enforce` 下业务 12/12→8/12 的四条下降**全部是攻击场景的工具调用被拒**，
 正常误阻断率仍是 0.0，不是「防护损失了 25% 业务」。审批与资源成本在演示引擎里
 拿不到，一律记 N/A 不写 0；审批开关的真实影响由真实 runtime 子实验单独验证。
 
@@ -498,8 +498,9 @@ python scripts/defense_demo.py --followup real     # 可选：本地真实模型
 python scripts/freeze_mode_compare.py          # 默认写 experiments/mode_compare_v2
 ```
 
-**8 个场景**（4 攻击 + 4 正常）低于计划 §5 建议的 12 个工程冒烟起点，未扩到 30+30，
-如实标注、不靠改措辞凑独立样本。口径与边界见
+**12 条 case**（6 场景：6 攻击 + 6 合法对照，6 个独立攻击向量组）已达到计划 §5
+的 12 个工程冒烟起点；新增的两组是**参数里的假凭据 / 外带 URL**，不是改措辞。
+仍未扩到「≥30 独立攻击 + ≥30 正常」，如实标注。口径与边界见
 [docs/mode-compare-protocol.md](docs/mode-compare-protocol.md)。
 
 ### 审批状态机与真实副作用闭环（会话 5/6）
@@ -540,6 +541,31 @@ python scripts/real_settlement_demo.py     # 默认写 experiments/real_settleme
 
 **必须说清楚的边界**：特征是匹配出来的，改个说法就能绕过；它是「发现 + 降风险」，不是「防住」。
 详见 [docs/security.md](docs/security.md)。
+
+### Word 计划剩余任务落地（§5 / §10 / E02 / E03）
+
+| 任务 | 交付 | 关键结果 |
+|---|---|---|
+| §5 先改权限结构 | `ai-service/evoguard/tool_contract.py` | 域名 / 资源 ID / 可写路径 / 最大金额 / 方法 / 副作用由契约校验，正则只作信号。反例：正则零命中但域名越界 → `deny`；正则命中但契约允许 → `allow` |
+| §5 12 个工程冒烟场景 | 6 场景 / 12 条 case / 6 个独立攻击向量组 | 新增参数假凭据、参数外带 URL 两个新入口，不是改措辞；四模式对照已按 12 重算 |
+| E02 独立家族增量 | `scripts/conditional_skill_eval.py` | train/dev/validation/test 四组，同 task/seed 前后配对；validation gain 0.167、test 0.25；无收益候选发布负结果，越权候选 REJECT |
+| E03 经验适用范围 | `ai-service/evoguard/experience_scope.py` | 工具契约/数据版本/权限/有效期/撤销先结构过滤，再 BM25；反例：文本最像但已撤销的记录不进候选 |
+| §10 公平消融 | `scripts/ablation_v1.py` | 六组消融 / 13 配置、一次只变一个变量；八项业务与防护指标同时报告；统一 manifest 登记 |
+
+```bash
+python scripts/tool_contract_demo.py
+python scripts/conditional_skill_eval.py
+python scripts/experience_scope_demo.py
+python scripts/ablation_v1.py
+```
+
+协议见 [docs/tool-contract.md](docs/tool-contract.md)、
+[docs/ablation-protocol.md](docs/ablation-protocol.md)、
+[docs/conditional-skill-protocol.md](docs/conditional-skill-protocol.md)。
+
+**如实标注**：E02 仍是确定性构造集（不是真实模型/线上流量），不给置信区间；
+E03 未加 embedding；公平消融不是 1080 run 历史评测的重跑，
+不能据此声称「验证门禁的因果收益已证明」；仍未扩到 30 攻击 + 30 正常。
 
 ---
 
@@ -598,7 +624,10 @@ EvoGuardLab/
 │   ├── test_mode_compare.py 14 个测试（审批开关反例 / 配置指纹 / 分母与 N/A / 冻结历史）
 │   ├── test_approval.py     15 个测试（5 个必须验收情形 / 统一门禁 / 进程重启 / 幂等）
 │   ├── test_permission_and_ci.py 21 个测试（Q01–Q05：权限反例 / kappa / 维度覆盖 / CI 策略）
-│   └── test_conditional_skill.py 21 个测试（声明式 schema / 越权拒绝 / 确定性执行 / 配对验证）
+│   ├── test_conditional_skill.py 21 个测试（声明式 schema / 越权拒绝 / 确定性执行 / 配对验证）
+│   ├── test_tool_contract.py  12 个测试（结构化授权 / 正则只作信号 / 反例）
+│   ├── test_e02_e03.py        17 个测试（四组家族 / 负结果 / 越权 / BM25 / 撤销反例）
+│   └── test_ablation.py       11 个测试（六组消融 / 单变量 / 八项指标 / manifest）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── scripts/freeze_mode_compare.py  四模式配置冻结 + 逐 case 对照
 ├── scripts/real_settlement_demo.py 5 个审批与结算验收情形
@@ -608,7 +637,13 @@ EvoGuardLab/
 ├── ai-service/evoguard/real_tasks.py   本地 HTTP 订单 + 沙箱规则 + 结算链
 ├── ai-service/evoguard_inspect/independent_labels.py  三种真值 + kappa 协议
 ├── ai-service/evoguard_inspect/ci_policy.py           CI 发布策略
-└── ai-service/evoguard/conditional_skill.py           声明式条件决策技能 + 配对验证骨架
+├── ai-service/evoguard/conditional_skill.py           声明式条件决策技能 + 配对验证骨架
+├── ai-service/evoguard/tool_contract.py               §5 结构化工具契约授权
+├── ai-service/evoguard/experience_scope.py            E03 经验适用范围 + BM25
+├── scripts/tool_contract_demo.py          §5 契约反例演示
+├── scripts/conditional_skill_eval.py      E02 四组家族配对验证
+├── scripts/experience_scope_demo.py       E03 检索反例演示
+├── scripts/ablation_v1.py                 §10 六组公平消融
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
 │   └── taxonomy.md          15 类故障与 MAST/TRAIL 分类法映射

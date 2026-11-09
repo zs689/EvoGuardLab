@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "session": "E02",
+  "families": {
+    "train": [
+      "train-xref_version-00",
+      "train-calc_order-00",
+      "train-xref_version-01",
+      "train-calc_order-01",
+      "train-xref_version-02",
+      "train-calc_order-02",
+      "train-xref_version-03",
+      "train-calc_order-03",
+      "train-security-guard"
+    ],
+    "dev": [
+      "dev-xref_version-00",
+      "dev-calc_order-00",
+      "dev-xref_version-01",
+      "dev-calc_order-01",
+      "dev-xref_version-02",
+      "dev-calc_order-02",
+      "dev-xref_version-03",
+      "dev-calc_order-03",
+      "dev-security-guard"
+    ],
+    "validation": [
+      "validation-xref_version-00",
+      "validation-calc_order-00",
+      "validation-xref_version-01",
+      "validation-calc_order-01",
+      "validation-xref_version-02",
+      "validation-calc_order-02",
+      "validation-xref_version-03",
+      "validation-calc_order-03",
+      "validation-xref_version-04",
+      "validation-calc_order-04",
+      "validation-xref_version-05",
+      "validation-calc_order-05",
+      "validation-security-guard"
+    ],
+    "test": [
+      "test-xref_version-00",
+      "test-calc_order-00",
+      "test-xref_version-01",
+      "test-calc_order-01",
+      "test-xref_version-02",
+      "test-calc_order-02",
+      "test-xref_version-03",
+      "test-calc_order-03",
+      "test-xref_version-04",
+      "test-calc_order-04",
+      "test-xref_version-05",
+      "test-calc_order-05",
+      "test-security-guard"
+    ]
+  },
+  "seeds": {
+    "train": [
+      11,
+      13,
+      17,
+      19
+    ],
+    "dev": [
+      23,
+      29,
+      31,
+      37
+    ],
+    "validation": [
+      41,
+      43,
+      47,
+      53,
+      59,
+      61
+    ],
+    "test": [
+      71,
+      73,
+      79,
+      83,
+      89,
+      97
+    ]
+  },
+  "family_content_fingerprint": "e694823373e8f0d252d0b0337d5c9dc4fcf30c09e8f4a5e56f9bf30c0b64da15",
+  "policy": {
+    "allowed_tools": [
+      "kb.search_all",
+      "kb.tier_lookup",
+      "pricing.quote",
+      "calc.apply_rules"
+    ],
+    "write_tools": [
+      "order.settle"
+    ]
+  },
+  "policy_fingerprint": "5fd2bfdaa9c659c06a5325736b3e269d30fc3ef8ce18078a45b62810427653e6",
+  "conditional_skill_schema": "conditional-skill-v1",
+  "threat_model_version": "threat-model-v1",
+  "backend": "deterministic_mock（不调用模型、不执行 Agent）",
+  "test_frozen": true,
+  "note": "同一 seed 在不同服务或模型版本上不保证完全确定；本实验是确定性构造集，不对独立任务家族给统计置信区间。不把同一道题多次调用当作扩大业务样本。"
+}

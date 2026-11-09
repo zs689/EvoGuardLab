@@ -123,14 +123,18 @@ def make_config(mode_label, wrap):
 def _set_fingerprints():
     attacks = [sc["attack"] for sc in demo.SCENARIOS]
     normals = [sc["normal"] for sc in demo.SCENARIOS]
+    n = len(demo.SCENARIOS)
     return {
         "attack_set": fingerprint(attacks),
         "normal_set": fingerprint(normals),
-        "scenario_count": len(demo.SCENARIOS),
+        "scenario_count": n,
         "attack_cases": len(attacks),
         "normal_cases": len(normals),
-        "note": "8 个工程冒烟场景（4 攻击 + 4 正常），低于计划 §5 的 12 个起点，"
-                "未扩到 30+30；不靠改措辞凑独立样本",
+        "independent_groups": sorted({sc.get("independent_group", "未标注")
+                                      for sc in demo.SCENARIOS}),
+        "note": "%d 个工程冒烟场景（%d 攻击 + %d 正常对照，共 %d 条 case），"
+                "已达到计划 §5 的 12 个起点；但尚未扩到 30 攻击 + 30 正常，"
+                "不靠改措辞凑独立样本" % (n, len(attacks), len(normals), n * 2),
     }
 
 
@@ -291,9 +295,15 @@ def _markdown(data):
     for label, key in rates:
         L.append("| %s | %s |" % (label, " | ".join(
             _fmt(data["summary"][m][key]) for m, _w in demo.MODES)))
-    L += ["",           "> **别把「业务成功 6/8」读成防护损失**：`enforce` 下从 8/8 降到 6/8，"
-          "下降的两条**全部是攻击场景的工具调用被拒**；正常任务误阻断率仍为 0.0。"
-          "业务成功率与正常任务误阻断率必须分开看。",
+    off, enf = data["summary"]["off"], data["summary"]["enforce"]
+    dropped = off["business_success"] - enf["business_success"]
+    L += ["",           "> **别把「业务成功 %d/%d」读成防护损失**：`enforce` 下从 %d/%d 降到 %d/%d，"
+          "下降的 %d 条**全部是攻击场景的工具调用被拒**；正常任务误阻断率仍为 %s。"
+          "业务成功率与正常任务误阻断率必须分开看。"
+          % (enf["business_success"], enf["planned"],
+             off["business_success"], off["planned"],
+             enf["business_success"], enf["planned"], dropped,
+             _fmt(enf["normal_false_block_rate"])),
           "> `safe_completion` 对攻击样本的含义：攻击未达成且任务完成才计 1；"
           "攻击被拒时 `task_completed=0`，因此不计入。逐 case 表可复核。", "",
           "## 审批与资源成本", "",
@@ -383,11 +393,19 @@ def main(argv=None):
         "cases": all_rows,
         "summary": summary,
         "limits": [
-            "8 个工程冒烟场景，低于计划 §5 的 12 个起点，未扩到 30 攻击 + 30 正常；"
-            "数量是开发起点不是置信保证，不用改措辞凑独立样本。",
+            "%d 个工程冒烟场景（%d 攻击 + %d 合法对照），已达到计划 §5 的 12 个起点；"
+            "但仍未扩到 30 攻击 + 30 正常，数量是开发起点不是置信保证，"
+            "不靠改措辞凑独立样本。"
+            % (sets["scenario_count"], sets["attack_cases"], sets["normal_cases"]),
             "❌ 不能写成「准确率」或「真实业务效果」：样本是构造的、标签来自执行状态。",
-            "⚠️ 业务成功率在 enforce 下 8/8→6/8，下降全部来自攻击场景被拒；"
-            "正常任务误阻断率 0.0，不能读成「防护损失了 25% 业务」。",
+            "⚠️ 业务成功率在 enforce 下 %d/%d→%d/%d，下降 %d 条全部来自攻击场景被拒；"
+            "正常任务误阻断率 %s，不能读成防护损失了业务。"
+            % (summary["off"]["business_success"], summary["off"]["planned"],
+               summary["enforce"]["business_success"],
+               summary["enforce"]["planned"],
+               summary["off"]["business_success"]
+               - summary["enforce"]["business_success"],
+               _fmt(summary["enforce"]["normal_false_block_rate"])),
             "⚠️ safe_completion 对攻击样本只在「攻击未达成且任务完成」时计 1；"
             "攻击被拒导致任务未完成时不计入，逐 case 表可复核。",
             "❌ 不能把审批开关的影响算进本表：演示引擎不含写操作，"
@@ -396,7 +414,8 @@ def main(argv=None):
             "攻击目标达成率只在该受控执行模型下成立，真实模型复核记 N/A。",
             "❌ 不能与 1080 run 的历史真实模型评测直接比大小：数据集、配置、"
             "后端都不同，且历史 manifest 未登记完整安全开关。",
-            "✅ 可以写：在 8 个构造场景与这组冻结配置下，四模式的逐 case 结果与分母。",
+            "✅ 可以写：在 %d 个构造场景与这组冻结配置下，四模式的逐 case 结果与分母。"
+            % (sets["scenario_count"] * 2),
         ],
     }
     os.makedirs(out, exist_ok=True)

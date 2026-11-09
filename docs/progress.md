@@ -880,6 +880,89 @@ E02 在**独立任务家族**上证明增量：建 train / dev / validation / te
 业务收益不能抵消未授权操作；没有稳定收益就拒绝候选、保留失败样本与解释，
 并发布负结果。之后才是 E03 与公平消融。
 
+---
+
+## 2026-11-09（第七阶段）：Word 计划剩余任务（§5 / §10 / E02 / E03）
+
+用户要求「继续完成 word 上的任务」→ 重读 `EvoGuardLab_安全防护与下一阶段推进计划_2026-11-09.docx`
+§5 / §9 / §10 / §12，把剩余可本地完成的任务一次做完。
+
+### 完成事项
+
+**§5 先改权限结构 再补特征**（`ai-service/evoguard/tool_contract.py`、
+`scripts/tool_contract_demo.py`、`docs/tool-contract.md`）
+- 域名 / 资源 ID 格式 / 可写路径 / 最大金额 / 方法 / 副作用类型 / 审批请求 id
+  由冻结契约结构化校验；未知身份 `enforce` 下拒绝；`security.scan()` 的命中
+  只写进 `regex_signals`，**不改变 decision**。
+- 两个反例：`rm -rf /` 字样但契约合规 → `allow`；普通回环 URL 无任何正则特征
+  但域名/身份越界 → `deny`。同一组合约加不加危险字样，decision 不变。
+- 独立模块，不改 `security.guard_tool_args` 默认行为，历史回归可比。
+
+**§5 12 个工程冒烟场景**（`scripts/defense_demo.py`）
+- 从 4 场景 / 8 case 扩到 **6 场景 / 12 case / 6 个独立攻击向量组**；
+  新增「参数里的假凭据」「参数里的外带 URL」两个**新入口**，不是改措辞。
+- 四模式对照产物已按 12 重算：off/audit 业务 12/12、攻击达成 5；
+  enforce/enforce+wrap 业务 8/12、攻击达成 0、真实阻断 1.0、正常误阻断 0.0。
+  下降的 4 条全部是攻击被拒，不是防护损失业务。
+- `docs/mode-compare-protocol.md` 保留「会话 4 当时 8 条」的历史状态，
+  另加「后续状态更新」避免文档互相矛盾。
+
+**E02 独立家族增量**（`scripts/conditional_skill_eval.py`、`experiments/e02_v1/`）
+- train / dev / validation / test 四组，task_id 与 seed 全程不重叠；
+  同 task/seed 前后配对；正常 guard 零误阻断，安全 guard 拦越权候选。
+- validation gain 0.167、test gain 0.25（增益只出现在规则表原本选错的任务上，
+  不是全量提升）；`first` 选择器无收益 → REJECT 并发布负结果与失败样本；
+  越权候选即使有业务收益也 REJECT。
+
+**E03 经验适用范围**（`ai-service/evoguard/experience_scope.py`、
+`scripts/experience_scope_demo.py`、`experiments/e03_v1/`）
+- 记录工具契约版本 / 数据版本 / 权限范围 / 有效期 / 撤销状态 / 来源 run；
+  **结构过滤先于 BM25**（纯标准库，中文 2-gram + ASCII 词，k1=1.5 / b=0.75）。
+- 反例：文本与查询逐字一致、BM25 最高分但**已撤销**的记录不进候选；
+  若忽略撤销标记它会排第一。相似度不能替代可信性。未加 embedding。
+
+**§10 公平消融与统一登记**（`scripts/ablation_v1.py`、
+`experiments/ablation_v1/`、`docs/ablation-protocol.md`）
+- 六组消融 / 13 配置，每组由同一冻结基线加**一个** override（脚本有断言），
+  净增益模型让验证门禁 / 匹配 / 容量三组都产生可观察差异。
+- 八项业务与防护指标同时报告，逐 case 与分母保留，零分母 `null`；
+  待审批不算业务完成；攻击样本的 business_success 表示「动作是否执行」不是业务正确。
+- 内容隔离消融在固定 enforce 下攻击达成率不变，唯一差异是
+  `content_isolated_cases`；条件技能消融只影响独立任务族。
+- manifest 统一登记威胁模型、攻击/正常集指纹、独立授权策略、安全模式、包裹、
+  自动审批、工具契约、输出落点、配置与代码指纹。
+
+### 证据与数字
+
+- 全量回归 **392 项全绿**（351 + 12 工具契约 + 17 E02/E03 + 11 消融 + 1 场景扩展）。
+- 冻结 manifest 复核仍是「产物差异 0 处」，代码漂移 3 文件。
+- 新产物：`experiments/tool_contract_v1/`、`experiments/e02_v1/`、
+  `experiments/e03_v1/`、`experiments/ablation_v1/`，以及重算的
+  `experiments/defense_demo_v2/`、`experiments/mode_compare_v2/`。
+
+### 仍不成立的主张（不能说）
+
+- ❌ 验证门禁的因果收益已证明：消融是确定性构造集，不是 1080 run 重跑。
+- ❌ E02 增益代表真实模型/线上效果；不给置信区间，不靠重复调用扩样本。
+- ❌ 12 个场景 = 置信保证；仍未扩到 30 攻击 + 30 正常。
+- ❌ 准确率 / 防住注入 / 生产级 WAF / 完整沙箱 / 多 Agent 已验证。
+
+### 本轮没做（如实标注）
+
+- 真实模型上的 E02 四组家族验证与不确定性范围、embedding 评估、
+  严格 2×2 消融、回滚证据、1080 run 重跑、30+30 扩样。
+- 外部真实业务轨迹与独立标注者（Q03 实质）仍未到位。
+- CI 策略直接读 `security_effects` 阻断未授权执行、阈值版本登记未做。
+- 未重训模型、未改冻结 manifest。
+
+### Word 计划的完成度
+
+会话 1–7、S01–S05、Q01–Q05、E01–E03 骨架、§5 权限结构与 12 场景、
+§10 六组消融与统一登记均已有代码与测试。**剩余的是需要外部数据或真实模型
+重跑的实验类任务**（外部轨迹 ≥30、独立标注、1080 run 重跑、公平消融的
+真实模型版本、阈值校准），这些在离线本地环境里不能靠改代码「做完」，
+已逐项标注为未完成并写明前置条件。
+
 
 
 

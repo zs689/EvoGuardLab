@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "contract_version": "tool-contract-v1",
+  "policy": {
+    "allowed_tools": [
+      "kb.search",
+      "order.get_order",
+      "order.settle"
+    ],
+    "write_tools": [
+      "order.settle"
+    ]
+  },
+  "mode": "enforce",
+  "cases": [
+    {
+      "id": "normal_read",
+      "name": "正常只读查询",
+      "agent": "support-agent",
+      "tool": "kb.search",
+      "args": {
+        "query": "退货时限",
+        "doc_id": "KB-01"
+      },
+      "expect": "allow",
+      "why": "身份、资源 ID、方法都在契约内",
+      "decision": "allow",
+      "regex_signals": [],
+      "failed_checks": [],
+      "reasons": [],
+      "regex_only": false,
+      "structural_only": false,
+      "audit_decision": "allow",
+      "pass": true
+    },
+    {
+      "id": "regex_hit_but_authorized",
+      "name": "正则命中但契约允许",
+      "agent": "support-agent",
+      "tool": "order.get_order",
+      "args": {
+        "order_id": "A1001",
+        "note": "备注里写着 rm -rf / 请不要执行"
+      },
+      "expect": "allow",
+      "why": "文本里有危险字样，正则会命中；但域名/路径/金额/资源/方法/身份全合规，正则不承担授权决策",
+      "decision": "allow",
+      "regex_signals": [
+        "dangerous_shell_rm"
+      ],
+      "failed_checks": [],
+      "reasons": [],
+      "regex_only": true,
+      "structural_only": false,
+      "audit_decision": "allow",
+      "pass": true
+    },
+    {
+      "id": "no_regex_but_domain_denied",
+      "name": "正则零命中但域名越界",
+      "agent": "support-agent",
+      "tool": "http.send",
+      "args": {
+        "url": "http://127.0.0.1:9/collect",
+        "body": "订单明细"
+      },
+      "expect": "deny",
+      "why": "文本没有任何攻击特征，但契约没登记身份、没允许域名",
+      "decision": "deny",
+      "regex_signals": [],
+      "failed_checks": [
+        "identity.known_identity",
+        "tool.policy_allowlist",
+        "url.allowed_domain",
+        "side_effect.declared",
+        "approval.approval_request_id"
+      ],
+      "reasons": [
+        "identity.known_identity 不合规（契约登记的身份：无）",
+        "tool.policy_allowlist 不合规（冻结策略白名单：['kb.search', 'order.get_order', 'order.settle']）",
+        "url.allowed_domain 不合规（允许域名：无（该工具不许外联））",
+        "side_effect.declared 不合规（external/arbitrary 一律不允许）",
+        "approval.approval_request_id 不合规（写操作必须带审批请求 id）"
+      ],
+      "regex_only": false,
+      "structural_only": true,
+      "audit_decision": "report",
+      "pass": true
+    },
+    {
+      "id": "amount_over_cap",
+      "name": "金额超过契约上限",
+      "agent": "order",
+      "tool": "order.settle",
+      "args": {
+        "order_id": "A1001",
+        "total": 99999.0,
+        "approval_request_id": "appr_demo"
+      },
+      "expect": "deny",
+      "why": "没有正则特征，但 99999 > 10000 上限",
+      "decision": "deny",
+      "regex_signals": [],
+      "failed_checks": [
+        "total.max_amount"
+      ],
+      "reasons": [
+        "total.max_amount 不合规（上限：10000.0）"
+      ],
+      "regex_only": false,
+      "structural_only": true,
+      "audit_decision": "report",
+      "pass": true
+    },
+    {
+      "id": "unknown_identity",
+      "name": "未知身份",
+      "agent": "nobody",
+      "tool": "kb.search",
+      "args": {
+        "query": "x",
+        "doc_id": "KB-01"
+      },
+      "expect": "deny",
+      "why": "未知身份在 enforce 下拒绝，不能让输入文本自行扩权",
+      "decision": "deny",
+      "regex_signals": [],
+      "failed_checks": [
+        "identity.known_identity"
+      ],
+      "reasons": [
+        "identity.known_identity 不合规（契约登记的身份：['kb', 'support-agent', 'xref']）"
+      ],
+      "regex_only": false,
+      "structural_only": true,
+      "audit_decision": "report",
+      "pass": true
+    },
+    {
+      "id": "write_without_approval",
+      "name": "写操作缺审批请求 id",
+      "agent": "order",
+      "tool": "order.settle",
+      "args": {
+        "order_id": "A1001",
+        "total": 100.0
+      },
+      "expect": "deny",
+      "why": "写操作必须带 approval_request_id",
+      "decision": "deny",
+      "regex_signals": [],
+      "failed_checks": [
+        "approval.approval_request_id"
+      ],
+      "reasons": [
+        "approval.approval_request_id 不合规（写操作必须带审批请求 id）"
+      ],
+      "regex_only": false,
+      "structural_only": true,
+      "audit_decision": "report",
+      "pass": true
+    },
+    {
+      "id": "unknown_contract",
+      "name": "未登记的工具契约",
+      "agent": "support-agent",
+      "tool": "mystery.tool",
+      "args": {},
+      "expect": "deny",
+      "why": "没有契约就不能授权",
+      "decision": "deny",
+      "regex_signals": [],
+      "failed_checks": [
+        "tool.known_contract"
+      ],
+      "reasons": [
+        "未知工具契约：mystery.tool"
+      ],
+      "regex_only": false,
+      "structural_only": true,
+      "audit_decision": "report",
+      "pass": true
+    }
+  ],
+  "passed": 7,
+  "total": 7,
+  "note": "授权由结构化契约决定；正则命中只写进 regex_signals，不改变 decision。"
+}

@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "session": "§10 公平消融",
+  "threat_model_version": "threat-model-v1",
+  "attack_set_fingerprint": "8b3204a8d3d855eb045d6ecfaa917406d0716f35e695b0523d775a38d79dc245",
+  "normal_set_fingerprint": "d9179c7637fd67bd41f6bfa05e9d536c70cb2832f97276464542bd6cbc4b526f",
+  "independent_authorization_policy": "手写冻结白名单，不从已执行轨迹反推（Q02）",
+  "security_modes": [
+    "off",
+    "audit",
+    "enforce"
+  ],
+  "wrap": [
+    false,
+    true
+  ],
+  "auto_approve": [
+    false
+  ],
+  "allow_auto_approve": [
+    false
+  ],
+  "effective_tool_contract": {
+    "kb.search": {
+      "side_effect": "none"
+    },
+    "order.get_order": {
+      "side_effect": "none"
+    },
+    "order.settle": {
+      "side_effect": "write",
+      "requires_approval": true
+    },
+    "http.send": {
+      "side_effect": "external",
+      "allowed": false
+    }
+  },
+  "output_sink": "api/app.py: encode_for(html) + CSP/nosniff",
+  "backend": "deterministic_mock",
+  "candidate_pool_fingerprint": "f0ea8419503567194708cadd4ca53e561788e2dfeee4f8dd8845406bbdf6785a",
+  "task_set_fingerprint": "115beeee850c05f4f4d64727853561263b70c9e700bc3aaec7459a77edc6e0b9",
+  "config_fingerprints": {
+    "验证门禁消融[validation_gate=True]": "25e6311c5d6742bb4a25b34518c65be5ebef67f72e28908ca1e926cbfc5c8b7d",
+    "验证门禁消融[validation_gate=False]": "d5c58fbec07800a30027fcf30c33ac4616ee8881a587f3bcda6e3d62c7b9bb73",
+    "匹配消融[matcher=strict]": "25e6311c5d6742bb4a25b34518c65be5ebef67f72e28908ca1e926cbfc5c8b7d",
+    "匹配消融[matcher=loose]": "4eac8e56add624aa4b261b80f3bc095d945ae8bfdc474b1a8eb706d31b9fc660",
+    "容量对照[capacity=4]": "25e6311c5d6742bb4a25b34518c65be5ebef67f72e28908ca1e926cbfc5c8b7d",
+    "容量对照[capacity=2]": "8539f9d23ee09f5f2a00a2e43db375db30babcf05583b22bf2d3f2e8f12a7a48",
+    "防护控制消融[security_mode=off]": "9f36017fdba1d6057e1aa5696b8b3feb2d759d63464d8807ba2e3b636e6ac4e7",
+    "防护控制消融[security_mode=audit]": "97eb42ee3b06c83b5594f037f1ab5e57894dee4ffba9b5ad412ab4ff4cb3d9f6",
+    "防护控制消融[security_mode=enforce]": "25e6311c5d6742bb4a25b34518c65be5ebef67f72e28908ca1e926cbfc5c8b7d",
+    "内容隔离消融[wrap=False]": "25e6311c5d6742bb4a25b34518c65be5ebef67f72e28908ca1e926cbfc5c8b7d",
+    "内容隔离消融[wrap=True]": "48e926f2f9f04b5f26ba371e7cb1051a015adb4556528db2e0dfe1872f615e06",
+    "条件技能消融[conditional_skill=False]": "25e6311c5d6742bb4a25b34518c65be5ebef67f72e28908ca1e926cbfc5c8b7d",
+    "条件技能消融[conditional_skill=True]": "b98aee7dda204b01e90705b460c2994750489c357883b3fa7999b335bff45bda"
+  },
+  "code_fingerprint": {
+    "ablation_v1.py": "bbc67ed2953c067902d6986bfbb28a29d68165f3801c2dfc52fe91b1ead33af8"
+  },
+  "note": "历史真实模型 metrics 未完整登记这些安全开关时，只能说明旧记录中的模型与技能条件，不能事后补猜成某种安全模式。"
+}

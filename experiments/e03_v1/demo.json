@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "scope_version": "experience-scope-v1",
+  "query": "新版退货政策 按文档版本号选证据",
+  "context": {
+    "allowed_tools": [
+      "kb.search_all",
+      "kb.tier_lookup"
+    ],
+    "tool_contract_version": "tool-contract-v1",
+    "data_version": "kb-v3",
+    "agent": "xref"
+  },
+  "now": 1000000.0,
+  "retrieval": {
+    "version": "experience-scope-v1",
+    "query": "新版退货政策 按文档版本号选证据",
+    "context": {
+      "allowed_tools": [
+        "kb.search_all",
+        "kb.tier_lookup"
+      ],
+      "tool_contract_version": "tool-contract-v1",
+      "data_version": "kb-v3",
+      "agent": "xref"
+    },
+    "eligible": 2,
+    "excluded": 5,
+    "results": [
+      {
+        "id": "exp_valid_old",
+        "text": "旧版退货政策 三天内退货",
+        "score": 1.3484,
+        "source_run": "run_demo",
+        "scope": {
+          "tool_contract_version": "tool-contract-v1",
+          "data_version": "kb-v3",
+          "permission_scope": [
+            "kb.search_all",
+            "kb.tier_lookup"
+          ],
+          "valid_until": 1009000.0,
+          "revoked": false
+        }
+      },
+      {
+        "id": "exp_valid_new",
+        "text": "退货政策 七天无理由 退款时限",
+        "score": 0.5343,
+        "source_run": "run_demo",
+        "scope": {
+          "tool_contract_version": "tool-contract-v1",
+          "data_version": "kb-v3",
+          "permission_scope": [
+            "kb.search_all",
+            "kb.tier_lookup"
+          ],
+          "valid_until": 1009000.0,
+          "revoked": false
+        }
+      }
+    ],
+    "excluded_records": [
+      {
+        "id": "exp_revoked_best_match",
+        "reasons": [
+          "经验已撤销"
+        ]
+      },
+      {
+        "id": "exp_expired",
+        "reasons": [
+          "经验已过期"
+        ]
+      },
+      {
+        "id": "exp_wrong_data_version",
+        "reasons": [
+          "数据版本不匹配"
+        ]
+      },
+      {
+        "id": "exp_wrong_contract",
+        "reasons": [
+          "工具契约版本不匹配"
+        ]
+      },
+      {
+        "id": "exp_privilege_overflow",
+        "reasons": [
+          "权限范围超出当前策略：['shell.exec']"
+        ]
+      }
+    ],
+    "note": "结构过滤先于相似度；撤销/过期/权限或版本不匹配一律剔除，分数再高也不进候选。相似度不能替代可信性。",
+    "embedding_used": false,
+    "embedding_note": "只有语义改写确实造成召回不足时才增加 embedding；本轮未加。"
+  },
+  "counterfactual_top_if_revocation_ignored": "exp_revoked_best_match",
+  "actual_top": "exp_valid_old",
+  "revoked_record_excluded": true,
+  "pass": true,
+  "note": "结构过滤先于 BM25；撤销/过期/版本/权限不匹配一律剔除，分数再高也不进候选。相似度不能替代可信性。"
+}
