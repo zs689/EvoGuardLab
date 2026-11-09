@@ -1,0 +1,51 @@
+{
+  "note": "同一数据集、mock 后端，三种安全模式的闭环结果对比。三者完全一致，说明安全层不改变结论；每项明细仍在各自目录的 evolution_report.md 与 manifest.json。",
+  "modes": {
+    "audit_smoke": {
+      "four_groups": {
+        "A": 0.5,
+        "B": 24.0,
+        "C": 89.2,
+        "D": 86.3
+      },
+      "composite": {
+        "single": 3.3,
+        "chain": 86.7,
+        "D": 86.7
+      },
+      "promoted": 7,
+      "candidates": 116
+    },
+    "enforce_smoke": {
+      "four_groups": {
+        "A": 0.5,
+        "B": 24.0,
+        "C": 89.2,
+        "D": 86.3
+      },
+      "composite": {
+        "single": 3.3,
+        "chain": 86.7,
+        "D": 86.7
+      },
+      "promoted": 7,
+      "candidates": 116
+    },
+    "enforce_wrap_smoke": {
+      "four_groups": {
+        "A": 0.5,
+        "B": 24.0,
+        "C": 89.2,
+        "D": 86.3
+      },
+      "composite": {
+        "single": 3.3,
+        "chain": 86.7,
+        "D": 86.7
+      },
+      "promoted": 7,
+      "candidates": 116
+    }
+  },
+  "identical": true
+}
