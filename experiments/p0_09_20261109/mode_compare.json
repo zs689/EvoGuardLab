@@ -59,5 +59,9 @@
   "delta": {
     "single_D": 26.5,
     "composite_chain": 40.0
-  }
+  },
+  "notes": [
+    "audit/enforce 的完整产物在各自目录（evolution_report.md + manifest.json + metrics.json）。",
+    "enforce+wrap 只保留 evolution_report.md：包裹在本仓库的规则式 Agent 上不改变指标，完整 metrics 与 enforce 逐项相同，没必要存两份（约 4.5 万行）。"
+  ]
 }
