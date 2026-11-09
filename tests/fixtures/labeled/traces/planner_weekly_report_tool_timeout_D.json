@@ -1,0 +1,282 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "planner"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "evoguard.export"
+     },
+     "spans": [
+      {
+       "traceId": "run_38811a1eda2a",
+       "spanId": "1a1eda2a-01",
+       "name": "rule-plan",
+       "startTimeUnixNano": "1000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "weekly_report"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.rule-plan"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_38811a1eda2a",
+       "spanId": "1a1eda2a-02",
+       "name": "execute_tool task.make_plan",
+       "startTimeUnixNano": "2000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "weekly_report"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "task.make_plan"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"goal_key\": \"weekly_report\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{\"error\": \"timeout\"}"
+         }
+        },
+        {
+         "key": "error.type",
+         "value": {
+          "stringValue": "timeout"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_ERROR"
+       }
+      },
+      {
+       "traceId": "run_38811a1eda2a",
+       "spanId": "1a1eda2a-03",
+       "name": "rule-plan",
+       "startTimeUnixNano": "3000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "weekly_report"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.rule-plan"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_38811a1eda2a",
+       "spanId": "1a1eda2a-04",
+       "name": "execute_tool task.make_plan",
+       "startTimeUnixNano": "4000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "weekly_report"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "task.make_plan"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"goal_key\": \"weekly_report\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{\"goal_key\": \"weekly_report\", \"steps\": [\"收集本周销售数据\", \"核对异常订单\", \"生成周报草稿\", \"提交审核\"]}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_38811a1eda2a",
+       "spanId": "1a1eda2a-05",
+       "name": "build_context",
+       "startTimeUnixNano": "5000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "weekly_report"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.build_context"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_38811a1eda2a",
+       "spanId": "1a1eda2a-06",
+       "name": "rule-plan",
+       "startTimeUnixNano": "6000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "weekly_report"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.rule-plan"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_38811a1eda2a",
+       "spanId": "1a1eda2a-07",
+       "name": "chat planner",
+       "startTimeUnixNano": "7000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "weekly_report"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": 32
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"steps\": [\"收集本周销售数据\", \"核对异常订单\", \"生成周报草稿\", \"提交审核\"]}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

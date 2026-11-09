@@ -66,6 +66,27 @@ def _attrs(sp):
     return out
 
 
+def _is_empty_shell(v):
+    """{"parsed": null, "text": ""} 这种外壳不算答案。
+
+    不处理会让「结果未被引用」这类规则误报：外壳是非空 dict，里面却什么都没有。
+    """
+    if not isinstance(v, dict):
+        return False
+    if set(v) - {"parsed", "text", "answer", "output", "result", "outputs"}:
+        return False
+    inner = v.get("parsed")
+    if inner is not None:
+        return False
+    for k in ("text", "answer"):
+        val = v.get(k)
+        if isinstance(val, str) and val.strip():
+            return False
+        if isinstance(val, (dict, list)) and val:
+            return False
+    return True
+
+
 def unwrap_answer(v):
     """把「模型输出」归一化成答案本体。
 
@@ -79,7 +100,7 @@ def unwrap_answer(v):
             inner = v.get(k)
             if isinstance(inner, dict):
                 return inner
-    return v
+    return None if _is_empty_shell(v) else v
 
 
 def load(doc):

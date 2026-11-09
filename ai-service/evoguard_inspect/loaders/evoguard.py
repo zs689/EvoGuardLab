@@ -45,7 +45,7 @@ def _read(c, run_id=None):
             t = Trace(trace_id=r["id"],
                       agent=str(exp.get("agent_type") or "unknown"),
                       task=str(exp.get("task_id") or ""),
-                      answer=_loads(r.get("answer")),
+                      answer=_clean_answer(r.get("answer")),
                       source="evoguard",
                       meta={"mode": r.get("mode"), "status": r.get("status"),
                             "fault": exp.get("fault_type")})
@@ -63,6 +63,22 @@ def _read(c, run_id=None):
     return traces
 
 
+def _clean_answer(v):
+    """把「空壳答案」归一成 None。
+
+    运行库里的 answer 常是 {"parsed": null, "text": ""} 这种外壳，
+    直接当答案会让「结果未被引用」这类规则误报（外壳非空，但里面什么都没有）。
+    """
+    a = _loads(v)
+    # 必须**真的存在** parsed/text 键才算外壳。
+    # 否则 {"order_id": "A1001", "total": 504.0} 这种正常答案会被当成空壳丢掉
+    # —— 实测导致 32 条正常轨迹全被判「没有答案」。
+    if isinstance(a, dict) and "parsed" in a:
+        if a.get("parsed") is None and not str(a.get("text") or "").strip():
+            return None
+    return a
+
+
 def _loads(v):
     if v is None:
         return None
@@ -72,6 +88,14 @@ def _loads(v):
         return json.loads(v)
     except Exception:
         return v
+
+
+def _empty_shell(v):
+    if not isinstance(v, dict):
+        return False
+    if set(v) - {"parsed", "text", "answer", "output", "result", "outputs"}:
+        return False
+    return v.get("parsed") is None and not str(v.get("text") or "").strip()
 
 
 def to_otel(traces, agent_name=None):
@@ -92,11 +116,18 @@ def to_otel(traces, agent_name=None):
                 ]
                 name = "execute_tool %s" % (s.tool or s.name)
             elif s.kind == KIND_CHAT:
+                # 模型步的结果可能是空壳（{"parsed": null, "text": ""}）：
+                # mock 后端不产出文本，真正的答案在 trace.answer 里。
+                # 导出时若照抄空壳，检查器就永远看不到答案 —— 会把每条正常轨迹
+                # 都判成「宣称完成但没有答案」（实测 32/32 误报）。
+                completion = s.result
+                if _empty_shell(completion) and t.answer is not None:
+                    completion = t.answer
                 attrs += [
                     {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
                     {"key": "gen_ai.usage.output_tokens", "value": {"intValue": s.tokens}},
                     {"key": "gen_ai.completion",
-                     "value": {"stringValue": json.dumps(s.result, ensure_ascii=False)}},
+                     "value": {"stringValue": json.dumps(completion, ensure_ascii=False)}},
                 ]
                 name = "chat %s" % (t.agent or "agent")
             else:

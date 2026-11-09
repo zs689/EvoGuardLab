@@ -1,0 +1,107 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "order"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "evoguard.export"
+     },
+     "spans": [
+      {
+       "traceId": "run_32a3d266450b",
+       "spanId": "d266450b-01",
+       "name": "rule-plan",
+       "startTimeUnixNano": "1000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "order"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "A1001"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.rule-plan"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_32a3d266450b",
+       "spanId": "d266450b-02",
+       "name": "execute_tool order.get_order",
+       "startTimeUnixNano": "2000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "order"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "A1001"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "order.get_order"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"order_id\": \"A1001\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{\"error\": \"timeout\"}"
+         }
+        },
+        {
+         "key": "error.type",
+         "value": {
+          "stringValue": "timeout"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_ERROR"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

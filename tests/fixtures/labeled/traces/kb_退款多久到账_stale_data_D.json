@@ -1,0 +1,200 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "kb"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "evoguard.export"
+     },
+     "spans": [
+      {
+       "traceId": "run_ea18938a20a5",
+       "spanId": "938a20a5-01",
+       "name": "rule-plan",
+       "startTimeUnixNano": "1000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "kb"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "退款多久到账"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.rule-plan"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_ea18938a20a5",
+       "spanId": "938a20a5-02",
+       "name": "execute_tool kb.search",
+       "startTimeUnixNano": "2000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "kb"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "退款多久到账"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "kb.search"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"退款时效\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{\"docs\": [{\"doc_id\": \"KB-02\", \"text\": \"退货审核通过后 6 个工作日内原路退回，遇节假日顺延。\", \"title\": \"退款时效\", \"version\": 1}]}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_ea18938a20a5",
+       "spanId": "938a20a5-03",
+       "name": "build_context",
+       "startTimeUnixNano": "3000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "kb"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "退款多久到账"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.build_context"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_ea18938a20a5",
+       "spanId": "938a20a5-04",
+       "name": "rule-plan",
+       "startTimeUnixNano": "4000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "kb"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "退款多久到账"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.rule-plan"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_ea18938a20a5",
+       "spanId": "938a20a5-05",
+       "name": "chat kb",
+       "startTimeUnixNano": "5000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "kb"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "退款多久到账"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": 30
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"cited\": [\"KB-02\"], \"text\": \"退货审核通过后 6 个工作日内原路退回，遇节假日顺延。\"}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

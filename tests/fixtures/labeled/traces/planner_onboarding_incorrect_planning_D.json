@@ -1,0 +1,200 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "planner"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "evoguard.export"
+     },
+     "spans": [
+      {
+       "traceId": "run_fa016347bedb",
+       "spanId": "6347bedb-01",
+       "name": "rule-plan",
+       "startTimeUnixNano": "1000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "onboarding"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.rule-plan"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_fa016347bedb",
+       "spanId": "6347bedb-02",
+       "name": "execute_tool task.make_plan",
+       "startTimeUnixNano": "2000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "onboarding"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "task.make_plan"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"goal_key\": \"onboarding\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "{\"goal_key\": \"onboarding\", \"steps\": [\"设置首周目标\", \"安排导师\", \"分配设备\", \"创建账号\"]}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_fa016347bedb",
+       "spanId": "6347bedb-03",
+       "name": "build_context",
+       "startTimeUnixNano": "3000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "onboarding"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.build_context"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_fa016347bedb",
+       "spanId": "6347bedb-04",
+       "name": "rule-plan",
+       "startTimeUnixNano": "4000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "onboarding"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "evoguard.rule-plan"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      },
+      {
+       "traceId": "run_fa016347bedb",
+       "spanId": "6347bedb-05",
+       "name": "chat planner",
+       "startTimeUnixNano": "5000000",
+       "attributes": [
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "planner"
+         }
+        },
+        {
+         "key": "gen_ai.task",
+         "value": {
+          "stringValue": "onboarding"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": 29
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"steps\": [\"设置首周目标\", \"安排导师\", \"分配设备\", \"创建账号\"]}"
+         }
+        }
+       ],
+       "status": {
+        "code": "STATUS_CODE_OK"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

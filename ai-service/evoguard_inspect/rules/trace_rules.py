@@ -49,6 +49,14 @@ def _issue(rule_id, trace, step=None, detail="", fix=""):
 
 def _answer_text(trace):
     a = trace.answer
+    # 空壳答案（{"parsed": null, "text": ""}）按「没有答案」处理。
+    # 否则依赖答案的规则会以为自己看到了内容，全部误报。
+    if isinstance(a, dict) and not (set(a) - {"parsed", "text", "answer", "output",
+                                              "outputs", "result"}) \
+            and a.get("parsed") is None \
+            and not str(a.get("text") or "").strip() \
+            and not str(a.get("answer") or "").strip():
+        return ""
     if a is None:
         return ""
     return a if isinstance(a, str) else json.dumps(a, ensure_ascii=False)
@@ -212,8 +220,10 @@ def rule_tool_result_unused(trace, cfg=DEFAULT):
     第一版拿整个 JSON 的 token 做交集，11 条轨迹全命中 —— 因为 JSON 的 key
     （items / docs / ok）本来就不会出现在答案里。这种规则没有区分度，只能制造噪音。
     """
-    ans = _answer_text(trace)
-    if not ans:
+    ans = _answer_text(trace).strip()
+    # 答案里没有实质文本（例如 {"parsed": null, "text": ""}）时，
+    # 「结果没被引用」无从谈起 —— 那是 empty_answer 的事，不是这条规则的。
+    if len(ans) < 3:
         return []
     tools = trace.tools()
     out = []
@@ -235,6 +245,20 @@ def rule_tool_result_unused(trace, cfg=DEFAULT):
                                         next(iter(sorted(vals)))[:20]),
                               fix="确认这次调用是否必要；如果结果该影响答案，说明 Agent 漏读了"))
     return out
+
+
+def _related(v, hay):
+    """参数值是否能在来源里找到**或**与来源有实质重叠。
+
+    中文改写很常见：用户问「退货要几天内」，Agent 拿去检索的 query 是「退货时限」。
+    按子串判会把它当成编造参数（实测 10/32 条正常轨迹误报）。
+    只对含中文的值放宽到 2-gram 重叠；纯 ASCII 的 ID/数字仍按子串判，避免误放过真错。
+    """
+    if v in hay:
+        return True
+    if not re.search(r"[\u4e00-\u9fa5]", v):
+        return False
+    return any(v[i:i + 2] in hay for i in range(len(v) - 1))
 
 
 @rule("dependency_mismatch", "tool", "warn",
@@ -260,7 +284,7 @@ def rule_dependency_mismatch(trace, cfg=DEFAULT):
         for k, v in s.args.items():
             if not isinstance(v, str) or len(v) < 4:
                 continue
-            if v not in before:
+            if not _related(v, before):
                 out.append(_issue("dependency_mismatch", trace, step=s,
                                   detail="%s 的参数 %s=%r 在工具输出、用户问题与模型输入里都找不到"
                                          % (s.tool or s.name, k, v[:40]),
@@ -331,7 +355,10 @@ def rule_loop_detected(trace, cfg=DEFAULT):
       "两条以上的工具交替出现两轮，通常是 Agent 在同一个坑里来回试。",
       "工作流本身就是交替的（读→写→读→写），属于正常设计。")
 def rule_cycle_detected(trace, cfg=DEFAULT):
-    names = [s.tool or s.name for s in trace.tools()]
+    # 恢复期会把同样的调用再放一次（kind=replay，有审计记录），
+    # 那是**有意的重放**，不是「陷入循环」—— 把它算进来会让 D 模式全被误报。
+    tools_all = [s for s in trace.tools() if s.kind != "replay"]
+    names = [s.tool or s.name for s in tools_all]
     tools = trace.tools()
     for n in range(2, len(names) // 2 + 1):
         for i in range(len(names) - 2 * n + 1):
