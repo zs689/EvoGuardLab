@@ -59,44 +59,48 @@ def main():
     store = core.Store(tmp, fast=True)
 
     entries = []
+    seen = set()
+
+    def _emit(agent, task, fault, mode):
+        key = "%s_%s_%s_%s" % (agent, task["task_id"], fault, mode)
+        key = "".join(ch if (ch.isalnum() or ch in "_-") else "_" for ch in key)
+        if key in seen:          # 「无故障」那条会被多个故障共用，只跑一次
+            return
+        seen.add(key)
+        exp = store.create_experiment(
+            name="%s/%s/%s/%s" % (agent, task["task_id"], fault, mode),
+            agent_type=agent, task_id=task["task_id"], fault_type=fault,
+            fault_target=0, seed=7, recovery_mode=mode)
+        run = runtime.run_once(store, exp, mode)
+        success = run["success"] == 1
+        if fault == "none":
+            label, why = "clean", "未注入故障"
+        elif success:
+            label, why = "recovered", "注入了 %s，恢复后成功" % fault
+        else:
+            label, why = "failed", "注入了 %s，未恢复" % fault
+        traces = eg.from_store(store, run["id"])
+        if not traces:
+            return
+        path = os.path.join(TRACES, key + ".json")
+        eg.dump_otel(traces, path, agent_name=agent)
+        entries.append({
+            "key": key,
+            "file": os.path.relpath(path, ROOT).replace(os.sep, "/"),
+            "label": label,
+            "agent": agent,
+            "fault": fault,
+            "mode": mode,
+            "success": success,
+            "provenance": "execution_ground_truth",
+            "note": why,
+        })
+
     for agent, fault in PLAN:
         for task in sim.dev_tasks(agent)[:2]:
             for mode in MODES:
-                # 1) 无注入，A 模式 -> clean
-                cases = [(mode, "none"), (mode, fault)]
-                for m, ft in cases:
-                    exp = store.create_experiment(
-                        name="%s/%s/%s/%s" % (agent, task["task_id"], ft, m),
-                        agent_type=agent, task_id=task["task_id"], fault_type=ft,
-                        fault_target=0, seed=7, recovery_mode=m)
-                    run = runtime.run_once(store, exp, m)
-                    success = run["success"] == 1
-
-                    if ft == "none":
-                        label, why = "clean", "未注入故障"
-                    elif success:
-                        label, why = "recovered", "注入了 %s，恢复后成功" % ft
-                    else:
-                        label, why = "failed", "注入了 %s，未恢复" % ft
-
-                    traces = eg.from_store(store, run["id"])
-                    if not traces:
-                        continue
-                    key = "%s_%s_%s_%s" % (agent, task["task_id"], ft, m)
-                    key = "".join(ch if (ch.isalnum() or ch in "_-") else "_" for ch in key)
-                    path = os.path.join(TRACES, key + ".json")
-                    eg.dump_otel(traces, path, agent_name=agent)
-                    entries.append({
-                        "key": key,
-                        "file": os.path.relpath(path, ROOT).replace(os.sep, "/"),
-                        "label": label,
-                        "agent": agent,
-                        "fault": ft,
-                        "mode": m,
-                        "success": success,
-                        "provenance": "execution_ground_truth",
-                        "note": why,
-                    })
+                _emit(agent, task, "none", mode)   # 每个任务只跑一次「无故障」
+                _emit(agent, task, fault, mode)
     store.close()
     os.remove(tmp)
 

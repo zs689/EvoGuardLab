@@ -18,8 +18,8 @@
      },
      "spans": [
       {
-       "traceId": "run_d09d4e5bf55a",
-       "spanId": "4e5bf55a-01",
+       "traceId": "run_7ed706eb9a0c",
+       "spanId": "06eb9a0c-01",
        "name": "rule-plan",
        "startTimeUnixNano": "1000000",
        "attributes": [
@@ -47,8 +47,8 @@
        }
       },
       {
-       "traceId": "run_d09d4e5bf55a",
-       "spanId": "4e5bf55a-02",
+       "traceId": "run_7ed706eb9a0c",
+       "spanId": "06eb9a0c-02",
        "name": "execute_tool kb.search",
        "startTimeUnixNano": "2000000",
        "attributes": [
@@ -100,8 +100,8 @@
        }
       },
       {
-       "traceId": "run_d09d4e5bf55a",
-       "spanId": "4e5bf55a-03",
+       "traceId": "run_7ed706eb9a0c",
+       "spanId": "06eb9a0c-03",
        "name": "rule-plan",
        "startTimeUnixNano": "3000000",
        "attributes": [
@@ -129,8 +129,8 @@
        }
       },
       {
-       "traceId": "run_d09d4e5bf55a",
-       "spanId": "4e5bf55a-04",
+       "traceId": "run_7ed706eb9a0c",
+       "spanId": "06eb9a0c-04",
        "name": "execute_tool kb.search",
        "startTimeUnixNano": "4000000",
        "attributes": [
@@ -176,8 +176,8 @@
        }
       },
       {
-       "traceId": "run_d09d4e5bf55a",
-       "spanId": "4e5bf55a-05",
+       "traceId": "run_7ed706eb9a0c",
+       "spanId": "06eb9a0c-05",
        "name": "build_context",
        "startTimeUnixNano": "5000000",
        "attributes": [
@@ -205,8 +205,8 @@
        }
       },
       {
-       "traceId": "run_d09d4e5bf55a",
-       "spanId": "4e5bf55a-06",
+       "traceId": "run_7ed706eb9a0c",
+       "spanId": "06eb9a0c-06",
        "name": "rule-plan",
        "startTimeUnixNano": "6000000",
        "attributes": [
@@ -234,8 +234,8 @@
        }
       },
       {
-       "traceId": "run_d09d4e5bf55a",
-       "spanId": "4e5bf55a-07",
+       "traceId": "run_7ed706eb9a0c",
+       "spanId": "06eb9a0c-07",
        "name": "chat kb",
        "startTimeUnixNano": "7000000",
        "attributes": [

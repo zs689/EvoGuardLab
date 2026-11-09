@@ -18,8 +18,8 @@
      },
      "spans": [
       {
-       "traceId": "run_b22b0091a0f0",
-       "spanId": "0091a0f0-01",
+       "traceId": "run_c98dd678ce0b",
+       "spanId": "d678ce0b-01",
        "name": "rule-plan",
        "startTimeUnixNano": "1000000",
        "attributes": [
@@ -47,8 +47,8 @@
        }
       },
       {
-       "traceId": "run_b22b0091a0f0",
-       "spanId": "0091a0f0-02",
+       "traceId": "run_c98dd678ce0b",
+       "spanId": "d678ce0b-02",
        "name": "execute_tool kb.search",
        "startTimeUnixNano": "2000000",
        "attributes": [

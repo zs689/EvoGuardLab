@@ -13,7 +13,7 @@
 | `failed` | 注入了故障，最终没救回来 | 注入故障，最终 success=0 |
 | `unjudgeable` | 输入不足（没有 error 级规则可跑） | 由覆盖率计算自动判定 |
 
-生成脚本：`scripts/build_labeled_set.py`（49 条：24 clean / 17 failed / 8 recovered，backend=mock）。
+生成脚本：`scripts/build_labeled_set.py`（**37 条：12 clean / 17 failed / 8 recovered**，backend=mock）。
 产物：`tests/fixtures/labeled/{labels.json,traces/*.json}`，轨迹是 OTLP 格式，
 所以检查器走的代码路径与检查别人时**完全一样**。
 
@@ -27,12 +27,12 @@
 只报一档会误导：`hallucinated_number` 这类规则按设计就是 warn，
 用 error 口径算召回会把它们全算成漏报；反过来只看 warn 又会把噪音当检出。
 
-## 三、当前数字（49 条构造集，mock 后端）
+## 三、当前数字（37 条构造集，mock 后端）
 
 | 口径 | 检出 | recall | 误报 | precision |
 |---|---|---|---|---|
-| 确诊（error 级） | 7/17 | 0.412 | 0 / 32 | 1.000 |
-| 提示（warn 及以上） | 7/17 | 0.412 | 2 / 32 | 0.778 |
+| 确诊（error 级） | 7/17 | 0.412 | 0 / 20 | 1.000 |
+| 提示（warn 及以上） | 7/17 | 0.412 | 2 / 20 | 0.778 |
 
 - `recovered` 单独一档：8 条里有 2 条被 `cycle_detected` 误报（恢复重放被当成循环），
   这是已知误伤，记在这里不藏。
@@ -54,8 +54,8 @@
 ## 五、不能怎么用
 
 - ❌ 不能写成「准确率 41%」——样本是构造的，分布不是真实业务。
-- ❌ 不能写成「误报率 0」——32 条里只有 2 条 recovered 有告警，样本太小，置信区间极宽。
-- ✅ 可以写成「在 49 条构造集上，error 级 recall 0.41 / precision 1.00，warn 级误报 2/32」。
+- ❌ 不能写成「误报率 0」——20 条正常轨迹里只有 2 条 recovered 有告警，样本太小，置信区间极宽。
+- ✅ 可以写成「在 37 条构造集上，error 级 recall 0.41 / precision 1.00，warn 级误报 2/20」。
 - ✅ 可以当**回归护栏**：改规则后重跑 `python scripts/eval_labeled.py`，看两组数有没有退化。
 
 ## 六、要变成真准确率还差什么

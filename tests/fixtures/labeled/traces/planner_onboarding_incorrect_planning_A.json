@@ -18,8 +18,8 @@
      },
      "spans": [
       {
-       "traceId": "run_abe84de52fcb",
-       "spanId": "4de52fcb-01",
+       "traceId": "run_56970b4c1459",
+       "spanId": "0b4c1459-01",
        "name": "rule-plan",
        "startTimeUnixNano": "1000000",
        "attributes": [
@@ -47,8 +47,8 @@
        }
       },
       {
-       "traceId": "run_abe84de52fcb",
-       "spanId": "4de52fcb-02",
+       "traceId": "run_56970b4c1459",
+       "spanId": "0b4c1459-02",
        "name": "execute_tool task.make_plan",
        "startTimeUnixNano": "2000000",
        "attributes": [
@@ -94,8 +94,8 @@
        }
       },
       {
-       "traceId": "run_abe84de52fcb",
-       "spanId": "4de52fcb-03",
+       "traceId": "run_56970b4c1459",
+       "spanId": "0b4c1459-03",
        "name": "build_context",
        "startTimeUnixNano": "3000000",
        "attributes": [
@@ -123,8 +123,8 @@
        }
       },
       {
-       "traceId": "run_abe84de52fcb",
-       "spanId": "4de52fcb-04",
+       "traceId": "run_56970b4c1459",
+       "spanId": "0b4c1459-04",
        "name": "rule-plan",
        "startTimeUnixNano": "4000000",
        "attributes": [
@@ -152,8 +152,8 @@
        }
       },
       {
-       "traceId": "run_abe84de52fcb",
-       "spanId": "4de52fcb-05",
+       "traceId": "run_56970b4c1459",
+       "spanId": "0b4c1459-05",
        "name": "chat planner",
        "startTimeUnixNano": "5000000",
        "attributes": [

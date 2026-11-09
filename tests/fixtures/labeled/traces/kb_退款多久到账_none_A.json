@@ -18,8 +18,8 @@
      },
      "spans": [
       {
-       "traceId": "run_d9a473a18f8f",
-       "spanId": "73a18f8f-01",
+       "traceId": "run_b29dd6ccb5b7",
+       "spanId": "d6ccb5b7-01",
        "name": "rule-plan",
        "startTimeUnixNano": "1000000",
        "attributes": [
@@ -47,8 +47,8 @@
        }
       },
       {
-       "traceId": "run_d9a473a18f8f",
-       "spanId": "73a18f8f-02",
+       "traceId": "run_b29dd6ccb5b7",
+       "spanId": "d6ccb5b7-02",
        "name": "execute_tool kb.search",
        "startTimeUnixNano": "2000000",
        "attributes": [
@@ -94,8 +94,8 @@
        }
       },
       {
-       "traceId": "run_d9a473a18f8f",
-       "spanId": "73a18f8f-03",
+       "traceId": "run_b29dd6ccb5b7",
+       "spanId": "d6ccb5b7-03",
        "name": "build_context",
        "startTimeUnixNano": "3000000",
        "attributes": [
@@ -123,8 +123,8 @@
        }
       },
       {
-       "traceId": "run_d9a473a18f8f",
-       "spanId": "73a18f8f-04",
+       "traceId": "run_b29dd6ccb5b7",
+       "spanId": "d6ccb5b7-04",
        "name": "rule-plan",
        "startTimeUnixNano": "4000000",
        "attributes": [
@@ -152,8 +152,8 @@
        }
       },
       {
-       "traceId": "run_d9a473a18f8f",
-       "spanId": "73a18f8f-05",
+       "traceId": "run_b29dd6ccb5b7",
+       "spanId": "d6ccb5b7-05",
        "name": "chat kb",
        "startTimeUnixNano": "5000000",
        "attributes": [

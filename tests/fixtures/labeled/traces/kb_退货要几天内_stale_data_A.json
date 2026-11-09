@@ -18,8 +18,8 @@
      },
      "spans": [
       {
-       "traceId": "run_a427f410bb82",
-       "spanId": "f410bb82-01",
+       "traceId": "run_77412a625320",
+       "spanId": "2a625320-01",
        "name": "rule-plan",
        "startTimeUnixNano": "1000000",
        "attributes": [
@@ -47,8 +47,8 @@
        }
       },
       {
-       "traceId": "run_a427f410bb82",
-       "spanId": "f410bb82-02",
+       "traceId": "run_77412a625320",
+       "spanId": "2a625320-02",
        "name": "execute_tool kb.search",
        "startTimeUnixNano": "2000000",
        "attributes": [
@@ -94,8 +94,8 @@
        }
       },
       {
-       "traceId": "run_a427f410bb82",
-       "spanId": "f410bb82-03",
+       "traceId": "run_77412a625320",
+       "spanId": "2a625320-03",
        "name": "build_context",
        "startTimeUnixNano": "3000000",
        "attributes": [
@@ -123,8 +123,8 @@
        }
       },
       {
-       "traceId": "run_a427f410bb82",
-       "spanId": "f410bb82-04",
+       "traceId": "run_77412a625320",
+       "spanId": "2a625320-04",
        "name": "rule-plan",
        "startTimeUnixNano": "4000000",
        "attributes": [
@@ -152,8 +152,8 @@
        }
       },
       {
-       "traceId": "run_a427f410bb82",
-       "spanId": "f410bb82-05",
+       "traceId": "run_77412a625320",
+       "spanId": "2a625320-05",
        "name": "chat kb",
        "startTimeUnixNano": "5000000",
        "attributes": [

@@ -18,8 +18,8 @@
      },
      "spans": [
       {
-       "traceId": "run_a4741c208ef2",
-       "spanId": "1c208ef2-01",
+       "traceId": "run_8988d9ae83c2",
+       "spanId": "d9ae83c2-01",
        "name": "rule-plan",
        "startTimeUnixNano": "1000000",
        "attributes": [
@@ -47,8 +47,8 @@
        }
       },
       {
-       "traceId": "run_a4741c208ef2",
-       "spanId": "1c208ef2-02",
+       "traceId": "run_8988d9ae83c2",
+       "spanId": "d9ae83c2-02",
        "name": "execute_tool order.get_order",
        "startTimeUnixNano": "2000000",
        "attributes": [
@@ -100,8 +100,8 @@
        }
       },
       {
-       "traceId": "run_a4741c208ef2",
-       "spanId": "1c208ef2-03",
+       "traceId": "run_8988d9ae83c2",
+       "spanId": "d9ae83c2-03",
        "name": "rule-plan",
        "startTimeUnixNano": "3000000",
        "attributes": [
@@ -129,8 +129,8 @@
        }
       },
       {
-       "traceId": "run_a4741c208ef2",
-       "spanId": "1c208ef2-04",
+       "traceId": "run_8988d9ae83c2",
+       "spanId": "d9ae83c2-04",
        "name": "execute_tool order.get_order",
        "startTimeUnixNano": "4000000",
        "attributes": [
@@ -176,8 +176,8 @@
        }
       },
       {
-       "traceId": "run_a4741c208ef2",
-       "spanId": "1c208ef2-05",
+       "traceId": "run_8988d9ae83c2",
+       "spanId": "d9ae83c2-05",
        "name": "build_context",
        "startTimeUnixNano": "5000000",
        "attributes": [
@@ -205,8 +205,8 @@
        }
       },
       {
-       "traceId": "run_a4741c208ef2",
-       "spanId": "1c208ef2-06",
+       "traceId": "run_8988d9ae83c2",
+       "spanId": "d9ae83c2-06",
        "name": "execute_tool pricing.calc_total",
        "startTimeUnixNano": "6000000",
        "attributes": [
@@ -252,8 +252,8 @@
        }
       },
       {
-       "traceId": "run_a4741c208ef2",
-       "spanId": "1c208ef2-07",
+       "traceId": "run_8988d9ae83c2",
+       "spanId": "d9ae83c2-07",
        "name": "execute_tool order.settle",
        "startTimeUnixNano": "7000000",
        "attributes": [
@@ -299,8 +299,8 @@
        }
       },
       {
-       "traceId": "run_a4741c208ef2",
-       "spanId": "1c208ef2-08",
+       "traceId": "run_8988d9ae83c2",
+       "spanId": "d9ae83c2-08",
        "name": "rule-plan",
        "startTimeUnixNano": "8000000",
        "attributes": [
@@ -328,8 +328,8 @@
        }
       },
       {
-       "traceId": "run_a4741c208ef2",
-       "spanId": "1c208ef2-09",
+       "traceId": "run_8988d9ae83c2",
+       "spanId": "d9ae83c2-09",
        "name": "chat order",
        "startTimeUnixNano": "9000000",
        "attributes": [

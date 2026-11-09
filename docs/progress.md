@@ -506,3 +506,45 @@ P0 06 冻结可复现基线：把报告 / metrics.json / runs.jsonl / C 与 D �
 
 - kb 的 39 个候选仍是 `NEEDS_REVIEW`（guard 里基线成功的独立任务不足 3 个）。
 - 硬组若要真正验证「技能能不能救」，需要挑规则表**没有**对应策略的硬组故障类型。
+
+## 2026-11-09：标注集与准确率口径（补上最缺的一块）
+
+### 做了什么
+
+- 新增 `scripts/build_labeled_set.py`：用**执行时的注入状态**当 ground truth，生成 37 条标注轨迹
+  （`clean` 12 / `failed` 17 / `recovered` 8，backend=mock），导出成 OTLP，
+  检查器走的代码路径与检查别人时完全一样。
+- 新增 `ai-service/evoguard_inspect/labels.py` + `scripts/eval_labeled.py`：
+  **两档口径**统计（确诊 = error 级；提示 = warn 及以上），分母为 0 时给 `None` 不给 0，
+  `unjudgeable`（没有 error 级规则可跑）从分母剔除。
+- 新增 `docs/labeling-protocol.md`：标签定义、两档口径、不能怎么用、要变成真准确率还差什么。
+- 新增 `tests/test_labels.py` 15 项：指标算法、空壳答案归一、中文改写、恢复重放。
+
+### 顺带修掉三处真实误报（都由这个标注集暴露）
+
+1. **空壳答案**（`{"parsed": null, "text": ""}`）被当成真答案 → 32/32 条正常轨迹被判「没有答案」。
+   修法：`otel.unwrap_answer` 与 loader 侧同时归一，并且只认**真的存在** `parsed` 键的字典
+   （第一版把 `{"order_id": ..., "total": ...}` 也当成空壳丢了，反而更糟）。
+2. **中文改写**被判成参数编造：用户问「退货要几天内」，检索词「退货时限」→ `dependency_mismatch` 误报 10/20。
+   修法：含中文的值放宽到 2-gram 重叠；纯 ASCII 的 ID 仍按子串判。
+3. **恢复重放**被当成循环：`cycle_detected` 把 `kind=replay` 的步也算进 A→B→A→B，D 模式全被误报。
+   修法：重放步不参与循环检测。
+
+### 当前数字（37 条构造集，mock）
+
+| 口径 | 检出 | recall | 误报 | precision |
+|---|---|---|---|---|
+| 确诊（error 级） | 7/17 | 0.412 | 0/20 | 1.000 |
+| 提示（warn 及以上） | 7/17 | 0.412 | 2/20 | 0.778 |
+
+### recall 只有 41% 的原因（不是调参能解决的）
+
+漏掉的 10 条全是「内部自洽但结论错」：`silent_corruption`（A 模式）、`stale_data`、
+`incorrect_planning`。这些需要**外部真值**（政策库 / 版本元数据 / 流程定义）才判得出，
+轨迹内部一致性推不出来。这条写进了 `docs/labeling-protocol.md` 第四节。
+
+### 仍未完成
+
+- 37 条全部来自本仓库自己跑的数据，**没有外部真实业务轨迹**；样本量也低于计划的 30 条
+  （按「可判定条数」算是 37，但分布不真实）。
+- 标注者仍是规则作者本人 —— 换成外部标注者前，这些数字只能当回归护栏。

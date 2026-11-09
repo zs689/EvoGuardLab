@@ -18,8 +18,8 @@
      },
      "spans": [
       {
-       "traceId": "run_3747b436ded0",
-       "spanId": "b436ded0-01",
+       "traceId": "run_4fd8675e0da3",
+       "spanId": "675e0da3-01",
        "name": "rule-plan",
        "startTimeUnixNano": "1000000",
        "attributes": [
@@ -47,8 +47,8 @@
        }
       },
       {
-       "traceId": "run_3747b436ded0",
-       "spanId": "b436ded0-02",
+       "traceId": "run_4fd8675e0da3",
+       "spanId": "675e0da3-02",
        "name": "execute_tool order.get_order",
        "startTimeUnixNano": "2000000",
        "attributes": [
@@ -94,8 +94,8 @@
        }
       },
       {
-       "traceId": "run_3747b436ded0",
-       "spanId": "b436ded0-03",
+       "traceId": "run_4fd8675e0da3",
+       "spanId": "675e0da3-03",
        "name": "build_context",
        "startTimeUnixNano": "3000000",
        "attributes": [
@@ -123,8 +123,8 @@
        }
       },
       {
-       "traceId": "run_3747b436ded0",
-       "spanId": "b436ded0-04",
+       "traceId": "run_4fd8675e0da3",
+       "spanId": "675e0da3-04",
        "name": "execute_tool pricing.calc_total",
        "startTimeUnixNano": "4000000",
        "attributes": [
@@ -170,8 +170,8 @@
        }
       },
       {
-       "traceId": "run_3747b436ded0",
-       "spanId": "b436ded0-05",
+       "traceId": "run_4fd8675e0da3",
+       "spanId": "675e0da3-05",
        "name": "execute_tool order.settle",
        "startTimeUnixNano": "5000000",
        "attributes": [
@@ -217,8 +217,8 @@
        }
       },
       {
-       "traceId": "run_3747b436ded0",
-       "spanId": "b436ded0-06",
+       "traceId": "run_4fd8675e0da3",
+       "spanId": "675e0da3-06",
        "name": "rule-plan",
        "startTimeUnixNano": "6000000",
        "attributes": [
@@ -246,8 +246,8 @@
        }
       },
       {
-       "traceId": "run_3747b436ded0",
-       "spanId": "b436ded0-07",
+       "traceId": "run_4fd8675e0da3",
+       "spanId": "675e0da3-07",
        "name": "chat order",
        "startTimeUnixNano": "7000000",
        "attributes": [

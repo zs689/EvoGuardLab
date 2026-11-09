@@ -18,8 +18,8 @@
      },
      "spans": [
       {
-       "traceId": "run_38811a1eda2a",
-       "spanId": "1a1eda2a-01",
+       "traceId": "run_de0f1ef99275",
+       "spanId": "1ef99275-01",
        "name": "rule-plan",
        "startTimeUnixNano": "1000000",
        "attributes": [
@@ -47,8 +47,8 @@
        }
       },
       {
-       "traceId": "run_38811a1eda2a",
-       "spanId": "1a1eda2a-02",
+       "traceId": "run_de0f1ef99275",
+       "spanId": "1ef99275-02",
        "name": "execute_tool task.make_plan",
        "startTimeUnixNano": "2000000",
        "attributes": [
@@ -100,8 +100,8 @@
        }
       },
       {
-       "traceId": "run_38811a1eda2a",
-       "spanId": "1a1eda2a-03",
+       "traceId": "run_de0f1ef99275",
+       "spanId": "1ef99275-03",
        "name": "rule-plan",
        "startTimeUnixNano": "3000000",
        "attributes": [
@@ -129,8 +129,8 @@
        }
       },
       {
-       "traceId": "run_38811a1eda2a",
-       "spanId": "1a1eda2a-04",
+       "traceId": "run_de0f1ef99275",
+       "spanId": "1ef99275-04",
        "name": "execute_tool task.make_plan",
        "startTimeUnixNano": "4000000",
        "attributes": [
@@ -176,8 +176,8 @@
        }
       },
       {
-       "traceId": "run_38811a1eda2a",
-       "spanId": "1a1eda2a-05",
+       "traceId": "run_de0f1ef99275",
+       "spanId": "1ef99275-05",
        "name": "build_context",
        "startTimeUnixNano": "5000000",
        "attributes": [
@@ -205,8 +205,8 @@
        }
       },
       {
-       "traceId": "run_38811a1eda2a",
-       "spanId": "1a1eda2a-06",
+       "traceId": "run_de0f1ef99275",
+       "spanId": "1ef99275-06",
        "name": "rule-plan",
        "startTimeUnixNano": "6000000",
        "attributes": [
@@ -234,8 +234,8 @@
        }
       },
       {
-       "traceId": "run_38811a1eda2a",
-       "spanId": "1a1eda2a-07",
+       "traceId": "run_de0f1ef99275",
+       "spanId": "1ef99275-07",
        "name": "chat planner",
        "startTimeUnixNano": "7000000",
        "attributes": [

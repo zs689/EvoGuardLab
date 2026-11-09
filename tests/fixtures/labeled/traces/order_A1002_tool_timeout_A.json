@@ -18,8 +18,8 @@
      },
      "spans": [
       {
-       "traceId": "run_da8ef79d6c7b",
-       "spanId": "f79d6c7b-01",
+       "traceId": "run_bb4b8307d86b",
+       "spanId": "8307d86b-01",
        "name": "rule-plan",
        "startTimeUnixNano": "1000000",
        "attributes": [
@@ -47,8 +47,8 @@
        }
       },
       {
-       "traceId": "run_da8ef79d6c7b",
-       "spanId": "f79d6c7b-02",
+       "traceId": "run_bb4b8307d86b",
+       "spanId": "8307d86b-02",
        "name": "execute_tool order.get_order",
        "startTimeUnixNano": "2000000",
        "attributes": [

@@ -18,8 +18,8 @@
      },
      "spans": [
       {
-       "traceId": "run_def259516e7d",
-       "spanId": "59516e7d-01",
+       "traceId": "run_30aa0e404cec",
+       "spanId": "0e404cec-01",
        "name": "rule-plan",
        "startTimeUnixNano": "1000000",
        "attributes": [
@@ -47,8 +47,8 @@
        }
       },
       {
-       "traceId": "run_def259516e7d",
-       "spanId": "59516e7d-02",
+       "traceId": "run_30aa0e404cec",
+       "spanId": "0e404cec-02",
        "name": "execute_tool task.make_plan",
        "startTimeUnixNano": "2000000",
        "attributes": [

@@ -18,8 +18,8 @@
      },
      "spans": [
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-01",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-01",
        "name": "rule-plan",
        "startTimeUnixNano": "1000000",
        "attributes": [
@@ -47,8 +47,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-02",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-02",
        "name": "execute_tool order.get_order",
        "startTimeUnixNano": "2000000",
        "attributes": [
@@ -94,8 +94,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-03",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-03",
        "name": "build_context",
        "startTimeUnixNano": "3000000",
        "attributes": [
@@ -123,8 +123,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-04",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-04",
        "name": "execute_tool pricing.calc_total",
        "startTimeUnixNano": "4000000",
        "attributes": [
@@ -170,8 +170,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-05",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-05",
        "name": "execute_tool order.settle",
        "startTimeUnixNano": "5000000",
        "attributes": [
@@ -217,8 +217,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-06",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-06",
        "name": "rule-plan",
        "startTimeUnixNano": "6000000",
        "attributes": [
@@ -246,8 +246,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-07",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-07",
        "name": "chat order",
        "startTimeUnixNano": "7000000",
        "attributes": [
@@ -287,8 +287,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-08",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-08",
        "name": "rule-plan",
        "startTimeUnixNano": "8000000",
        "attributes": [
@@ -316,8 +316,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-09",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-09",
        "name": "execute_tool order.get_order",
        "startTimeUnixNano": "9000000",
        "attributes": [
@@ -363,8 +363,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-10",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-10",
        "name": "build_context",
        "startTimeUnixNano": "10000000",
        "attributes": [
@@ -392,8 +392,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-11",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-11",
        "name": "execute_tool pricing.calc_total",
        "startTimeUnixNano": "11000000",
        "attributes": [
@@ -439,8 +439,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-12",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-12",
        "name": "execute_tool order.settle",
        "startTimeUnixNano": "12000000",
        "attributes": [
@@ -486,8 +486,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-13",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-13",
        "name": "rule-plan",
        "startTimeUnixNano": "13000000",
        "attributes": [
@@ -515,8 +515,8 @@
        }
       },
       {
-       "traceId": "run_28fe3e8ef942",
-       "spanId": "3e8ef942-14",
+       "traceId": "run_38cabd1bd4a8",
+       "spanId": "bd1bd4a8-14",
        "name": "chat order",
        "startTimeUnixNano": "14000000",
        "attributes": [

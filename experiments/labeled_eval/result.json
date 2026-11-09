@@ -1,6 +1,6 @@
 {
-  "n_total": 49,
-  "n_judged": 49,
+  "n_total": 37,
+  "n_judged": 37,
   "n_unjudgeable": 0,
   "unjudgeable_keys": [],
   "by_label": {
@@ -10,7 +10,7 @@
       "recall": 0.412
     },
     "clean": {
-      "n": 24,
+      "n": 12,
       "flagged": 0,
       "false_alarm_rate": 0.0
     },
@@ -24,13 +24,13 @@
     "tp": 7,
     "fp": 0,
     "fn": 10,
-    "tn": 32
+    "tn": 20
   },
   "confusion_alert": {
     "tp": 7,
     "fp": 2,
     "fn": 10,
-    "tn": 30
+    "tn": 18
   },
   "recall_alert": 0.412,
   "precision_alert": 0.778,
@@ -183,28 +183,8 @@
       "applicable_error_rules": 13
     },
     {
-      "key": "order_A1001_none_A",
-      "label": "clean",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 13
-    },
-    {
       "key": "order_A1001_silent_corruption_A",
       "label": "failed",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 13
-    },
-    {
-      "key": "order_A1001_none_D",
-      "label": "clean",
       "flagged_error": false,
       "flagged_warn": false,
       "error_count": 0,
@@ -225,28 +205,8 @@
       "applicable_error_rules": 13
     },
     {
-      "key": "order_A1002_none_A",
-      "label": "clean",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 13
-    },
-    {
       "key": "order_A1002_silent_corruption_A",
       "label": "failed",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 13
-    },
-    {
-      "key": "order_A1002_none_D",
-      "label": "clean",
       "flagged_error": false,
       "flagged_warn": false,
       "error_count": 0,
@@ -351,28 +311,8 @@
       "applicable_error_rules": 12
     },
     {
-      "key": "kb_退货要几天内_none_A",
-      "label": "clean",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 12
-    },
-    {
       "key": "kb_退货要几天内_stale_data_A",
       "label": "failed",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 12
-    },
-    {
-      "key": "kb_退货要几天内_none_D",
-      "label": "clean",
       "flagged_error": false,
       "flagged_warn": false,
       "error_count": 0,
@@ -391,28 +331,8 @@
       "applicable_error_rules": 12
     },
     {
-      "key": "kb_退款多久到账_none_A",
-      "label": "clean",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 12
-    },
-    {
       "key": "kb_退款多久到账_stale_data_A",
       "label": "failed",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 12
-    },
-    {
-      "key": "kb_退款多久到账_none_D",
-      "label": "clean",
       "flagged_error": false,
       "flagged_warn": false,
       "error_count": 0,
@@ -515,28 +435,8 @@
       "applicable_error_rules": 12
     },
     {
-      "key": "planner_weekly_report_none_A",
-      "label": "clean",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 12
-    },
-    {
       "key": "planner_weekly_report_incorrect_planning_A",
       "label": "failed",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 12
-    },
-    {
-      "key": "planner_weekly_report_none_D",
-      "label": "clean",
       "flagged_error": false,
       "flagged_warn": false,
       "error_count": 0,
@@ -555,28 +455,8 @@
       "applicable_error_rules": 12
     },
     {
-      "key": "planner_onboarding_none_A",
-      "label": "clean",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 12
-    },
-    {
       "key": "planner_onboarding_incorrect_planning_A",
       "label": "failed",
-      "flagged_error": false,
-      "flagged_warn": false,
-      "error_count": 0,
-      "warn_count": 0,
-      "rules": [],
-      "applicable_error_rules": 12
-    },
-    {
-      "key": "planner_onboarding_none_D",
-      "label": "clean",
       "flagged_error": false,
       "flagged_warn": false,
       "error_count": 0,
