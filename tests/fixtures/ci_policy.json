@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "protocol": "ci-release-policy-v1",
+  "allow_verdicts": ["PASS"],
+  "allow_limited": false,
+  "allow_unknown": false,
+  "review_on_risk": true,
+  "block_on_input_load_failure": true,
+  "require_security_coverage": true,
+  "require_all_dimension_coverage": false,
+  "allow_missing_config": [],
+  "note": "默认发布策略（推进计划 §8）。工程经验值，需登记版本与适用场景；不在最终测试集上反复调阈值追求通过。报告判定与流水线是否阻断分开保存。"
+}

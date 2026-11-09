@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（309 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 14 四模式对照 + 15 审批与结算）
+# 2) 回归测试（330 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 14 四模式对照 + 15 审批与结算 + 21 评测质量与 CI）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -386,6 +386,32 @@ python scripts/eval_labeled.py --out /tmp/labeled # 显式隔离输出
 > 是冻结历史原件，保留不动；当前版本报告在 `experiments/labeled_eval_v2/` 与
 > `experiments/assurance_v2/`。
 
+### 评测质量与 CI 策略（Q01–Q05）
+
+| 任务 | 落地 | 关键结果 |
+|---|---|---|
+| Q01 三种真值 | `independent_labels.py` 分开存执行状态 / 可观察故障 / 业务结果 | 37 条全标 `pending_independent_review` |
+| Q02 独立授权策略 | `scripts/eval_permission.py` 只用冻结白名单，缺策略标不可评 | 冻结策略检出越权 **2**，反推白名单 **0**（反例成立） |
+| Q03 外部轨迹与独立标注 | 协议 + 待复核清单 + Cohen's kappa 函数 | 外部轨迹 0、独立人工标注 0、kappa `null` |
+| Q04 按维度覆盖 | `assurance.py` 每维各自算 `coverage_ok` | 安全缺白名单只压 security，不牵连可靠性 |
+| Q05 CI 发布策略 | `ci_policy.py` + CLI `--policy` | 报告判定与流水线阻断分文件保存 |
+
+```bash
+python scripts/eval_permission.py
+python scripts/build_external_label_registry.py
+cd ai-service && python -m evoguard_inspect.cli \
+  --trace ../tests/fixtures/trace_attack.json --assurance \
+  --policy ../tests/fixtures/ci_policy.json --out ../experiments/assurance_ci_v1
+```
+
+`ci_decision.json` 里 `report_verdict` 与 `ci_action` 分开：`review` 退出码 0
+但明确需要人工处置，**退出码 0 不等于全面安全**。协议见
+[docs/external-labeling-protocol.md](docs/external-labeling-protocol.md) 与
+[docs/ci-policy.md](docs/ci-policy.md)。
+
+**如实标注**：没有外部真实业务轨迹、没有独立标注者，这些数字仍不能叫准确率；
+CI 策略的阈值仍是工程经验值，尚未登记版本与开发集分布。
+
 ### 安全层：三层防护，默认只检测不改写
 
 攻击面有三条口子：**用户输入**、**工具返回的外部内容**、**Agent 吐给浏览器的输出**。
@@ -549,12 +575,17 @@ EvoGuardLab/
 │   ├── test_defense_demo_v2.py 12 个测试（按后果计量 / 不虚报外泄 / 正常对照 / 输出隔离）
 │   ├── test_docs_consistency.py 12 个测试（当前口径 / 冻结历史不被改写）
 │   ├── test_mode_compare.py 14 个测试（审批开关反例 / 配置指纹 / 分母与 N/A / 冻结历史）
-│   └── test_approval.py     15 个测试（5 个必须验收情形 / 统一门禁 / 进程重启 / 幂等）
+│   ├── test_approval.py     15 个测试（5 个必须验收情形 / 统一门禁 / 进程重启 / 幂等）
+│   └── test_permission_and_ci.py 21 个测试（Q01–Q05：权限反例 / kappa / 维度覆盖 / CI 策略）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── scripts/freeze_mode_compare.py  四模式配置冻结 + 逐 case 对照
 ├── scripts/real_settlement_demo.py 5 个审批与结算验收情形
+├── scripts/eval_permission.py        Q02 权限专项（冻结策略）
+├── scripts/build_external_label_registry.py  Q01/Q03 待复核清单
 ├── ai-service/evoguard/approval.py     可恢复审批状态机 + 幂等结算账本
-└── ai-service/evoguard/real_tasks.py   本地 HTTP 订单 + 沙箱规则 + 结算链
+├── ai-service/evoguard/real_tasks.py   本地 HTTP 订单 + 沙箱规则 + 结算链
+├── ai-service/evoguard_inspect/independent_labels.py  三种真值 + kappa 协议
+└── ai-service/evoguard_inspect/ci_policy.py           CI 发布策略
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
 │   └── taxonomy.md          15 类故障与 MAST/TRAIL 分类法映射

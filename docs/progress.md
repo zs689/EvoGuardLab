@@ -760,5 +760,73 @@ SQLite 幂等闭环。
 按规则 / 严重级别 / 入口 / 任务家族报 TP/FP/FN 与适用率，零分母继续 null。
 之后再进入条件技能实验（阶段 D）。
 
+---
+
+## 2026-11-09（第五阶段）：会话 7 + Q01–Q05（评测质量与 CI 策略）
+
+用户要求「一直搞，不用汇报」，本轮连续完成会话 7 与阶段 C 的五项质量任务。
+
+### 完成事项
+
+**Q02 独立授权策略**（`scripts/eval_permission.py`、`tests/fixtures/labeled/policies.json`）
+- 白名单只从事先冻结的手写策略取，与 `security.AGENT_TOOLS` 一致（测试断言）。
+- 没有独立策略的样本标 `unjudgeable_permission`，**不计入分母也不静默通过**。
+- 实测反例：`trace_attack.json` 执行了白名单外工具，反推白名单检出越权 **0**，
+  冻结策略检出 **2**，差异 2 条 —— 不分离口径越权永远测不出来。
+- 适用率 1.0（38/38 可评，含 1 条受控反例）。
+
+**Q01 三种真值 + Q03 独立标注协议**（`independent_labels.py`、
+`scripts/build_external_label_registry.py`、`docs/external-labeling-protocol.md`）
+- 分开存 `execution_state` / `observable_fault` / `business_outcome`。
+- 待复核清单：自生成 37、**外部可授权 0 / 独立人工标注 0 / kappa `null`**，
+  全部 `pending_independent_review`，不冒充人工标签。
+- 外部轨迹必须带 `source` + `authorization` 才计入；分歧标 `needs_discussion`，
+  先讨论再定不取多数；`cohen_kappa` 零分母给 `None`。
+
+**Q04 按维度覆盖**（`assurance.py`）
+- 不再拿整份规则的一个 `cov_ok` 压所有维度；reliability / security 各自算规则覆盖，
+  operability 按观测字段算，每维报适用/实检/跳过/原因/观测数。
+- 安全缺白名单只压 security，不牵连可靠性；补白名单只修好 security。
+- 原 `tests/test_assurance.py` 8 项保持全绿。
+
+**Q05 CI 发布策略**（`ci_policy.py`、`cli.py --policy`、
+`tests/fixtures/ci_policy.json`、`docs/ci-policy.md`）
+- `assurance.json` 存报告判定，`ci_decision.json` 存 `ci_action` /
+  `block_pipeline` / `exit_code` / `reasons` / 策略指纹，两者分开。
+- `review` 退出码 0 但明确需人工处置；`block` 退出码 3。
+- 补掉一个真实漏洞：`coverage_ok=False` 却列不出缺失项时，旧逻辑会因
+  「空列表全在允许清单」放行复核，现在必须阻断。
+
+### 证据与数字
+
+- 全量回归 **330 项全绿**（309 + 21 条 Q01–Q05 测试）。
+- Q05 CLI 演示：报告 `FAIL` → 流水线 `block` → 退出码 3；
+  理由含「报告判定不通过」与「关键安全规则不可评：配置未声明 allowed_tools」。
+- 标注回归护栏数字未变：error 级 7/17、误报 0/20；warn 级误报 2/20。
+- 冻结 manifest 复核仍是「产物差异 0 处」，代码漂移 3 文件。
+
+### 仍不成立的主张（不能说）
+
+- ❌ 37 条自生成样本是外部真实业务轨迹 / 人工标注 / 真实准确率。
+- ❌ 退出码 0 等于全面安全；`review` 等于通过。
+- ❌ 权限专项证明了「防住越权」：它只证明口径分离后越权**测得出**。
+- ❌ 阈值已校准：10% / 20% 仍是工程经验值，未登记版本与开发集分布。
+
+### 本轮没做（如实标注）
+
+- 外部轨迹 ≥30 条与独立标注者（Q03 的实质部分）**未到位**，只建了协议与清单。
+- CI 策略还没直接读 `security_effects` 的执行后果证据来阻断
+  「未授权执行 / 未批准写入」，只按报告判定与覆盖决策。
+- 按规则 / 严重级别 / 入口 / 任务家族的 TP/FP/FN 分报表未生成。
+- 阶段 D 条件技能实验（E01/E02/E03）、公平消融、1080 run 重跑、2×2 消融、
+  30+30 扩样都未开始。
+
+### 下一项验收
+
+阶段 D：一个声明式条件决策技能（适用条件 / 必需证据 / 允许工具 / 确定性参数 /
+停止条件 / 失败回退），在独立任务家族上做前后配对验证与公平消融；
+无稳定收益允许拒绝晋升并发布负结果。
+
+
 
 

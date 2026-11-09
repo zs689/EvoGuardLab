@@ -144,19 +144,82 @@ def _operability(hl):
     return verdict, reasons
 
 
+DIMENSION_GROUPS = {
+    "reliability": RELIABILITY_GROUPS,
+    "security": SECURITY_GROUPS,
+}
+
+# 每个维度各自必需的配置事实。安全缺白名单只压 security 维度，
+# 不牵连正常的可靠性判定 —— 这正是 Q04 要修的「一个 cov_ok 压所有维度」。
+DIMENSION_REQUIRED_CONFIG = {
+    "security": (cov.CFG_ALLOWED_TOOLS,),
+}
+
+
+def _rules_coverage(dim, coverage):
+    """Q04：按维度核对规则覆盖，不再拿整份规则的一个 cov_ok 压所有维度。
+
+    安全缺白名单只让 security 维度「覆盖有限」，不该把可靠性判定也一起弄丢解释。
+    """
+    groups = DIMENSION_GROUPS[dim]
+    rows = [r for r in (coverage or {}).get("rules", [])
+            if r.get("group") in groups]
+    if not rows:                       # 没传覆盖统计时保持旧行为，不无中生有
+        return {"applicable_rules": 0, "checked_rules": 0,
+                "skipped_rules": [], "skip_reasons": [], "observations": 0,
+                "coverage_ok": True,
+                "note": "未提供规则覆盖统计，沿用旧口径（不据此宣称覆盖完整）"}
+    checked = sum(1 for r in rows if r["runnable"])
+    skipped = [r["rule_id"] for r in rows if not r["runnable"]]
+    reasons = set(x for r in rows for x in r.get("skipped_because", []))
+    cfg_facts = (coverage or {}).get("config", {})
+    missing_cfg = [k for k in DIMENSION_REQUIRED_CONFIG.get(dim, ())
+                   if not cfg_facts.get(k, False)]
+    for k in missing_cfg:
+        reasons.add(cov.REASON.get(k, k))
+    return {
+        "applicable_rules": len(rows), "checked_rules": checked,
+        "skipped_rules": skipped, "skip_reasons": sorted(reasons),
+        "missing_config": missing_cfg,
+        "observations": sum(r.get("hits", 0) for r in rows),
+        "coverage_ok": (len(rows) > 0 and checked == len(rows)
+                        and not missing_cfg),
+    }
+
+
+def _operability_coverage(hl, coverage):
+    """可运行性没有专属规则组，按**观测字段**核对，并明确只是本批轨迹观测。"""
+    checks = {
+        "model_steps": hl["model_steps"] > 0,
+        "tool_steps": hl["tool_steps"] > 0,
+        "latency_observations": hl["tool_p95_ms"] is not None,
+        "error_rate_computable": hl["model_error_rate"] is not None
+                                 or hl["tool_error_rate"] is not None,
+    }
+    missing = [k for k, ok in checks.items() if not ok]
+    return {
+        "applicable_rules": len(checks), "checked_rules": len(checks) - len(missing),
+        "skipped_rules": missing,
+        "skip_reasons": ["本批轨迹没有提供 %s 观测" % k for k in missing],
+        "observations": hl["traces"],
+        "coverage_ok": not missing,
+        "note": "只是本批轨迹观测，不代表线上 SLA / 并发 / 限流",
+    }
+
+
 def build(traces, issues, cfg=None, coverage=None, static_defs=None,
           static_issues=None):
     """合成三维修正后的判定。issues 是轨迹规则的全部发现。"""
     rel = [i for i in issues if (i.get("group") or "") in RELIABILITY_GROUPS]
     sec = [i for i in issues if (i.get("group") or "") in SECURITY_GROUPS]
     hl = health(traces)
-    cov_ok = True
-    if coverage is not None:
-        cov_ok = coverage.get("runnable_rules", 0) == coverage.get("total_rules", 0)
+    rel_cov = _rules_coverage("reliability", coverage)
+    sec_cov = _rules_coverage("security", coverage)
+    op_cov = _operability_coverage(hl, coverage)
     empty = not traces
 
-    rel_v = _verdict(rel, cov_ok, empty)
-    sec_v = _verdict(sec, cov_ok, empty)
+    rel_v = _verdict(rel, rel_cov["coverage_ok"], empty)
+    sec_v = _verdict(sec, sec_cov["coverage_ok"], empty)
     op_v, op_reasons = _operability(hl)
 
     worst = [rel_v, sec_v, op_v]
@@ -181,6 +244,7 @@ def build(traces, issues, cfg=None, coverage=None, static_defs=None,
                 "measured": "结论正确性、工具使用、流程、资源、结构（31 条规则中的 25 条）",
                 "not_measured": "语义正确性（规则只看证据是否自洽，不判断业务上对不对）；"
                                 "提示词层面的约束（属于静态检查）",
+                "coverage": rel_cov,
             },
             "security": {
                 "verdict": sec_v, "findings": len(sec),
@@ -191,13 +255,17 @@ def build(traces, issues, cfg=None, coverage=None, static_defs=None,
                                 "工具白名单拒绝与恢复期写操作审批在 enforce 下真执行，"
                                 "但通用沙箱/网络隔离仍未实现；action 仅为检测建议，"
                                 "不等于拦截成功",
+                "coverage": sec_cov,
             },
             "operability": {
                 "verdict": op_v, "reasons": op_reasons, "metrics": hl,
                 "measured": "模型/工具报错率、预算触发、工具耗时 p95、报错后仍有答案的轨迹数",
                 "not_measured": "真实服务可用性（SLA）、并发与限流、成本曲线",
+                "coverage": op_cov,
             },
         },
+        "dimension_coverage": {"reliability": rel_cov, "security": sec_cov,
+                               "operability": op_cov},
         "coverage": coverage,
         "static": None if static_defs is None else {
             "defs": len(static_defs),
@@ -254,6 +322,14 @@ def render(data):
         L.append("- 判定：**%s**" % VERDICT_CN[d["verdict"]])
         L.append("- 测了什么：%s" % d["measured"])
         L.append("- **没测什么**：%s" % d["not_measured"])
+        c = d.get("coverage") or {}
+        L.append("- 覆盖：适用 %s 项 / 实检 %s 项 ｜ 跳过 %s ｜ 原因 %s%s"
+                 % (c.get("applicable_rules", "N/A"),
+                    c.get("checked_rules", "N/A"),
+                    "、".join(c.get("skipped_rules", [])) or "无",
+                    "、".join(c.get("skip_reasons", [])) or "无",
+                    "" if c.get("coverage_ok", True)
+                    else "（**覆盖不足，不能写无条件通过**）"))
         if key == "operability":
             m = d["metrics"]
             L.append("- 指标：模型步骤 %d（报错 %d，%s）｜工具步骤 %d（报错 %d，%s）"

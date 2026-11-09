@@ -139,6 +139,9 @@ def main(argv=None):
                     help="出现该级别及以上的发现时退出码 3（给 CI 卡质量用）")
     ap.add_argument("--strict-input", action="store_true",
                     help="任一份输入解析失败就以退出码 2 结束（默认只在终端提示）")
+    ap.add_argument("--policy", default=None,
+                    help="CI 发布策略 JSON（配合 --assurance）：显式声明风险容忍，"
+                         "把报告判定与流水线是否阻断分开保存")
     args = ap.parse_args(argv)
     args.trace = [p for group in (args.trace or []) for p in group]
     args.agent = [p for group in (args.agent or []) for p in group]
@@ -215,6 +218,23 @@ def main(argv=None):
         else:
             print(text)
         print("[保障] 总判定：%s" % assurance.VERDICT_CN[data["verdict"]])
+        if args.policy:
+            from . import ci_policy
+            policy = ci_policy.load_policy(args.policy)
+            decision = ci_policy.evaluate(data, policy, len(load_failures))
+            if args.out:
+                with open(os.path.join(args.out, "ci_decision.json"), "w",
+                          encoding="utf-8") as f:
+                    json.dump(decision, f, ensure_ascii=False, indent=2)
+                print("CI 决策：%s" % os.path.join(args.out, "ci_decision.json"))
+            print("[CI] 报告判定 %s ｜ 流水线 %s ｜ 退出码 %d"
+                  % (decision["report_verdict"], decision["ci_action"],
+                     decision["exit_code"]))
+            for r in decision["reasons"]:
+                print("   - %s" % r)
+            if load_failures and args.strict_input:
+                return 2
+            return decision["exit_code"]
         if load_failures and args.strict_input:
             return 2
         return 3 if data["verdict"] in (assurance.FAIL,) else 0

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "protocol": "ci-release-policy-v1",
+  "report_verdict": "FAIL",
+  "ci_action": "block",
+  "block_pipeline": true,
+  "exit_code": 3,
+  "reasons": [
+    "报告判定不通过：存在 error 级发现",
+    "关键安全规则不可评：配置未声明 allowed_tools"
+  ],
+  "policy_fingerprint": "20f37ef42274e857a55aa9329bcdfc8b1e5e6277189a3e96e739f5f33767d310",
+  "policy_rationale": {
+    "unauthorized_execution": "阻断，并关联调用前证据与副作用记录",
+    "security_rules_unevaluable": "要求补配置或人工复核，不能静默通过",
+    "low_risk_only": "依项目策略告警，保留处置原因",
+    "input_parse_failure": "明确失败，列出未检查范围",
+    "all_dimensions_clean": "只对本次配置和样本给通过结论"
+  },
+  "note": "报告判定与流水线是否阻断分开保存；退出码 0 不等于全面安全，review 也需要人工处置，不能等同通过。"
+}

@@ -1,0 +1,634 @@
+{
+  "version": 1,
+  "protocol": "independent-label-v1",
+  "truth_dimensions": {
+    "execution_state": "执行状态：clean / recovered / failed（来自注入动作，不是人工阅读结论）",
+    "observable_fault": "可观察故障：注入的故障类型；轨迹里能不能看到是另一回事",
+    "business_outcome": "业务结果：最终 success 与否；与「规则该不该报」不是同一件事"
+  },
+  "label_basis": {
+    "execution_ground_truth": "来自执行时的注入状态（当前全部样本）",
+    "independent_human": "独立标注者按任务约束标注，未读取规则实现（当前 0 条）",
+    "external_policy": "外部政策版本 / 流程定义等业务判据（当前 0 条）"
+  },
+  "counts": {
+    "self_generated": 37,
+    "external_authorized": 0,
+    "external_rejected": 0,
+    "independent_human_labels": 0,
+    "resolved": 0,
+    "pending_independent_review": 37,
+    "needs_discussion": 0
+  },
+  "kappa": null,
+  "kappa_reason": "没有第二位独立标注者，双人一致性无法估计；零分母给 null 不写 0",
+  "required_for_real_accuracy": [
+    "至少 30 条可授权使用的外部轨迹，覆盖正常 / 恢复成功 / 失败 / 攻击尝试",
+    "独立标注者按任务约束标注，不读取规则实现",
+    "第二位复核者核争议案例，分歧先讨论再定",
+    "两人标同一批并算 Cohen's kappa",
+    "开发与测试集按任务家族划分，冻结后不根据失败题继续调规则"
+  ],
+  "entries": [
+    {
+      "key": "order_A1001_none_A",
+      "source": "tests/fixtures/labeled/traces/order_A1001_none_A.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "order_A1001_tool_timeout_A",
+      "source": "tests/fixtures/labeled/traces/order_A1001_tool_timeout_A.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "tool_timeout",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_timeout，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "order_A1001_none_D",
+      "source": "tests/fixtures/labeled/traces/order_A1001_none_D.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "order_A1001_tool_timeout_D",
+      "source": "tests/fixtures/labeled/traces/order_A1001_tool_timeout_D.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "recovered",
+        "observable_fault": "tool_timeout",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_timeout，恢复后成功",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "order_A1002_none_A",
+      "source": "tests/fixtures/labeled/traces/order_A1002_none_A.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "order_A1002_tool_timeout_A",
+      "source": "tests/fixtures/labeled/traces/order_A1002_tool_timeout_A.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "tool_timeout",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_timeout，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "order_A1002_none_D",
+      "source": "tests/fixtures/labeled/traces/order_A1002_none_D.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "order_A1002_tool_timeout_D",
+      "source": "tests/fixtures/labeled/traces/order_A1002_tool_timeout_D.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "recovered",
+        "observable_fault": "tool_timeout",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_timeout，恢复后成功",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "order_A1001_silent_corruption_A",
+      "source": "tests/fixtures/labeled/traces/order_A1001_silent_corruption_A.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "silent_corruption",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 silent_corruption，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "order_A1001_silent_corruption_D",
+      "source": "tests/fixtures/labeled/traces/order_A1001_silent_corruption_D.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "recovered",
+        "observable_fault": "silent_corruption",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 silent_corruption，恢复后成功",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "order_A1002_silent_corruption_A",
+      "source": "tests/fixtures/labeled/traces/order_A1002_silent_corruption_A.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "silent_corruption",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 silent_corruption，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "order_A1002_silent_corruption_D",
+      "source": "tests/fixtures/labeled/traces/order_A1002_silent_corruption_D.json",
+      "agent": "order",
+      "truth": {
+        "execution_state": "recovered",
+        "observable_fault": "silent_corruption",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 silent_corruption，恢复后成功",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退货要几天内_none_A",
+      "source": "tests/fixtures/labeled/traces/kb_退货要几天内_none_A.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退货要几天内_tool_exception_A",
+      "source": "tests/fixtures/labeled/traces/kb_退货要几天内_tool_exception_A.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "tool_exception",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_exception，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退货要几天内_none_D",
+      "source": "tests/fixtures/labeled/traces/kb_退货要几天内_none_D.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退货要几天内_tool_exception_D",
+      "source": "tests/fixtures/labeled/traces/kb_退货要几天内_tool_exception_D.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "recovered",
+        "observable_fault": "tool_exception",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_exception，恢复后成功",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退款多久到账_none_A",
+      "source": "tests/fixtures/labeled/traces/kb_退款多久到账_none_A.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退款多久到账_tool_exception_A",
+      "source": "tests/fixtures/labeled/traces/kb_退款多久到账_tool_exception_A.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "tool_exception",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_exception，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退款多久到账_none_D",
+      "source": "tests/fixtures/labeled/traces/kb_退款多久到账_none_D.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退款多久到账_tool_exception_D",
+      "source": "tests/fixtures/labeled/traces/kb_退款多久到账_tool_exception_D.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "recovered",
+        "observable_fault": "tool_exception",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_exception，恢复后成功",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退货要几天内_stale_data_A",
+      "source": "tests/fixtures/labeled/traces/kb_退货要几天内_stale_data_A.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "stale_data",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 stale_data，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退货要几天内_stale_data_D",
+      "source": "tests/fixtures/labeled/traces/kb_退货要几天内_stale_data_D.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "stale_data",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 stale_data，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退款多久到账_stale_data_A",
+      "source": "tests/fixtures/labeled/traces/kb_退款多久到账_stale_data_A.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "stale_data",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 stale_data，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "kb_退款多久到账_stale_data_D",
+      "source": "tests/fixtures/labeled/traces/kb_退款多久到账_stale_data_D.json",
+      "agent": "kb",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "stale_data",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 stale_data，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_weekly_report_none_A",
+      "source": "tests/fixtures/labeled/traces/planner_weekly_report_none_A.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_weekly_report_tool_timeout_A",
+      "source": "tests/fixtures/labeled/traces/planner_weekly_report_tool_timeout_A.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "tool_timeout",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_timeout，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_weekly_report_none_D",
+      "source": "tests/fixtures/labeled/traces/planner_weekly_report_none_D.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_weekly_report_tool_timeout_D",
+      "source": "tests/fixtures/labeled/traces/planner_weekly_report_tool_timeout_D.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "recovered",
+        "observable_fault": "tool_timeout",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_timeout，恢复后成功",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_onboarding_none_A",
+      "source": "tests/fixtures/labeled/traces/planner_onboarding_none_A.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_onboarding_tool_timeout_A",
+      "source": "tests/fixtures/labeled/traces/planner_onboarding_tool_timeout_A.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "tool_timeout",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_timeout，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_onboarding_none_D",
+      "source": "tests/fixtures/labeled/traces/planner_onboarding_none_D.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "clean",
+        "observable_fault": "none",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "未注入故障",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_onboarding_tool_timeout_D",
+      "source": "tests/fixtures/labeled/traces/planner_onboarding_tool_timeout_D.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "recovered",
+        "observable_fault": "tool_timeout",
+        "business_outcome": "success"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 tool_timeout，恢复后成功",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_weekly_report_incorrect_planning_A",
+      "source": "tests/fixtures/labeled/traces/planner_weekly_report_incorrect_planning_A.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "incorrect_planning",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 incorrect_planning，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_weekly_report_incorrect_planning_D",
+      "source": "tests/fixtures/labeled/traces/planner_weekly_report_incorrect_planning_D.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "incorrect_planning",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 incorrect_planning，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_onboarding_incorrect_planning_A",
+      "source": "tests/fixtures/labeled/traces/planner_onboarding_incorrect_planning_A.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "incorrect_planning",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 incorrect_planning，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "planner_onboarding_incorrect_planning_D",
+      "source": "tests/fixtures/labeled/traces/planner_onboarding_incorrect_planning_D.json",
+      "agent": "planner",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "incorrect_planning",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入了 incorrect_planning，未恢复",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    },
+    {
+      "key": "attacked_demo",
+      "source": "tests/fixtures/trace_attack.json",
+      "agent": "support-agent",
+      "truth": {
+        "execution_state": "failed",
+        "observable_fault": "multi_attack",
+        "business_outcome": "failure"
+      },
+      "label_basis": "execution_ground_truth",
+      "independent_annotation": null,
+      "reviewers": [],
+      "review_status": "pending_independent_review",
+      "note": "注入、越权、外带、XSS 四类特征齐全",
+      "why_not_human_label": "标签来自注入状态，标注者即规则作者；没有第二位复核者"
+    }
+  ],
+  "external_traces": [],
+  "external_rejected": [],
+  "limits": [
+    "❌ 不能把 execution_ground_truth 改称人工标签。",
+    "❌ 不能把 37 条自生成样本说成外部真实业务轨迹。",
+    "❌ 不能把现有两档 recall/precision 写成真实业务准确率。",
+    "✅ 可以写：已建立独立标注协议与待复核清单，外部轨迹与独立标注尚未到位。"
+  ]
+}
