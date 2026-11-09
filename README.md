@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（229 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 30 安全层 + 8 保障视图）
+# 2) 回归测试（248 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 30 安全层 + 8 保障视图 + 15 标注集）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -359,6 +359,24 @@ python -m evoguard_inspect.cli --trace ../experiments/p0_09_20261109/audit_smoke
 
 **退出码**：0 通过/有风险，3 不通过，2 输入解析失败。
 
+### 标注集：目前只有「回归护栏」，没有准确率
+
+用**执行时的注入状态**当 ground truth，生成 37 条标注轨迹（clean 12 / failed 17 / recovered 8），
+导出成 OTLP 后走与检查别人完全相同的代码路径。
+
+| 口径 | 检出 | recall | 误报 | precision |
+|---|---|---|---|---|
+| 确诊（error 级） | 7/17 | 0.412 | 0/20 | 1.000 |
+| 提示（warn 及以上） | 7/17 | 0.412 | 2/20 | 0.778 |
+
+```bash
+python scripts/eval_labeled.py     # 改规则后重跑，看两组数有没有退化
+```
+
+**这不叫准确率**：样本是本仓库自己跑出来的、标签来自注入状态、标注者就是规则作者。
+漏掉的 10 条全是「内部自洽但结论错」（静默篡改 / 陈旧数据 / 计划顺序），
+需要外部真值才判得出。口径与边界写在 [docs/labeling-protocol.md](docs/labeling-protocol.md)。
+
 ### 安全层：三层防护，默认只检测不改写
 
 攻击面有三条口子：**用户输入**、**工具返回的外部内容**、**Agent 吐给浏览器的输出**。
@@ -437,7 +455,8 @@ EvoGuardLab/
 │   ├── test_static.py       27 个测试（静态规则 / 框架写法适配 / 低置信度噪音治理 / 覆盖率）
 │   ├── test_skill_validation.py 36 个测试（成对负迁移 / 样本充分性 / 晋升门禁 / 严格库链路）
 │   ├── test_security.py     30 个测试（注入/越权/外带/凭据/XSS、误报与延迟预算、audit vs enforce、审批真执行）
-│   └── test_assurance.py    8 个测试（三维判定 / 覆盖有限不算通过 / 报错后仍有答案 / 不给分数）
+│   ├── test_assurance.py    8 个测试（三维判定 / 覆盖有限不算通过 / 报错后仍有答案 / 不给分数）
+│   └── test_labels.py       15 个测试（指标算法 / 空壳答案 / 中文改写 / 重放循环 / 标注集完整性）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析
