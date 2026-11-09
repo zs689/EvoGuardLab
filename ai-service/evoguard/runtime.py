@@ -457,8 +457,8 @@ class Ctx:
         out_sec = security.guard_tool_output(tool, out)
         if out_sec["findings"]:
             security.record(self.store, self.run_id, "tool_output:%s" % tool, out_sec)
-        if security.enforcing() and any(f["severity"] == "error"
-                                        for f in out_sec["findings"]):
+        if security.enforcing() and security.wrapping() and any(
+                f["severity"] == "error" for f in out_sec["findings"]):
             out = security.mark_payload(out, source=tool)
 
         # 只有干净结果才进缓存 —— 污染值进缓存会让重放变成"再犯一次同样的错"

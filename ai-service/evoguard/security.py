@@ -201,6 +201,18 @@ def enforcing():
     return mode() == MODE_ENFORCE
 
 
+def wrapping():
+    """是否把可疑内容包成不可信数据（额外开关，默认关）。
+
+    为什么单列一个开关：包裹会改变下游能看到的文本。本仓库的 Agent 是规则式、
+    不读被包裹的字段，所以实测三模式（off / enforce / enforce+wrap）指标完全一致；
+    但真实模型读 prompt 时，包裹必然改变输入，代价要单独测。
+    不把「改内容」绑死在 enforce 上，是为了让调用方自己决定在哪一层做隔离。
+    """
+    return (os.environ.get("AGENTLAB_SECURITY_WRAP") or "").strip().lower() in (
+        "1", "true", "yes", "on")
+
+
 def _text(v):
     if v is None:
         return ""
@@ -378,7 +390,7 @@ def guard_tool_output(tool, output, where="tool_output"):
     findings = scan(output, where)
     action = _decide(findings)
     body = _text(output)
-    if enforcing():
+    if enforcing() and wrapping():
         body = wrap_untrusted(body, source=tool)
     return {"text": body, "findings": findings, "action": action}
 
@@ -404,7 +416,7 @@ def guard_peer_message(from_agent, text, allowed_peers=None):
     findings.extend(scan(text, "peer_message"))
     action = _decide(findings)
     body = _text(text)
-    if enforcing():
+    if enforcing() and wrapping():
         body = wrap_untrusted(body, source="agent:%s" % from_agent)
     return {"text": body, "findings": findings, "action": action}
 
