@@ -548,3 +548,93 @@ P0 06 冻结可复现基线：把报告 / metrics.json / runs.jsonl / C 与 D �
 - 37 条全部来自本仓库自己跑的数据，**没有外部真实业务轨迹**；样本量也低于计划的 30 条
   （按「可判定条数」算是 37，但分布不真实）。
 - 标注者仍是规则作者本人 —— 换成外部标注者前，这些数字只能当回归护栏。
+
+---
+
+## 2026-11-09（第二阶段）：阶段 A「防护证据可信」完成（S01 / S02 / S03）
+
+按 `EvoGuardLab_安全防护与下一阶段推进计划_2026-11-09.docx` 第 13 节推进：
+先做 S01、S02（会话 1、2），再做 S03 清理旧描述（会话 3）。
+起点已复核：HEAD `74d4312`、工作区干净、248 项测试全绿。
+
+### 完成事项
+
+**S01 让检测与执行结果分开记录**
+- 复现反例：`enforce` + 未设 `AGENTLAB_SECURITY_WRAP` 时，`guard_tool_output` 返回
+  `action="blocked"`、命中 `injection_override`，但 `text` 与输入逐字相同、
+  `Ctx.call` 也没停止调用 —— `blocked` 只是检测建议。
+- 四个 guard 统一返回六字段契约 `detected / decision / attempted / executed / effect / reason`；
+  `action` 保留仅作兼容，语义降级为检测建议。
+- 新增 `security_effects` 表 + `record_effect()` / `list_effects()`；`Ctx.call`、
+  `Ctx.answer`、`run_once`、审批点共 6 个真实执行点逐点落痕，可按 `run_id` 与
+  `security_events` 对上。未改正文、未停止调用时一律写 `executed=False / unchanged`。
+- 验收：反例测试在修复前 **2 failures + 6 errors**，修复后 8 项全绿。
+
+**S02 重做四类演示的判据**
+- `scripts/defense_demo.py` 重写为 v2：四档（off / audit / enforce / enforce+wrap）
+  × 四类攻击 + 各自的合法业务对照；只按真实后果计量（未授权调用是否执行、
+  `FakeSink` 实际命中、危险操作是否执行、输出是否仍可被当代码、任务是否完成）。
+- 修掉 v1 虚报：危险命令 / XSS 分支不再记 `leaked`；`dangerous_executed` 恒 False
+  并注明「演示本身拒绝执行命令」。`sink_hits` 必须回指真实放行的 `http.send`。
+- 间接注入加**后续动作链**：真的采用 guard 返回的 `text` 回灌给决策器，再尝试
+  `http.send`。默认决策器是确定性最坏情况观测器（**不是真实模型**），
+  报告把真实模型复核标 N/A；`--followup real` 可接本地模型，不可用时降级为 N/A。
+- 关键结论：`enforce`（未开 wrap）下间接注入正文**没变**，攻击没达成靠的是后续
+  `http.send` 被白名单拒，不是「认出了注入」；只有 `enforce+wrap` 才真的改了回灌文本。
+- 支持 `--out`，默认 `experiments/defense_demo_v2/`；v1 冻结原件不动。
+
+**S03 清理会改变理解的旧描述**
+- `security.py` 顶部 docstring、`docs/security.md`、`docs/assurance.md`、
+  `evoguard_inspect/assurance.py` 里「权限与审批只有声明 / 运行时不强制」
+  「人工标注集缺失」「前两项只是文档与规则」等旧描述全部按现状改写。
+- `scripts/eval_labeled.py`：去掉硬编码「49 条」，条数从 `n_total` 动态取；
+  支持 `--out`（默认 `experiments/labeled_eval_v2/`）；修章节编号；
+  补上 Q02 限制（白名单由轨迹反推，不能用来判越权）。
+- `ai-service/real_model_train.py`：docstring 与报告表格改成
+  `dev_train_tasks / dev_target_tasks / dev_guard_tasks` 三组 3/3/3；
+  顺带修掉「dev 每 agent 只有 2 个 task」这条更严重的旧描述。
+- 新增当前版本报告：`experiments/labeled_eval_v2/`、`experiments/assurance_v2/`；
+  冻结历史原件（`labeled_eval/`、`p0_09_20261109/assurance/`、各 `train_report.md`、
+  `defense_demo/`）**保留旧数字不改写**，并由 `tests/test_docs_consistency.py` 守住。
+
+### 证据与数字
+
+- 全量回归 **280 项全绿**（248 + 8 契约 + 12 演示 + 12 文档一致性）。
+- 演示四档（`experiments/defense_demo_v2/demo.json`）：
+
+| 模式 | 检测 | 控制动作真执行 | 接收方命中 | 攻击目标达成 | 正常误阻断 |
+|---|---|---|---|---|---|
+| off | 0/4 | 0 | 2 | 3 | 0.0 |
+| audit | 4/4 | 0 | 2 | 3 | 0.0 |
+| enforce | 4/4 | 4 | 0 | 0 | 0.0 |
+| enforce+wrap | 4/4 | 4 | 0 | 0 | 0.0 |
+
+- `baseline.py verify` 冻结 manifest：**产物差异 0 处**，代码漂移 3 个文件
+  （`runtime.py` / `sim.py` / `real_model_train.py`）。它证明历史证据未被改写，
+  **不证明当前代码重新产生相同结果**。
+- 标注集当前口径仍是 error 级 7/17、误报 0/20；warn 级误报 2/20，未变。
+
+### 仍不成立的主张（不能说）
+
+- ❌「防住提示注入 / 生产级 WAF」：检测是特征匹配，改写就能绕。
+- ❌「4/4 拦截」「leaked=3」：v1 的高估与虚报，已在 v2 更正。
+- ❌「准确率 41%」「误报率 0」：37 条构造集只是回归护栏。
+- ❌「所有收益来自验证门禁」：C/D 还差匹配、容量、状态过滤，未做公平消融。
+- ❌「多 Agent 已安全协作」「存在完整沙箱」「审批可暂停续跑」：都还没实现。
+
+### 本轮没做（如实标注）
+
+- 没重训模型、没重跑 1080 run 完整评测；本轮只改本地代码与文档。
+- 间接注入的**真实模型复核未执行**（默认观测器不是真实模型），该项标 N/A。
+- 阶段 B 的审批状态机、真实 HTTP/SQLite 副作用、独立授权策略与外部轨迹都没动。
+
+### 下一项验收（阶段 B，对应计划会话 4–6）
+
+1. 会话 4：冻结全部安全开关（mode / wrap / auto_approve / 工具契约 / 输出落点）
+   并比较四模式，产出逐 case 结果、分母与配置指纹；`--out` 隔离，不覆盖冻结证据。
+2. 会话 5：`approval_request` 状态 + 规范化参数摘要，覆盖批准 / 拒绝 / 过期 /
+   参数篡改 / 重复消费 / 进程重启恢复，首次写入与重放写入走同一个执行门禁。
+3. 会话 6：本地 HTTP 测试订单 + 沙箱规则文件 + 专用 SQLite 结算表，
+   验证「提交成功但响应丢失仍只写一次」；`sim` 保留作回归。
+4. 前置依赖：Q02 从事先冻结的策略取白名单、Q03 外部轨迹与独立标注。
+

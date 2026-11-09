@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（248 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 30 安全层 + 8 保障视图 + 15 标注集）
+# 2) 回归测试（280 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -370,12 +370,21 @@ python -m evoguard_inspect.cli --trace ../experiments/p0_09_20261109/audit_smoke
 | 提示（warn 及以上） | 7/17 | 0.412 | 2/20 | 0.778 |
 
 ```bash
-python scripts/eval_labeled.py     # 改规则后重跑，看两组数有没有退化
+python scripts/eval_labeled.py                    # 默认写 experiments/labeled_eval_v2，不覆盖冻结历史
+python scripts/eval_labeled.py --out /tmp/labeled # 显式隔离输出
 ```
 
 **这不叫准确率**：样本是本仓库自己跑出来的、标签来自注入状态、标注者就是规则作者。
 漏掉的 10 条全是「内部自洽但结论错」（静默篡改 / 陈旧数据 / 计划顺序），
 需要外部真值才判得出。口径与边界写在 [docs/labeling-protocol.md](docs/labeling-protocol.md)。
+
+另外 `eval_labeled.py` 把**轨迹实际用到的工具**填进 `allowed_tools`（只为消除结构评测的
+无配置噪声），所以它**不能用来判断越权**：未经授权但已执行的工具会被自动视为允许。
+权限专项必须从事先冻结的 Agent 策略取白名单。
+
+> `experiments/labeled_eval/`（末尾仍写 49 条）与 `experiments/p0_09_20261109/assurance/`
+> 是冻结历史原件，保留不动；当前版本报告在 `experiments/labeled_eval_v2/` 与
+> `experiments/assurance_v2/`。
 
 ### 安全层：三层防护，默认只检测不改写
 
@@ -384,7 +393,7 @@ python scripts/eval_labeled.py     # 改规则后重跑，看两组数有没有�
 | 层 | 位置 | 做什么 |
 |---|---|---|
 | 定义层 | 静态规则（20 条） | prompt 有没有拒答边界、有没有声明「工具结果是数据不是指令」、写操作有没有审批、有没有危险 shell |
-| 行为层 | 轨迹规则 security 组（6 条）+ 运行时 5 个钩子 | 注入指令、白名单外工具、外带、参数里的凭据、破坏性命令、答案里的 XSS；`enforce` 下在**执行前**拦参数与越权工具，写操作必须审批 |
+| 行为层 | 轨迹规则 security 组（6 条）+ 运行时 6 个执行点 | 注入指令、白名单外工具、外带、参数里的凭据、破坏性命令、答案里的 XSS；`enforce` 下在**执行前**拦参数与越权工具，写操作必须审批 |
 | 边界层 | `api/app.py` | `nosniff`、`X-Frame-Options: DENY`、CSP、按落点转义（`encode_for`） |
 
 ```bash
@@ -394,6 +403,28 @@ cd ai-service && python -m evoguard_inspect.cli --trace t.json --group security
 # 运行时拦截（默认 audit：只记账不改内容，保证历史实验可比）
 AGENTLAB_SECURITY_MODE=enforce python ai-service/api/app.py
 ```
+
+**检测建议 ≠ 拦截成功（S01 契约）**：`enforce` 且未开 `AGENTLAB_SECURITY_WRAP` 时，
+`guard_tool_output` 会返回 `action="blocked"`，但正文逐字未改、调用也没停 ——
+旧演示把它算成「4/4 拦截」。现在每个 guard 都返回
+`detected / decision / attempted / executed / effect / reason`，
+真实执行点另落 `security_effects` 表；只有 `executed=True` 且 `effect` 有实际后果
+才算「拦住了」，`action` 降级为检测建议。
+详见 [docs/security.md](docs/security.md)，反例回归见 `tests/test_security_contract.py`。
+
+**防御演示按真实后果计量**：四档（off / audit / enforce / enforce+wrap）×
+四类攻击 + 各自的合法业务对照，分别统计未授权调用是否执行、模拟接收方是否命中、
+危险操作是否执行、输出是否仍可被当代码、任务是否完成。`FakeSink` 只计数不联网，
+`dangerous_executed` 恒为 False（演示本身拒绝执行任何命令）。
+
+```bash
+python scripts/defense_demo.py                     # 默认写 experiments/defense_demo_v2
+python scripts/defense_demo.py --followup real     # 可选：本地真实模型驱动后续动作
+```
+
+默认后续动作是**确定性最坏情况观测器，不是真实模型**；攻击目标达成率只在该受控
+执行模型下成立，报告把真实模型复核标为 N/A。旧 v1 的 `enforced=4 / leaked=3`
+是已知高估与虚报，冻结原件留在 `experiments/defense_demo/`，不再引用。
 
 **延迟**：1 KB 0.044 ms / 10 KB 0.31 ms / 50 KB 1.84 ms；真实运行每次约 **51 µs**，
 相对真实模型的 627 ms 是 **0.008%**（`experiments/p0_09_20261109/security_bench.json`）。
@@ -451,12 +482,15 @@ EvoGuardLab/
 │   ├── test_core.py         56 个测试（对抗性投毒 / 策略链 / 完整回滚 / 经验溯源 / 基线冻结）
 │   ├── test_judgeability.py 9 个测试（可评口径：业务失败 vs 服务抖动）
 │   ├── test_hard_tasks.py   19 个测试（真值可独立算 / 判定不误杀 / 训练集与评测集不相交）
-│   ├── test_inspect.py      42 个测试（规则全命中 / 零误报 / 配置适配 / 事故模式 / 覆盖率与退出码）
+│   ├── test_inspect.py      44 个测试（规则全命中 / 零误报 / 配置适配 / 事故模式 / 覆盖率与退出码）
 │   ├── test_static.py       27 个测试（静态规则 / 框架写法适配 / 低置信度噪音治理 / 覆盖率）
 │   ├── test_skill_validation.py 36 个测试（成对负迁移 / 样本充分性 / 晋升门禁 / 严格库链路）
-│   ├── test_security.py     30 个测试（注入/越权/外带/凭据/XSS、误报与延迟预算、audit vs enforce、审批真执行）
+│   ├── test_security.py     34 个测试（注入/越权/外带/凭据/XSS、误报与延迟预算、audit vs enforce、审批真执行）
 │   ├── test_assurance.py    8 个测试（三维判定 / 覆盖有限不算通过 / 报错后仍有答案 / 不给分数）
-│   └── test_labels.py       15 个测试（指标算法 / 空壳答案 / 中文改写 / 重放循环 / 标注集完整性）
+│   ├── test_labels.py       15 个测试（指标算法 / 空壳答案 / 中文改写 / 重放循环 / 标注集完整性）
+│   ├── test_security_contract.py 8 个测试（S01 反例 / 六字段契约 / 真实执行点留痕）
+│   ├── test_defense_demo_v2.py 12 个测试（按后果计量 / 不虚报外泄 / 正常对照 / 输出隔离）
+│   └── test_docs_consistency.py 12 个测试（当前口径 / 冻结历史不被改写）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/
 │   ├── stage0-research.md   10 个参考仓库的技术分析

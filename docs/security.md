@@ -11,18 +11,23 @@
 | 层 | 位置 | 做什么 | 默认状态 |
 |---|---|---|---|
 | 定义层 | 检查器静态规则（20 条） | 看 prompt/工具/配置有没有基本防线：拒答边界、工具结果是数据不是指令、写操作审批、危险 shell、幂等键、预算 | 只读检查 |
-| 行为层 | 检查器轨迹规则（security 组 6 条）+ 运行时钩子 | 看**已经发生的执行**里有没有注入、越权、外带、凭据、危险命令、XSS；运行时在 4 个点做扫描与拦截 | 检测开、改写关（`audit`） |
+| 行为层 | 检查器轨迹规则（security 组 6 条）+ 运行时钩子 | 看**已经发生的执行**里有没有注入、越权、外带、凭据、危险命令、XSS；运行时在 6 个点做扫描与执行控制 | 检测开、改写关（`audit`） |
 | 边界层 | `api/app.py` | 输出侧安全头（`nosniff` / `X-Frame-Options: DENY` / CSP）、`Content-Type` 固定、`encode_for()` 按落点转义 | 常开 |
 
 ## 运行时钩子（`ai-service/evoguard/runtime.py`）
 
 1. `run_once`：任务输入进 Agent 前扫描；`enforce` 下高危直接判该次运行被拦（`security_blocked:user_input`）。
 2. `Ctx.call` 入口：最小权限校验，工具不在该 Agent 白名单内则拒绝（`tool_not_allowed`）。
-3. `Ctx.call` 出口：工具返回扫描；`enforce` 下把命中高危的字符串包成不可信数据（**不改结构**，只包裹值 + 加 `__untrusted__`）。
+3. `Ctx.call` 出口：工具返回扫描；**只有** `enforce` + `AGENTLAB_SECURITY_WRAP=1`
+   且命中 error 级时，才用 `mark_payload()` 把可疑值包成不可信数据（不改结构）。
+   默认只记账 —— `action="blocked"` 在这里**不阻止**结果进入 Agent（见下方 S01 契约）。
 4. `Ctx.answer`：模型输出扫描，只记账不改文本 —— 答案还要被解析成 JSON 参与判定，改写会让评测结论失真。
+5. `run_once` 入口 / 审批点：高危输入终止运行、恢复期写操作要求审批，两处都是真实执行点。
+6. 上述每个执行点都落一条 `security_effects` 记录，与检测日志按 `run_id` 关联。
 
-轨迹里始终保存**原始**工具输出，检测结果单独落 `security_events` 表；
-这样「评测看真值」和「安全看原始内容」两件事互不污染。
+轨迹里始终保存**原始**工具输出；检测结果落 `security_events` 表，
+**真实执行后果**落 `security_effects` 表。这样「评测看真值」「安全看原始内容」
+「报告看拦没拦住」三件事互不污染。
 
 ## 三种模式
 
@@ -35,6 +40,37 @@
 
 为什么默认 audit：这个项目的核心资产是可复现的对照实验。默认改写会让
 「模型能力」和「安全层行为」混成一个数字，之前的 1080 run 也就失去可比性。
+
+配置必须记全：除了 `AGENTLAB_SECURITY_MODE`，还有 `AGENTLAB_SECURITY_WRAP`、
+`AUTO_APPROVE`、`AGENTLAB_ALLOW_AUTO_APPROVE`、工具契约与输出编码落点。
+只记录一个 `mode` 字段就宣称「配置完整」是不成立的。
+
+## 检测建议 ≠ 拦截成功（S01 契约）
+
+**复现过的反例**：`enforce` 且未设 `AGENTLAB_SECURITY_WRAP` 时，
+`guard_tool_output("kb.search", 含注入的文档)` 返回 `action="blocked"`、
+命中 `injection_override`，但 `text` 与输入**逐字相同**，`Ctx.call` 也没停止调用。
+旧版 `defense_demo.py` 把这个 `action` 算成「拦截成功」，属于高估。
+
+现在每个 guard 都返回六字段契约：
+
+| 字段 | 含义 |
+|---|---|
+| `detected` | 有没有命中特征 |
+| `decision` | 这一层决定做什么：`deny / allow / encode / wrap / report / none` |
+| `attempted` | 有没有尝试执行控制动作 |
+| `executed` | 控制动作是否真的执行了 |
+| `effect` | 真实后果：`call_stopped / body_wrapped / body_encoded / body_marked / unchanged / reported_only / none` |
+| `reason` | 为什么是这个后果，尤其要写清「为什么没生效」 |
+
+`action` 保留仅为兼容旧调用方，**语义降级为检测建议**。
+只有真实执行点（`Ctx.call` / `run_once` / 演示的执行点）写下的
+`security_effects.effect` 才能作为「拦住了」的判据。
+**未改正文、未停止调用时，报告不得统计为拦截成功。**
+
+```bash
+python -m unittest tests.test_security_contract -q   # 8 项：反例 + 六字段 + 执行点留痕
+```
 
 ## 多 Agent 协作
 
@@ -82,4 +118,11 @@
 6. **多 Agent 只到库级**，见上。
 
 真要提升强度，优先级是：工具权限最小化 → 写操作审批与沙箱 → 输出编码与 CSP → 最后才是特征检测。
-本模块做的是第 4 项，而前两项在本仓库里仍然只是文档与规则。
+前两项里，**工具白名单拒绝**与**恢复期写操作审批**已经在 `enforce` 下真执行（见上第 4 条）；
+**通用沙箱 / 网络隔离**和**可暂停续跑的审批工作流**仍未实现（推进计划 S04）。
+输出编码与特征检测已具备，但编码是否在真实落点生效要逐点核验，
+不能只看 `guard_model_output` 的返回值 —— 运行库内部刻意不改写答案。
+
+旧版防御演示 v1 的 `enforced=4` / `leaked=3` 是已知高估与虚报，冻结原件保留在
+`experiments/defense_demo/`；当前报告在 `experiments/defense_demo_v2/`，
+按真实执行后果计量（`sink_hits` / `call_blocked` / `body_changed` / `dangerous_executed`）。

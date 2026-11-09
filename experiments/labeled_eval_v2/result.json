@@ -1,0 +1,495 @@
+{
+  "n_total": 37,
+  "n_judged": 37,
+  "n_unjudgeable": 0,
+  "unjudgeable_keys": [],
+  "by_label": {
+    "failed": {
+      "n": 17,
+      "flagged": 7,
+      "recall": 0.412
+    },
+    "clean": {
+      "n": 12,
+      "flagged": 0,
+      "false_alarm_rate": 0.0
+    },
+    "recovered": {
+      "n": 8,
+      "flagged": 0,
+      "false_alarm_rate": 0.0
+    }
+  },
+  "confusion": {
+    "tp": 7,
+    "fp": 0,
+    "fn": 10,
+    "tn": 20
+  },
+  "confusion_alert": {
+    "tp": 7,
+    "fp": 2,
+    "fn": 10,
+    "tn": 18
+  },
+  "recall_alert": 0.412,
+  "precision_alert": 0.778,
+  "missed_error": [
+    {
+      "key": "order_A1001_silent_corruption_A",
+      "rules": []
+    },
+    {
+      "key": "order_A1002_silent_corruption_A",
+      "rules": []
+    },
+    {
+      "key": "kb_退货要几天内_stale_data_A",
+      "rules": []
+    },
+    {
+      "key": "kb_退货要几天内_stale_data_D",
+      "rules": []
+    },
+    {
+      "key": "kb_退款多久到账_stale_data_A",
+      "rules": []
+    },
+    {
+      "key": "kb_退款多久到账_stale_data_D",
+      "rules": []
+    },
+    {
+      "key": "planner_weekly_report_incorrect_planning_A",
+      "rules": []
+    },
+    {
+      "key": "planner_weekly_report_incorrect_planning_D",
+      "rules": []
+    },
+    {
+      "key": "planner_onboarding_incorrect_planning_A",
+      "rules": []
+    },
+    {
+      "key": "planner_onboarding_incorrect_planning_D",
+      "rules": []
+    }
+  ],
+  "precision": 1.0,
+  "recall": 0.412,
+  "f1": 0.584,
+  "warn_only_on_good": 2,
+  "rules_hit_on_failed": {
+    "empty_answer": 6,
+    "dangerous_shell_command": 1,
+    "data_exfiltration": 1,
+    "dependency_mismatch": 1,
+    "injection_in_tool_output": 1,
+    "secret_in_tool_args": 1,
+    "xss_in_answer": 1
+  },
+  "protocol": "trace-label-v2",
+  "backend": "mock",
+  "skipped": [],
+  "limits": [
+    "标签来自执行时的注入状态，可复现，但只覆盖已知故障类型",
+    "backend=mock：测的是规则集在确定性环境下的行为，不是模型能力",
+    "覆盖不到「规则设计之外」的问题，因此不能当真实分布的准确率对外引用"
+  ],
+  "records": [
+    {
+      "key": "order_A1001_none_A",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 13
+    },
+    {
+      "key": "order_A1001_tool_timeout_A",
+      "label": "failed",
+      "flagged_error": true,
+      "flagged_warn": true,
+      "error_count": 1,
+      "warn_count": 0,
+      "rules": [
+        "empty_answer"
+      ],
+      "applicable_error_rules": 7
+    },
+    {
+      "key": "order_A1001_none_D",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 13
+    },
+    {
+      "key": "order_A1001_tool_timeout_D",
+      "label": "recovered",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 13
+    },
+    {
+      "key": "order_A1002_none_A",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 13
+    },
+    {
+      "key": "order_A1002_tool_timeout_A",
+      "label": "failed",
+      "flagged_error": true,
+      "flagged_warn": true,
+      "error_count": 1,
+      "warn_count": 0,
+      "rules": [
+        "empty_answer"
+      ],
+      "applicable_error_rules": 7
+    },
+    {
+      "key": "order_A1002_none_D",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 13
+    },
+    {
+      "key": "order_A1002_tool_timeout_D",
+      "label": "recovered",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 13
+    },
+    {
+      "key": "order_A1001_silent_corruption_A",
+      "label": "failed",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 13
+    },
+    {
+      "key": "order_A1001_silent_corruption_D",
+      "label": "recovered",
+      "flagged_error": false,
+      "flagged_warn": true,
+      "error_count": 0,
+      "warn_count": 1,
+      "rules": [
+        "cycle_detected"
+      ],
+      "applicable_error_rules": 13
+    },
+    {
+      "key": "order_A1002_silent_corruption_A",
+      "label": "failed",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 13
+    },
+    {
+      "key": "order_A1002_silent_corruption_D",
+      "label": "recovered",
+      "flagged_error": false,
+      "flagged_warn": true,
+      "error_count": 0,
+      "warn_count": 1,
+      "rules": [
+        "cycle_detected"
+      ],
+      "applicable_error_rules": 13
+    },
+    {
+      "key": "kb_退货要几天内_none_A",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "kb_退货要几天内_tool_exception_A",
+      "label": "failed",
+      "flagged_error": true,
+      "flagged_warn": true,
+      "error_count": 1,
+      "warn_count": 0,
+      "rules": [
+        "empty_answer"
+      ],
+      "applicable_error_rules": 7
+    },
+    {
+      "key": "kb_退货要几天内_none_D",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "kb_退货要几天内_tool_exception_D",
+      "label": "recovered",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "kb_退款多久到账_none_A",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "kb_退款多久到账_tool_exception_A",
+      "label": "failed",
+      "flagged_error": true,
+      "flagged_warn": true,
+      "error_count": 1,
+      "warn_count": 0,
+      "rules": [
+        "empty_answer"
+      ],
+      "applicable_error_rules": 7
+    },
+    {
+      "key": "kb_退款多久到账_none_D",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "kb_退款多久到账_tool_exception_D",
+      "label": "recovered",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "kb_退货要几天内_stale_data_A",
+      "label": "failed",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "kb_退货要几天内_stale_data_D",
+      "label": "failed",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "kb_退款多久到账_stale_data_A",
+      "label": "failed",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "kb_退款多久到账_stale_data_D",
+      "label": "failed",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "planner_weekly_report_none_A",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "planner_weekly_report_tool_timeout_A",
+      "label": "failed",
+      "flagged_error": true,
+      "flagged_warn": true,
+      "error_count": 1,
+      "warn_count": 0,
+      "rules": [
+        "empty_answer"
+      ],
+      "applicable_error_rules": 7
+    },
+    {
+      "key": "planner_weekly_report_none_D",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "planner_weekly_report_tool_timeout_D",
+      "label": "recovered",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "planner_onboarding_none_A",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "planner_onboarding_tool_timeout_A",
+      "label": "failed",
+      "flagged_error": true,
+      "flagged_warn": true,
+      "error_count": 1,
+      "warn_count": 0,
+      "rules": [
+        "empty_answer"
+      ],
+      "applicable_error_rules": 7
+    },
+    {
+      "key": "planner_onboarding_none_D",
+      "label": "clean",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "planner_onboarding_tool_timeout_D",
+      "label": "recovered",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "planner_weekly_report_incorrect_planning_A",
+      "label": "failed",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "planner_weekly_report_incorrect_planning_D",
+      "label": "failed",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "planner_onboarding_incorrect_planning_A",
+      "label": "failed",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "planner_onboarding_incorrect_planning_D",
+      "label": "failed",
+      "flagged_error": false,
+      "flagged_warn": false,
+      "error_count": 0,
+      "warn_count": 0,
+      "rules": [],
+      "applicable_error_rules": 12
+    },
+    {
+      "key": "attacked_demo",
+      "label": "failed",
+      "flagged_error": true,
+      "flagged_warn": true,
+      "error_count": 5,
+      "warn_count": 2,
+      "rules": [
+        "dangerous_shell_command",
+        "data_exfiltration",
+        "dependency_mismatch",
+        "injection_in_tool_output",
+        "secret_in_tool_args",
+        "xss_in_answer"
+      ],
+      "applicable_error_rules": 13
+    }
+  ]
+}

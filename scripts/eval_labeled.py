@@ -2,13 +2,18 @@
 """在标注集上跑规则，算检出率/误报率/不可判定。
 
 跑法：
-    python scripts/eval_labeled.py
+    python scripts/eval_labeled.py                        # 默认写新目录，不覆盖冻结历史
+    python scripts/eval_labeled.py --out /tmp/labeled     # 显式隔离输出
 产物：
-    experiments/labeled_eval/{report.md,result.json}
+    {--out}/{report.md,result.json}
 
 这一步的用途是**回归护栏**：改规则后跑一遍，看误伤有没有变多、漏报有没有变多。
 它不是「准确率证明」—— 标签来自注入状态，只覆盖已知故障。
+
+旧版 `experiments/labeled_eval/` 是冻结历史原件（末尾仍写 49 条），保留不动：
+当时样本量改过，报告里的硬编码没跟着改。现在条数一律从数据动态取。
 """
+import argparse
 import json
 import os
 import sys
@@ -21,10 +26,19 @@ from evoguard_inspect import config, coverage, labels, loaders  # noqa: E402
 from evoguard_inspect.rules import registry, trace_rules           # noqa: E402
 
 LABELS = os.path.join(ROOT, "tests", "fixtures", "labeled", "labels.json")
-OUT = os.path.join(ROOT, "experiments", "labeled_eval")
+DEFAULT_OUT = os.path.join(ROOT, "experiments", "labeled_eval_v2")
+FROZEN_OUT = os.path.join(ROOT, "experiments", "labeled_eval")
 
 
-def main():
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="标注集回归护栏评测")
+    ap.add_argument("--out", default=DEFAULT_OUT,
+                    help="输出目录；默认与 v1 冻结报告隔离")
+    args = ap.parse_args(argv)
+    out = args.out
+    if os.path.abspath(out) == os.path.abspath(FROZEN_OUT):
+        raise SystemExit("拒绝写入 v1 冻结报告目录；请用 --out 指定新目录")
+
     doc = json.load(open(LABELS, encoding="utf-8"))
     records = []
     skipped = []
@@ -54,10 +68,10 @@ def main():
     result["limits"] = doc.get("limits", [])
     result["records"] = records
 
-    os.makedirs(OUT, exist_ok=True)
-    json.dump(result, open(os.path.join(OUT, "result.json"), "w", encoding="utf-8"),
+    os.makedirs(out, exist_ok=True)
+    json.dump(result, open(os.path.join(out, "result.json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=2)
-    open(os.path.join(OUT, "report.md"), "w", encoding="utf-8").write(render(result))
+    open(os.path.join(out, "report.md"), "w", encoding="utf-8").write(render(result))
 
     c = result["confusion"]
     print("轨迹 %d 条（可判定 %d，不可判定 %d）"
@@ -68,7 +82,7 @@ def main():
              ca["tp"], ca["tp"] + ca["fn"], result["recall_alert"]))
     print("  误报：error 级 %d / warn+ 级 %d（good 共 %d 条）"
           % (c["fp"], ca["fp"], c["tn"] + c["fp"]))
-    print("  产物：%s" % os.path.join(OUT, "report.md"))
+    print("  产物：%s" % os.path.join(out, "report.md"))
 
 
 def render(r):
@@ -114,9 +128,17 @@ def render(r):
     if r["skipped"]:
         L += ["", "解析失败的条目："] + ["- `%s`：%s" % (s["key"], s["error"])
                                      for s in r["skipped"]]
-    L += ["", "## 六、这份评测的边界", ""]
+    L += ["", "## 五、这份评测的边界", ""]
     L += ["- %s" % x for x in r["limits"]]
-    L += ["", "因此引用时要写「在 49 条构造集上 recall=… 」，不能写「准确率 …」。", ""]
+    L += [
+        "- 本评测把**轨迹实际用到的工具**填入 `allowed_tools`，只为消除结构评测的"
+        "无配置噪声；因此**不能**用它判断越权 —— 未经授权但已执行的工具会被"
+        "自动视为允许。权限专项必须从事先冻结的 Agent 策略取白名单（推进计划 §7 Q02）。",
+        "",
+        "因此引用时要写「在 %d 条构造集上 recall=… 」，不能写「准确率 …」。"
+        % r["n_total"],
+        "",
+    ]
     return "\n".join(L)
 
 

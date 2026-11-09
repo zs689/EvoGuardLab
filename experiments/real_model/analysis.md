@@ -31,7 +31,7 @@ run2 的问题不是 bug 而是设计：C 和 D 共用一套严格验证出来�
 |---|---|
 | 模型 | qwen3:4b（Ollama 原生 `/api/chat`，`think:false` + `format=json`） |
 | 训练 | 39 例探索 → 38 条经验 → 38 个候选 → **严格晋升 6 / 放宽入库 38** |
-| 数据划分 | dev task #1 训练，dev task #2 验证，**test 全程不参与** |
+| 数据划分 | dev task #1 训练，dev task #2 验证，**test 全程不参与**（本文件是 11-08 历史分析，此处为旧两组写法；当前为 `dev_train_tasks` / `dev_target_tasks` / `dev_guard_tasks` 三组 3/3/3，见 `ai-service/evoguard/sim.py`） |
 | 评测 | 234 用例 × 4 模式 = 936 run，654.6s，936 次模型调用 |
 | 可评率 | **100%**（450 条失败里没有一条是框架异常） |
 | 模型答错 | **0 次**（`bad_model_output = 0`） |

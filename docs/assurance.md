@@ -13,7 +13,7 @@
 | 维度 | 回答什么问题 | 用什么测 | 现在能测到什么程度 |
 |---|---|---|---|
 | **可靠** reliability | 结论对不对、流程有没有乱、资源有没有失控 | 轨迹规则 25 条（answer/tool/flow/resource/structure） | 能测「结论有没有证据支撑」；**测不了业务上该不该这么做** |
-| **防护** security | 有没有被注入、越权、外带、泄凭据、执行危险命令、输出 XSS | `security` 组 6 条规则 + 运行时 4 个钩子 | 特征匹配，可被改写绕过；审批/沙箱仍只是声明 |
+| **防护** security | 有没有被注入、越权、外带、泄凭据、执行危险命令、输出 XSS | `security` 组 6 条规则 + 运行时 6 个执行点 | 特征匹配可绕过；白名单拒绝与写操作审批在 `enforce` 下真执行；沙箱仍没有 |
 | **可运行** operability | 模型/工具健康吗、有没有预算超限、报错后还在出答案吗 | 轨迹里的步骤状态、耗时、token、错误类型 | 只看轨迹；**不是线上 SLA、不含并发与限流** |
 
 判定取值：`通过 / 有风险 / 不通过 / 覆盖有限 / 无法判定`。
@@ -42,7 +42,8 @@ python -m evoguard_inspect.cli --trace t.json --config inspect.json --assurance
 
 ## 报告长什么样
 
-`experiments/p0_09_20261109/assurance/assurance.md` 是真实产物，3205 条轨迹：
+`experiments/p0_09_20261109/assurance/assurance.md` 是 3205 条轨迹的历史产物（冻结原件，
+其中「审批与沙箱只有声明」是旧描述）；当前版本报告在 `experiments/assurance_v2/`：
 
 - 总判定 + 三维判定表（每行带一句依据，不是只有分数）
 - 每维固定写两行：**测了什么** / **没测什么**
@@ -68,7 +69,12 @@ python -m evoguard_inspect.cli --trace t.json --config inspect.json --assurance
 
 ## 已知缺口（按重要性）
 
-1. **人工标注集缺失**：只有覆盖率，没有准确率/误报率/漏报率。没有标签就没有质量数字。
+1. **标注集只是回归护栏，不是真实准确率**：现有 37 条构造集（`trace-label-v2`，
+   标签来自执行时的注入状态），两档口径 error 级 recall 0.412 / precision 1.000、
+   warn 级误报 2/20。样本全部来自本仓库、标注者即规则作者，没有外部真实轨迹与
+   独立标注；不能写成「准确率 41%」或「误报率 0」。详见 `docs/labeling-protocol.md`。
+   另外 `eval_labeled.py` 把轨迹实际用到的工具填入 `allowed_tools`，所以它**不能**
+   用来判断越权（权限专项需从事先冻结的策略取白名单，见推进计划 §7 Q02）。
 2. **防护是特征匹配**：可绕过。最小权限与写操作审批已经能在 `enforce` 下真执行
    （代价实测：单故障 D -26.5pp、复合链 -40pp，见 `mode_compare.json`）；
    **沙箱仍然没有**，真要跑 shell 工具时没有隔离层。

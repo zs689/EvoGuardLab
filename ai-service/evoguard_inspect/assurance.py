@@ -188,7 +188,9 @@ def build(traces, issues, cfg=None, coverage=None, static_defs=None,
                 "by_rule": _by_rule(sec),
                 "measured": "间接注入、越权工具、数据外带、凭据出现在参数、危险命令、输出侧 XSS",
                 "not_measured": "检测基于特征，改写/编码/多语言混写可绕过；"
-                                "审批与沙箱只有声明，运行时不强制",
+                                "工具白名单拒绝与恢复期写操作审批在 enforce 下真执行，"
+                                "但通用沙箱/网络隔离仍未实现；action 仅为检测建议，"
+                                "不等于拦截成功",
             },
             "operability": {
                 "verdict": op_v, "reasons": op_reasons, "metrics": hl,
@@ -292,7 +294,9 @@ def render(data):
     L += ["## 七、这份报告的边界", "",
           "1. %s" % data["note"],
           "2. 可靠 ≠ 业务正确：规则只判断「结论有没有证据支撑」，不判断业务上该不该这么做。",
-          "3. 防护 ≠ 安全：特征检测可被绕过，审批/沙箱/隔离才是兜底，而那三项本仓库只有声明。",
+          "3. 防护 ≠ 安全：特征检测可被绕过；最小权限拒绝与写操作审批在 enforce 下"
+          "真执行，通用沙箱/网络隔离仍未实现；且检测建议（action）不等于拦截成功，"
+          "要看真实执行点的 effect。",
           "4. 可运行 ≠ 高可用：这里看的是轨迹里的报错与降级，不是线上 SLA。",
           ""]
     return "\n".join(L)

@@ -9,9 +9,12 @@
   - 严格库（给 D）：只有在独立验证集上 gain >= 门槛、且负迁移不超标才晋升
   - 放宽库（给 C）：只要这次恢复救回来了就入库，不测目标集、不测负迁移
 
-数据划分（test 一律不碰，评估才用它）：
-  dev task #1  → 探索（train）
-  dev task #2  → 验证 target / guard（val）
+数据划分（test 一律不碰，评估才用它）—— 当前是**三组**，不是旧的两组编号：
+  dev_train_tasks  [0:3]  → 探索（train）
+  dev_target_tasks [3:6]  → 目标集验证（target），与探索不重叠
+  dev_guard_tasks  [6:9]  → 守护集验证（guard），与前两组都不重叠
+  target + guard 合起来是报告里的 val。三组都来自 sim.py 的固定切片，
+  难度组同样按 3/3/3 切，见 build_splits()。
 
 跑法（在 EvoGuardLab 目录下，先起 Ollama）：
     python ai-service/real_model_train.py                # 全量
@@ -397,9 +400,13 @@ def write_report(stats, proposed, verdicts, n_d, n_c, elapsed, provider):
          % (os.environ.get("AGENTLAB_LLM_MODEL", "?"), provider.name, elapsed, stats["ran"]), ""]
     L += ["## 一、划分（test 一律不参与）", "",
           "| 用途 | 来源 | 用例数 |", "|---|---|---|",
-          "| 探索（train） | dev task #1（每 agent）／复合 dev 每个模式各 1 条 | %d |" % stats["train"],
-          "| 验证（val） | dev task #2（每 agent）／复合 dev 每个模式另 1 条 | %d |" % stats["val"],
-          "| 评测 | test（6 task/agent + 30 复合） | 234 |", ""]
+          "| 探索（train） | `dev_train_tasks`（每 agent 3 条）／复合 dev 按任务角色分 | %d |" % stats["train"],
+          "| 验证（val = target + guard） | `dev_target_tasks` + `dev_guard_tasks`"
+          "（每 agent 各 3 条，两组与探索互不重叠）／复合 dev 按任务角色分 | %d |" % stats["val"],
+          "| 评测 | test（6 task/agent + 30 复合），**全程不参与训练与验证** | 234 |",
+          "",
+          "> 划分是 train / target / guard 三组（每 agent 3/3/3）；旧报告里的"
+          "「dev task 编号」是两组时期的历史写法，冻结历史原件不改写。", ""]
     L += ["## 二、探索", "",
           "| 项 | 值 |", "|---|---|",
           "| 规则表直接救回（不需要新策略） | %d |" % stats["rule_ok"],
@@ -429,7 +436,8 @@ def write_report(stats, proposed, verdicts, n_d, n_c, elapsed, provider):
           "1. 本轮后端为 `%s`；mock 是机制冒烟，不能作为真实模型结论。" % provider.name,
           "2. 但任务本身简单：模型在答案步几乎不犯错，所以探索失败基本都来自故障机制，",
           "   不是模型推理错。技能学到的是「遇到这类故障该走哪几步」。",
-          "3. dev 每 agent 只有 2 个 task，train/val 各 1 个，样本极小，不能当统计结论。",
+          "3. dev 每 agent 9 个 task，按 3 探索 / 3 target / 3 guard 切分；"
+          "target 与 guard 任务互不重叠，但样本仍小，不能当统计结论。",
           "4. 放宽库不验证就入库 —— 这是**故意**的，用来量出「不验证」的代价。", ""]
     with open(REPORT, "w", encoding="utf-8") as f:
         f.write("\n".join(L))

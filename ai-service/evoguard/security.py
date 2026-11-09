@@ -4,13 +4,25 @@
 先说清楚它是什么、不是什么 —— 这段比代码重要：
   **它是「检测 + 降风险」，不是「保证不被攻破」。**
   检测靠确定性特征，改个说法就能绕过。真正兜底的是权限最小化、写操作审批、
-  沙箱执行；这些在本项目里目前只有**声明**，运行时并不强制执行。
-  任何报告里都不许把本模块写成「已防住注入」。
+  执行隔离；本项目里**运行时确实强制执行**的有：工具白名单拒绝（enforce）、
+  调用前参数拦截、恢复期写操作审批阻断。尚未实现的是通用沙箱 / 网络隔离，
+  以及可暂停续跑的审批工作流（见推进计划 S04）。
+  任何报告里都不许把本模块写成「已防住注入」或「生产级 WAF」。
+
+  **返回契约（S01）**：每个 guard 都返回 detected / decision / attempted /
+  executed / effect / reason 六个字段。`action` 只表示**检测建议**，不等于
+  拦截成功 —— 实测 enforce 且未开 WRAP 时工具输出报 blocked，正文却逐字未改、
+  调用也没停。只有真实执行点（Ctx.call / run_once）落下的 effect 才能作为
+  「拦住了」的判据；未改正文、未停止调用时，报告不得统计为拦截成功。
 
 三种模式（AGENTLAB_SECURITY_MODE）：
   off     —— 完全关闭，用于对照实验
   audit   —— **默认**：只检测、只记账，不改任何内容（现有实验行为不变）
-  enforce —— 检测 + 改写：工具结果包裹隔离、密钥脱敏、越权工具直接拒绝
+  enforce —— 检测 + 执行控制：越权工具与高危参数在调用前拒绝、输出按落点编码、
+             恢复期写操作要求审批。工具结果包裹由 AGENTLAB_SECURITY_WRAP
+             单独控制（默认关），不会随 enforce 自动开启。
+             审批还受 AUTO_APPROVE / AGENTLAB_ALLOW_AUTO_APPROVE 影响，
+             配置必须完整记录，不能只记一个 mode 字段。
 
 为什么默认 audit：这个项目的核心资产是「可复现的对照实验」。
 默认开启改写会让历史数字全部失去可比性，也会把「模型能力」和「安全层行为」
@@ -54,6 +66,16 @@ CREATE TABLE IF NOT EXISTS security_events(
   severity TEXT, action TEXT, match TEXT, detail TEXT);
 CREATE INDEX IF NOT EXISTS idx_sec_run ON security_events(run_id);
 CREATE INDEX IF NOT EXISTS idx_sec_code ON security_events(code);
+"""
+
+# 执行后果单独一张表：security_events 记「发现了什么」，这里记「真的做了什么」。
+# 两者靠 run_id + where 关联，避免把检测建议混进拦截统计。
+EFFECT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS security_effects(
+  id TEXT PRIMARY KEY, ts REAL, run_id TEXT, where_ TEXT, tool TEXT,
+  detected INTEGER, decision TEXT, action TEXT,
+  attempted INTEGER, executed INTEGER, effect TEXT, reason TEXT);
+CREATE INDEX IF NOT EXISTS idx_seff_run ON security_effects(run_id);
 """
 
 # ---------------- 特征表 ----------------
@@ -368,6 +390,46 @@ def _decide(findings):
     return "blocked" if worst == "error" else "redacted"
 
 
+# ---------------- 执行契约（S01） ----------------
+# `action` 历史上被同时用在两种场合：真的拒绝调用、以及「建议别采信这段文本」。
+# 后者并不改变任何东西，却被 defense_demo 当成拦截成功统计 —— 属于高估。
+# 现在把「检测 → 决策 → 尝试 → 执行 → 后果 → 原因」六件事分开写清楚。
+DECISION_DENY, DECISION_ALLOW = "deny", "allow"
+DECISION_ENCODE, DECISION_WRAP = "encode", "wrap"
+DECISION_REPORT, DECISION_NONE = "report", "none"
+
+EFFECT_CALL_STOPPED = "call_stopped"
+EFFECT_BODY_WRAPPED = "body_wrapped"
+EFFECT_BODY_ENCODED = "body_encoded"
+EFFECT_BODY_MARKED = "body_marked"
+EFFECT_UNCHANGED = "unchanged"
+EFFECT_REPORTED_ONLY = "reported_only"
+EFFECT_NONE = "none"
+
+CONTRACT_FIELDS = ("detected", "decision", "attempted", "executed", "effect", "reason")
+
+
+def contract(result, decision, attempted=False, executed=False,
+             effect=EFFECT_NONE, reason=""):
+    """给 guard 返回值附加执行契约（就地改，返回同一个 dict）。
+
+    detected 由 findings 自动给出；其余字段由调用方**如实**填写。
+    铁律：没改正文、没停止调用，就不许写 executed=True 或声称拦截成功。
+    guard 层是纯检测/建议，除 encode / wrap 真的改了自己返回的 text 之外，
+    一律 attempted=False、executed=False、effect=unchanged；
+    真实执行点在 runtime 里用 record_effect 的 override 覆盖这里的值。
+    """
+    result.update({
+        "detected": bool(result.get("findings")),
+        "decision": decision,
+        "attempted": bool(attempted),
+        "executed": bool(executed),
+        "effect": effect,
+        "reason": reason,
+    })
+    return result
+
+
 def _mark(payload, source):
     """递归包裹，返回 (新值, 是否改过)。
 
@@ -409,36 +471,98 @@ def mark_payload(payload, source="tool"):
 
 
 def guard_input(text, where="user_input"):
-    """用户输入：先扫描；enforce 下命中高危直接拒绝。"""
+    """用户输入：先扫描；命中高危给 deny 建议，是否终止运行由 run_once 决定。"""
+    body = _text(text)
     if not enabled():
-        return {"text": _text(text), "findings": [], "action": "none"}
+        return contract({"text": body, "findings": [], "action": "none"},
+                        decision=DECISION_NONE, effect=EFFECT_NONE,
+                        reason="mode=off：未扫描、未拦截")
     findings = scan(text, where)
     action = _decide(findings)
-    return {"text": _text(text), "findings": findings, "action": action}
+    if action == "blocked":
+        decision, effect = DECISION_DENY, EFFECT_UNCHANGED
+        reason = ("命中高危特征。本层只给检测建议；是否终止运行由 run_once "
+                  "在真实执行点决定，此处未改正文、未停止调用")
+    elif findings:
+        decision, effect = DECISION_REPORT, EFFECT_REPORTED_ONLY
+        reason = "audit 模式或未到 error 级：只记账，不改内容、不拦调用"
+    else:
+        decision, effect = DECISION_ALLOW, EFFECT_NONE
+        reason = "未命中特征"
+    return contract({"text": body, "findings": findings, "action": action},
+                    decision=decision, attempted=False, executed=False,
+                    effect=effect, reason=reason)
 
 
 def guard_tool_output(tool, output, where="tool_output"):
-    """工具返回：扫描 + enforce 下包裹成不可信数据。"""
+    """工具返回：扫描；只有真的改了返回的 text 才算内容隔离生效。
+
+    历史坑（S01 反例）：enforce 且 AGENTLAB_SECURITY_WRAP 未开时，这里返回
+    action="blocked" 但 text 逐字未改、调用也没停。blocked 现在只是检测建议，
+    绝不能当拦截成功统计。
+    """
+    original = _text(output)
     if not enabled():
-        return {"text": _text(output), "findings": [], "action": "none"}
+        return contract({"text": original, "findings": [], "action": "none"},
+                        decision=DECISION_NONE, effect=EFFECT_NONE,
+                        reason="mode=off：未扫描、未拦截")
     findings = scan(output, where)
     action = _decide(findings)
-    body = _text(output)
     if enforcing() and wrapping():
-        body = wrap_untrusted(body, source=tool)
-    return {"text": body, "findings": findings, "action": action}
+        body = wrap_untrusted(original, source=tool)
+        changed = body != original
+        return contract({"text": body, "findings": findings, "action": action},
+                        decision=DECISION_WRAP, attempted=True, executed=changed,
+                        effect=EFFECT_BODY_WRAPPED if changed else EFFECT_UNCHANGED,
+                        reason=("enforce + AGENTLAB_SECURITY_WRAP=1：返回值 text "
+                                "已包裹为不可信数据；调用方必须真的采用这个 text "
+                                "才算隔离生效" if changed else "包裹后文本未改变"))
+    if not findings:
+        return contract({"text": original, "findings": [], "action": "none"},
+                        decision=DECISION_ALLOW, effect=EFFECT_NONE,
+                        reason="未命中特征")
+    if not enforcing():
+        return contract({"text": original, "findings": findings, "action": action},
+                        decision=DECISION_REPORT, effect=EFFECT_REPORTED_ONLY,
+                        reason="audit 模式只记账：未改正文、未停止调用")
+    # enforce 但没开 WRAP —— 就是被复现的那个反例
+    decision = DECISION_DENY if action == "blocked" else DECISION_REPORT
+    return contract({"text": original, "findings": findings, "action": action},
+                    decision=decision, attempted=False, executed=False,
+                    effect=EFFECT_UNCHANGED,
+                    reason=("命中高危特征，但 AGENTLAB_SECURITY_WRAP 未开启："
+                            "正文逐字返回、调用未停止；blocked 仅为检测建议，"
+                            "不得统计为拦截成功"))
 
 
 def guard_model_output(text, context="html", where="model_output"):
-    """给出到用户/浏览器之前：扫描 + enforce 下按落点编码。"""
+    """给出到用户/浏览器之前：扫描 + enforce 下按落点编码。
+
+    executed 只在编码**真的改变**了文本时为 True；context=text 时通常不变，
+    那就如实写 unchanged，不许统计成「输出已处理」。
+    """
+    original = _text(text)
     if not enabled():
-        return {"text": _text(text), "findings": [], "action": "none"}
+        return contract({"text": original, "findings": [], "action": "none"},
+                        decision=DECISION_NONE, effect=EFFECT_NONE,
+                        reason="mode=off：未扫描、未编码")
     findings = scan(text, where)
     action = _decide(findings)
-    body = _text(text)
     if enforcing():
-        body = encode_for(body, context)
-    return {"text": body, "findings": findings, "action": action}
+        body = encode_for(original, context)
+        changed = body != original
+        return contract({"text": body, "findings": findings, "action": action},
+                        decision=DECISION_ENCODE, attempted=True, executed=changed,
+                        effect=EFFECT_BODY_ENCODED if changed else EFFECT_UNCHANGED,
+                        reason=("enforce：按落点 %s 编码，返回值 text 已改变；"
+                                "调用方必须真的采用这个 text 才算生效" % context
+                                if changed else
+                                "enforce：按落点 %s 编码，文本未改变，"
+                                "不构成可统计的拦截" % context))
+    return contract({"text": original, "findings": findings, "action": action},
+                    decision=DECISION_REPORT if findings else DECISION_ALLOW,
+                    effect=EFFECT_REPORTED_ONLY if findings else EFFECT_NONE,
+                    reason="audit 模式只记账：未编码、未改正文")
 
 
 def guard_tool_args(agent_type, tool, args, where="tool_call"):
@@ -446,9 +570,12 @@ def guard_tool_args(agent_type, tool, args, where="tool_call"):
 
     为什么必须在调用前拦：危险命令和外带一旦执行，事后检测只能看到结果，
     数据已经出门了。检测「发生过的攻击」和「阻止攻击」是两件事，这里做后者。
+    但本层仍只给建议，真正在 Ctx.call 里 raise 才算「拦住了」。
     """
     if not enabled():
-        return {"text": _text(args), "findings": [], "action": "none"}
+        return contract({"text": _text(args), "findings": [], "action": "none"},
+                        decision=DECISION_NONE, effect=EFFECT_NONE,
+                        reason="mode=off：未扫描、未拦截")
     findings = []
     deny = check_tool(agent_type, tool)
     if deny and deny["code"] == "tool_policy_missing" and enforcing():
@@ -462,7 +589,20 @@ def guard_tool_args(agent_type, tool, args, where="tool_call"):
     body = _text(args)
     if body:
         findings.extend(scan(body, where, only=SECRETS + SHELL + EXFIL))
-    return {"text": body, "findings": findings, "action": _decide(findings)}
+    action = _decide(findings)
+    if action == "blocked":
+        decision, effect = DECISION_DENY, EFFECT_UNCHANGED
+        reason = ("命中高危特征。本层只给检测建议；是否拒绝调用由 Ctx.call "
+                  "在真实执行点决定，此处未执行工具")
+    elif findings:
+        decision, effect = DECISION_REPORT, EFFECT_REPORTED_ONLY
+        reason = "audit 模式或未到 error 级：只记账，不拦调用"
+    else:
+        decision, effect = DECISION_ALLOW, EFFECT_NONE
+        reason = "未命中特征且工具在白名单内"
+    return contract({"text": body, "findings": findings, "action": action},
+                    decision=decision, attempted=False, executed=False,
+                    effect=effect, reason=reason)
 
 
 def guard_peer_message(from_agent, text, allowed_peers=None):
@@ -475,16 +615,28 @@ def guard_peer_message(from_agent, text, allowed_peers=None):
                              false_positive="协作拓扑配置漏写会误判为非法对端"))
     findings.extend(scan(text, "peer_message"))
     action = _decide(findings)
-    body = _text(text)
-    if enforcing() and wrapping():
+    original = _text(text)
+    body = original
+    wrapped = enforcing() and wrapping()
+    if wrapped:
         body = wrap_untrusted(body, source="agent:%s" % from_agent)
-    return {"text": body, "findings": findings, "action": action}
+    decision = (DECISION_WRAP if wrapped else
+                DECISION_DENY if action == "blocked" else
+                DECISION_REPORT if findings else DECISION_ALLOW)
+    return contract({"text": body, "findings": findings, "action": action},
+                    decision=decision, attempted=wrapped,
+                    executed=wrapped and body != original,
+                    effect=(EFFECT_BODY_WRAPPED if wrapped and body != original
+                            else EFFECT_REPORTED_ONLY if findings else EFFECT_NONE),
+                    reason=("enforce + WRAP：返回值 text 已包裹为不可信数据"
+                            if wrapped else "只记账/只建议，未改变对端消息"))
 
 
 # ---------------- 记账 ----------------
 def ensure_schema(store):
     with store.conn() as c:
         c.executescript(SCHEMA)
+        c.executescript(EFFECT_SCHEMA)
 
 
 def record(store, run_id, where, result):
@@ -503,6 +655,50 @@ def record(store, run_id, where, result):
                        f.get("match"), f.get("detail")))
             n += 1
     return n
+
+
+def record_effect(store, run_id, where, result, tool=None, override=None):
+    """在**真实执行点**落一条后果记录，返回写入条数。
+
+    guard 层给的是「建议层面」的契约；调用方必须用 override 改成实际发生了
+    什么（例如把 executed=False 改成 True、effect 改成 call_stopped）。
+    缺字段时按「没执行、没效果」兜底，绝不默认成拦截成功。
+    """
+    c = dict(result)
+    c.update(override or {})
+    defaults = {"detected": False, "decision": DECISION_NONE, "action": "none",
+                "attempted": False, "executed": False,
+                "effect": EFFECT_UNCHANGED, "reason": "调用方未说明后果"}
+    for k, v in defaults.items():
+        c.setdefault(k, v)
+    ensure_schema(store)
+    with store.conn() as conn:
+        conn.execute(
+            "INSERT INTO security_effects(id,ts,run_id,where_,tool,detected,"
+            "decision,action,attempted,executed,effect,reason) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("eff_" + uuid.uuid4().hex[:10], core.now(), run_id, where, tool,
+             1 if c["detected"] else 0, c["decision"], c["action"],
+             1 if c["attempted"] else 0, 1 if c["executed"] else 0,
+             c["effect"], c["reason"]))
+    return 1
+
+
+def list_effects(store, run_id=None, limit=200):
+    """按时间倒序列出执行后果；供报告把检测日志与真实后果逐条对上。"""
+    ensure_schema(store)
+    sql = "SELECT * FROM security_effects"
+    args = ()
+    if run_id:
+        sql += " WHERE run_id=?"
+        args = (run_id,)
+    sql += " ORDER BY ts DESC, rowid DESC LIMIT %d" % int(limit)
+    with store.conn() as c:
+        rows = [dict(r) for r in c.execute(sql, args)]
+    # 列名 where_ 是 SQL 保留字避让；对外统一暴露 where，和 events 口径一致。
+    for r in rows:
+        r["where"] = r["where_"]
+    return rows
 
 
 def list_events(store, run_id=None, limit=200):

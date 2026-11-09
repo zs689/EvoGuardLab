@@ -274,6 +274,17 @@ class Ctx:
             out_sec = security.guard_model_output(text, "text", "model_output")
             if out_sec["findings"]:
                 security.record(self.store, self.run_id, "model_output", out_sec)
+            # guard 返回的编码文本在本链路**没有被采用**（答案要参与 JSON 判定），
+            # 所以后果如实记为未执行；面向页面的编码在 API 边界另做。
+            security.record_effect(
+                self.store, self.run_id, "model_output", out_sec,
+                override={"decision": security.DECISION_REPORT,
+                          "attempted": False, "executed": False,
+                          "effect": (security.EFFECT_UNCHANGED
+                                     if out_sec["detected"] else security.EFFECT_NONE),
+                          "reason": ("运行库内部不改写答案：guard 的编码结果未采用；"
+                                     "面向页面的编码在 API 边界做，本链路未执行"
+                                     if out_sec["detected"] else "未命中特征")})
 
         fault = self._fault_at(self.logical)
 
@@ -366,15 +377,32 @@ class Ctx:
         # 否则新增一个 Agent 忘了登记就被全线挡住 —— 那会变成可用性问题。
         deny = security.check_tool(self.exp.get("agent_type"), tool)
         if deny:
-            sec = {"findings": [dict(deny, where="tool_call", match=str(tool))],
-                   "action": "blocked" if (security.enforcing()
-                                           and deny["severity"] == "error") else "reported"}
+            blocked = security.enforcing() and deny["severity"] == "error"
+            sec = security.contract(
+                {"text": str(tool),
+                 "findings": [dict(deny, where="tool_call", match=str(tool))],
+                 "action": "blocked" if blocked else "reported"},
+                decision=security.DECISION_DENY if blocked else security.DECISION_REPORT,
+                attempted=False, executed=False, effect=security.EFFECT_UNCHANGED,
+                reason="检测到越权工具；是否拒绝由下方真实执行点决定")
             security.record(self.store, self.run_id, "tool_call", sec)
-            if sec["action"] == "blocked":
+            if blocked:
                 self.store.add_step(self.run_id, seq, "security", tool, args,
                                     {"error": deny["code"]}, status="error",
                                     error_type=deny["code"], logical=logical)
+                security.record_effect(
+                    self.store, self.run_id, "tool_call", sec, tool=tool,
+                    override={"decision": security.DECISION_DENY,
+                              "attempted": True, "executed": True,
+                              "effect": security.EFFECT_CALL_STOPPED,
+                              "reason": "enforce：越权工具在调用前被拒绝，"
+                                        "未执行 sim.call_tool"})
                 raise ToolError(deny["code"], deny["detail"])
+            security.record_effect(
+                self.store, self.run_id, "tool_call", sec, tool=tool,
+                override={"attempted": False, "executed": False,
+                          "effect": security.EFFECT_REPORTED_ONLY,
+                          "reason": "audit 模式只记账：工具照常执行，未拦截"})
 
         # ---- 安全层：参数级拦截（执行前）----
         # 危险命令与外带一旦执行，事后只能看到结果，数据已经出门了。
@@ -386,7 +414,19 @@ class Ctx:
             self.store.add_step(self.run_id, seq, "security", tool, args,
                                 {"error": codes}, status="error",
                                 error_type="security_blocked", logical=logical)
+            security.record_effect(
+                self.store, self.run_id, "tool_args:%s" % tool, arg_sec, tool=tool,
+                override={"decision": security.DECISION_DENY,
+                          "attempted": True, "executed": True,
+                          "effect": security.EFFECT_CALL_STOPPED,
+                          "reason": "enforce：参数命中高危特征，调用前拒绝，工具未执行"})
             raise ToolError("security_blocked", "参数被安全策略拦截：%s" % "、".join(codes))
+        elif arg_sec["findings"]:
+            security.record_effect(
+                self.store, self.run_id, "tool_args:%s" % tool, arg_sec, tool=tool,
+                override={"attempted": False, "executed": False,
+                          "effect": security.EFFECT_REPORTED_ONLY,
+                          "reason": "audit 模式只记账：参数原样传入，工具照常执行"})
 
         err = sim.validate_args(tool, args)
         if err:
@@ -430,25 +470,47 @@ class Ctx:
                 not security.enforcing()
                 or os.environ.get("AGENTLAB_ALLOW_AUTO_APPROVE") == "1")
             if not allow_auto:
-                security.record(self.store, self.run_id, "tool_approval", {
-                    "findings": [{"code": "approval_required", "severity": "error",
+                req = security.contract(
+                    {"text": str(tool),
+                     "findings": [{"code": "approval_required", "severity": "error",
                                   "where": "tool_approval", "match": tool,
                                   "detail": "写操作 %s 在恢复期重放，未经审批" % tool,
                                   "false_positive": ""}],
-                    "action": "blocked"})
+                     "action": "blocked"},
+                    decision=security.DECISION_DENY, attempted=False,
+                    executed=False, effect=security.EFFECT_UNCHANGED,
+                    reason="写操作需要审批；是否阻断由下方真实执行点决定")
+                security.record(self.store, self.run_id, "tool_approval", req)
                 self.store.add_step(self.run_id, seq, "security", tool, args,
                                     {"error": "approval_required"}, status="error",
                                     error_type="approval_required", logical=logical)
+                security.record_effect(
+                    self.store, self.run_id, "tool_approval", req, tool=tool,
+                    override={"attempted": True, "executed": True,
+                              "effect": security.EFFECT_CALL_STOPPED,
+                              "reason": "恢复期写操作未经审批：抛出 "
+                                        "E_APPROVAL_REQUIRED，未执行 sim.call_tool"})
                 raise ApiError("E_APPROVAL_REQUIRED",
                                "恢复过程需要重放写操作 %s，等待人工审批" % tool, 409)
             if AUTO_APPROVE:
                 # 基准实验默认自动放行，但必须留痕：报告里要能看到「审批被绕过多少次」
-                security.record(self.store, self.run_id, "tool_approval", {
-                    "findings": [{"code": "approval_bypassed", "severity": "warn",
+                by = security.contract(
+                    {"text": str(tool),
+                     "findings": [{"code": "approval_bypassed", "severity": "warn",
                                   "where": "tool_approval", "match": tool,
                                   "detail": "写操作 %s 自动放行（AGENTLAB_AUTO_APPROVE）" % tool,
                                   "false_positive": ""}],
-                    "action": "reported"})
+                     "action": "reported"},
+                    decision=security.DECISION_ALLOW, attempted=False,
+                    executed=False, effect=security.EFFECT_UNCHANGED,
+                    reason="自动放行：审批被绕过，写操作照常执行")
+                security.record(self.store, self.run_id, "tool_approval", by)
+                security.record_effect(
+                    self.store, self.run_id, "tool_approval", by, tool=tool,
+                    override={"attempted": False, "executed": False,
+                              "effect": security.EFFECT_UNCHANGED,
+                              "reason": "AGENTLAB_AUTO_APPROVE：审批被绕过，"
+                                        "写操作照常执行，未拦截"})
 
         started = time.time()
         try:
@@ -495,9 +557,31 @@ class Ctx:
         out_sec = security.guard_tool_output(tool, out)
         if out_sec["findings"]:
             security.record(self.store, self.run_id, "tool_output:%s" % tool, out_sec)
-        if security.enforcing() and security.wrapping() and any(
-                f["severity"] == "error" for f in out_sec["findings"]):
+        before = out
+        wrapped = (security.enforcing() and security.wrapping()
+                   and any(f["severity"] == "error" for f in out_sec["findings"]))
+        if wrapped:
             out = security.mark_payload(out, source=tool)
+        # S01：只有**真的改了交给 Agent 的对象**才算内容隔离生效。
+        # guard 报的 blocked 只是检测建议，不能拿来统计拦截成功。
+        changed = out != before
+        security.record_effect(
+            self.store, self.run_id, "tool_output:%s" % tool, out_sec, tool=tool,
+            override={
+                "decision": (security.DECISION_WRAP if changed
+                             else out_sec["decision"]),
+                "attempted": wrapped and bool(out_sec["detected"]),
+                "executed": changed,
+                "effect": (security.EFFECT_BODY_MARKED if changed
+                           else security.EFFECT_UNCHANGED if out_sec["detected"]
+                           else security.EFFECT_NONE),
+                "reason": ("enforce + WRAP：工具结果对象已标记不可信，"
+                           "交给 Agent 的内容确实变了" if changed else
+                           "enforce 但 AGENTLAB_SECURITY_WRAP 未开启：工具结果"
+                           "对象逐字未改、原样进入 Agent；blocked 仅为检测建议"
+                           if out_sec["detected"] else
+                           "未命中特征，工具结果原样进入 Agent"),
+            })
 
         # 只有干净结果才进缓存 —— 污染值进缓存会让重放变成"再犯一次同样的错"
         if not poisoned and status == "ok":
@@ -926,7 +1010,19 @@ def run_once(store, exp, mode):
         store.set_state(rid, FAILED)
         store.finish_run(rid, 0, None, _expected(exp), 0, 0,
                          "security_blocked:user_input")
+        security.record_effect(
+            store, rid, "user_input", in_sec,
+            override={"decision": security.DECISION_DENY,
+                      "attempted": True, "executed": True,
+                      "effect": security.EFFECT_CALL_STOPPED,
+                      "reason": "enforce：高危输入，运行被终止，Agent 未启动"})
         return store.get_run(rid)
+    if in_sec["detected"]:
+        security.record_effect(
+            store, rid, "user_input", in_sec,
+            override={"attempted": False, "executed": False,
+                      "effect": security.EFFECT_REPORTED_ONLY,
+                      "reason": "audit 模式只记账：输入原样交给 Agent"})
 
     t0 = time.time()
     died = None
