@@ -376,6 +376,18 @@ class Ctx:
                                     error_type=deny["code"], logical=logical)
                 raise ToolError(deny["code"], deny["detail"])
 
+        # ---- 安全层：参数级拦截（执行前）----
+        # 危险命令与外带一旦执行，事后只能看到结果，数据已经出门了。
+        arg_sec = security.guard_tool_args(self.exp.get("agent_type"), tool, args)
+        if arg_sec["findings"]:
+            security.record(self.store, self.run_id, "tool_args:%s" % tool, arg_sec)
+        if arg_sec["action"] == "blocked":
+            codes = sorted({f["code"] for f in arg_sec["findings"]})
+            self.store.add_step(self.run_id, seq, "security", tool, args,
+                                {"error": codes}, status="error",
+                                error_type="security_blocked", logical=logical)
+            raise ToolError("security_blocked", "参数被安全策略拦截：%s" % "、".join(codes))
+
         err = sim.validate_args(tool, args)
         if err:
             self.store.add_step(self.run_id, seq, "tool", tool, args,
@@ -412,9 +424,31 @@ class Ctx:
 
         if tool in WRITE_TOOLS and self.recovering:
             SIDE_EFFECT_COUNT["n"] += 1
-            if not AUTO_APPROVE:
+            # enforce 模式下，AUTO_APPROVE 不再能默默放行写操作 ——
+            # 否则「审批」只是一句配置，跟没有一样。
+            allow_auto = AUTO_APPROVE and (
+                not security.enforcing()
+                or os.environ.get("AGENTLAB_ALLOW_AUTO_APPROVE") == "1")
+            if not allow_auto:
+                security.record(self.store, self.run_id, "tool_approval", {
+                    "findings": [{"code": "approval_required", "severity": "error",
+                                  "where": "tool_approval", "match": tool,
+                                  "detail": "写操作 %s 在恢复期重放，未经审批" % tool,
+                                  "false_positive": ""}],
+                    "action": "blocked"})
+                self.store.add_step(self.run_id, seq, "security", tool, args,
+                                    {"error": "approval_required"}, status="error",
+                                    error_type="approval_required", logical=logical)
                 raise ApiError("E_APPROVAL_REQUIRED",
                                "恢复过程需要重放写操作 %s，等待人工审批" % tool, 409)
+            if AUTO_APPROVE:
+                # 基准实验默认自动放行，但必须留痕：报告里要能看到「审批被绕过多少次」
+                security.record(self.store, self.run_id, "tool_approval", {
+                    "findings": [{"code": "approval_bypassed", "severity": "warn",
+                                  "where": "tool_approval", "match": tool,
+                                  "detail": "写操作 %s 自动放行（AGENTLAB_AUTO_APPROVE）" % tool,
+                                  "false_positive": ""}],
+                    "action": "reported"})
 
         started = time.time()
         try:

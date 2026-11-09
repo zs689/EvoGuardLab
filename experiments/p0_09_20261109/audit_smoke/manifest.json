@@ -1,5 +1,5 @@
 {
-  "baseline_commit": "82427c2884f630ee55a6a700cc84b816f868bd29",
+  "baseline_commit": "1ae4624d16eb431c80b02cb1f55d0b36f4425fa1",
   "config": {
     "backend": "mock",
     "dataset": {
@@ -89,7 +89,7 @@
     "validation_protocol": "paired-v2"
   },
   "config_hash": "df1275f49467cf35e750b7e2036c4baedf8fd560cb20118f54dc25d4826a65e8",
-  "created_at": "2026-11-09T02:46:23.916532+00:00",
+  "created_at": "2026-11-09T02:57:06.273766+00:00",
   "files": [
     {
       "bytes": 25460,
@@ -122,10 +122,10 @@
       "sha256": "c8795eac6185f6f9254d41caaf8c79c203cf256ce450f1e2f09c975c44834445"
     },
     {
-      "bytes": 51577,
+      "bytes": 54509,
       "kind": "code",
       "path": "ai-service/evoguard/runtime.py",
-      "sha256": "88ac82250e590788dcfa01502ce6ae2f2ab9ef9625702ffa2b0aa3f1accac6cc"
+      "sha256": "93b4ece4f4d340fd8a8c7184d30a0b265aa736a9fbf53acb0aef04060b44d0a2"
     },
     {
       "bytes": 45249,
@@ -158,10 +158,10 @@
       "sha256": "3356662830559d3d029dd5df760eaf8881d838d45c1f6aeccd9488a6ca1ec27a"
     },
     {
-      "bytes": 23932928,
+      "bytes": 24195072,
       "kind": "database",
       "path": "experiments/p0_09_20261109/audit_smoke/evolution.db",
-      "sha256": "354f40d5229ba254eabf9287f014d83fa44459189f6c8e1484687faf9f4e6c05"
+      "sha256": "7cd49ecd34fbd0a511c8b7dc719f77cf17a154a8d27e2f66ec78cb48f1f73d70"
     },
     {
       "bytes": 17886,
@@ -170,22 +170,22 @@
       "sha256": "d0e871d1413ae912b589211ec84b961b6475df6b96792eb050e1d3898fcea174"
     },
     {
-      "bytes": 3637930,
+      "bytes": 3637927,
       "kind": "metrics",
       "path": "experiments/p0_09_20261109/audit_smoke/metrics.json",
-      "sha256": "08da9ee2881643ba48248ec394202461b1d71873cff81a65231ed12010b670c5"
+      "sha256": "3e3eff72f9e755a7770a23e20bc456313ccc5661cbbd67df09f0c798892afa6f"
     }
   ],
-  "fingerprint": "f58954220010cc58c05fd62ee0573030c123852da29990bdf471f2516667e781",
+  "fingerprint": "f110dd95b159a1c8c75b1ee9ed8d3c6713ddb29b47fbbe9ecb4ce59c4b73375e",
   "libraries": {
     "SKILLS": {
-      "content_sha256": "ef9022f9cae6559b8932960d7a946654b9f672d9ccf10358d39c1b2219a7c94a",
-      "file_sha256": "354f40d5229ba254eabf9287f014d83fa44459189f6c8e1484687faf9f4e6c05",
+      "content_sha256": "221ed918c509da8aeadb12592b3be9ae78691cbaca492394b2d187ef948ff31e",
+      "file_sha256": "7cd49ecd34fbd0a511c8b7dc719f77cf17a154a8d27e2f66ec78cb48f1f73d70",
       "path": "experiments/p0_09_20261109/audit_smoke/evolution.db",
       "skills": 116
     }
   },
-  "library_hash": "7a200e00b6401e172332c812023e03a83aa8674239982f34a7effc8bc2e80c54",
+  "library_hash": "d29a71b3ca826d1b801ebec62951df1135a22129cd5362bb449e1e04666793fe",
   "manifest_path": "experiments/p0_09_20261109/audit_smoke/manifest.json",
   "note": "mock 闭环（P0 06 冻结基线）",
   "protocol": "evoguard-baseline-v1",

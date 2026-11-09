@@ -1,7 +1,7 @@
 {
-  "note": "同一数据集、mock 后端，三种安全模式的闭环结果对比。三者完全一致，说明安全层不改变结论；每项明细仍在各自目录的 evolution_report.md 与 manifest.json。",
+  "note": "同一数据集（204 单故障 + 30 复合 + 36 难度组）、mock 后端，不同安全模式的闭环结果。enforce 的下降不是 bug：写操作在恢复期必须人工审批，没有审批就中断恢复——这就是「审批真执行」的价格，也正是它和「只声明审批」的区别。",
   "modes": {
-    "audit_smoke": {
+    "off/audit（默认，只检测不拦截）": {
       "four_groups": {
         "A": 0.5,
         "B": 24.0,
@@ -14,38 +14,50 @@
         "D": 86.7
       },
       "promoted": 7,
-      "candidates": 116
+      "candidates": 116,
+      "security_events": {
+        "approval_bypassed": 825
+      }
     },
-    "enforce_smoke": {
+    "enforce（审批与参数拦截真执行）": {
       "four_groups": {
         "A": 0.5,
-        "B": 24.0,
-        "C": 89.2,
-        "D": 86.3
+        "B": 15.2,
+        "C": 62.7,
+        "D": 59.8
       },
       "composite": {
         "single": 3.3,
-        "chain": 86.7,
-        "D": 86.7
+        "chain": 46.7,
+        "D": 46.7
       },
-      "promoted": 7,
-      "candidates": 116
+      "promoted": 5,
+      "candidates": 83,
+      "security_events": {
+        "approval_required": 633
+      }
     },
-    "enforce_wrap_smoke": {
+    "enforce + 包裹工具结果": {
       "four_groups": {
         "A": 0.5,
-        "B": 24.0,
-        "C": 89.2,
-        "D": 86.3
+        "B": 15.2,
+        "C": 62.7,
+        "D": 59.8
       },
       "composite": {
         "single": 3.3,
-        "chain": 86.7,
-        "D": 86.7
+        "chain": 46.7,
+        "D": 46.7
       },
-      "promoted": 7,
-      "candidates": 116
+      "promoted": 5,
+      "candidates": 83,
+      "security_events": {
+        "approval_required": 633
+      }
     }
   },
-  "identical": true
+  "delta": {
+    "single_D": 26.5,
+    "composite_chain": 40.0
+  }
 }

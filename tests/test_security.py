@@ -242,5 +242,67 @@ class TestRuntimeIntegration(unittest.TestCase):
             ctx.call("kb.search", {"query": "退款时效"})
 
 
+class TestRuntimeEnforcement(unittest.TestCase):
+    """从「检测」到「拦得住」：参数级拦截与写操作审批。"""
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        os.unlink(self.path)
+        self.store = core.Store(self.path, fast=True)
+        self.addCleanup(self.store.close)
+        self.addCleanup(lambda: os.environ.pop("AGENTLAB_SECURITY_MODE", None))
+        self.exp = self.store.create_experiment(
+            name="sec", agent_type="order", task_id="A1001",
+            fault_type="none", fault_target=0, seed=7, recovery_mode="D")
+
+    def _ctx(self, recovering=False):
+        run = self.store.create_run(self.exp["id"], "D", 7)
+        ctx = runtime.Ctx(self.store, run["id"], self.exp)
+        ctx.recovering = recovering
+        return ctx
+
+    def test_enforce_blocks_dangerous_args_before_execution(self):
+        os.environ["AGENTLAB_SECURITY_MODE"] = "enforce"
+        ctx = self._ctx()
+        with self.assertRaises(runtime.ToolError) as cm:
+            ctx.call("order.get_order", {"order_id": "A1001", "cmd": "rm -rf /"})
+        self.assertIn("security_blocked", str(cm.exception))
+        # 必须真的没执行：轨迹里不应出现成功调用
+        steps = self.store.list_steps(ctx.run_id)
+        self.assertTrue(any(st["status"] == "error" for st in steps))
+
+    def test_audit_reports_but_still_executes(self):
+        os.environ["AGENTLAB_SECURITY_MODE"] = "audit"
+        ctx = self._ctx()
+        out = ctx.call("order.get_order", {"order_id": "A1001", "cmd": "rm -rf /"})
+        self.assertEqual(out.get("order_id"), "A1001", "audit 不许拦住正常执行")
+        codes = {e["code"] for e in S.list_events(self.store, ctx.run_id)}
+        self.assertIn("dangerous_shell_rm", codes)
+
+    def test_enforce_requires_human_approval_for_write(self):
+        os.environ["AGENTLAB_SECURITY_MODE"] = "enforce"
+        ctx = self._ctx(recovering=True)
+        with self.assertRaises(core.ApiError) as cm:
+            ctx.call("order.settle", {"order_id": "A1001", "total": 504.0})
+        self.assertEqual(cm.exception.code, "E_APPROVAL_REQUIRED")
+
+    def test_enforce_allows_write_with_explicit_override(self):
+        os.environ["AGENTLAB_SECURITY_MODE"] = "enforce"
+        os.environ["AGENTLAB_ALLOW_AUTO_APPROVE"] = "1"
+        self.addCleanup(lambda: os.environ.pop("AGENTLAB_ALLOW_AUTO_APPROVE", None))
+        ctx = self._ctx(recovering=True)
+        out = ctx.call("order.settle", {"order_id": "A1001", "total": 504.0})
+        self.assertTrue(out.get("settled"))
+
+    def test_audit_write_records_bypass(self):
+        """默认实验环境自动放行，但必须留下「审批被绕过」的记录。"""
+        os.environ["AGENTLAB_SECURITY_MODE"] = "audit"
+        ctx = self._ctx(recovering=True)
+        ctx.call("order.settle", {"order_id": "A1001", "total": 504.0})
+        codes = {e["code"] for e in S.list_events(self.store, ctx.run_id)}
+        self.assertIn("approval_bypassed", codes)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

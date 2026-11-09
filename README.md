@@ -15,7 +15,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（224 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 25 安全层 + 8 保障视图）
+# 2) 回归测试（229 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 30 安全层 + 8 保障视图）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -371,7 +371,7 @@ python -m evoguard_inspect.cli --trace ../experiments/p0_09_20261109/audit_smoke
 | 层 | 位置 | 做什么 |
 |---|---|---|
 | 定义层 | 静态规则（20 条） | prompt 有没有拒答边界、有没有声明「工具结果是数据不是指令」、写操作有没有审批、有没有危险 shell |
-| 行为层 | 轨迹规则 security 组（6 条）+ 运行时 4 个钩子 | 注入指令、白名单外工具、外带敏感数据、参数里的凭据、破坏性命令、答案里的 XSS；运行时在输入 / 工具调用 / 工具返回 / 模型输出四处扫描 |
+| 行为层 | 轨迹规则 security 组（6 条）+ 运行时 5 个钩子 | 注入指令、白名单外工具、外带、参数里的凭据、破坏性命令、答案里的 XSS；`enforce` 下在**执行前**拦参数与越权工具，写操作必须审批 |
 | 边界层 | `api/app.py` | `nosniff`、`X-Frame-Options: DENY`、CSP、按落点转义（`encode_for`） |
 
 ```bash
@@ -385,9 +385,13 @@ AGENTLAB_SECURITY_MODE=enforce python ai-service/api/app.py
 **延迟**：1 KB 0.044 ms / 10 KB 0.31 ms / 50 KB 1.84 ms；真实运行每次约 **51 µs**，
 相对真实模型的 627 ms 是 **0.008%**（`experiments/p0_09_20261109/security_bench.json`）。
 
-**必须说清楚的边界**：这是特征匹配，改个说法就能绕过；它是「发现 + 降风险」，
-不是「防住」。真正兜底的是工具权限最小化、写操作审批与沙箱 ——
-这三样在本仓库里仍然只是**声明**。详见 [docs/security.md](docs/security.md)。
+**审批是真执行的，沙箱不是**：`enforce` 下恢复期重放写操作必须人工审批，否则中断恢复。
+代价实测：单故障 D 从 86.3% 降到 59.8%（-26.5pp）、复合链 86.7% → 46.7%（-40pp），
+默认 audit 模式里「审批被默默放行」记了 825 次（`mode_compare.json`）。
+**沙箱仍然没有**：危险命令能在调用前被拦，但真要跑 shell 工具时没有隔离层。
+
+**必须说清楚的边界**：特征是匹配出来的，改个说法就能绕过；它是「发现 + 降风险」，不是「防住」。
+详见 [docs/security.md](docs/security.md)。
 
 ---
 
@@ -437,7 +441,7 @@ EvoGuardLab/
 │   ├── test_inspect.py      42 个测试（规则全命中 / 零误报 / 配置适配 / 事故模式 / 覆盖率与退出码）
 │   ├── test_static.py       27 个测试（静态规则 / 框架写法适配 / 低置信度噪音治理 / 覆盖率）
 │   ├── test_skill_validation.py 36 个测试（成对负迁移 / 样本充分性 / 晋升门禁 / 严格库链路）
-│   ├── test_security.py     25 个测试（注入/越权/外带/凭据/XSS 检测，误报与延迟预算，audit vs enforce）
+│   ├── test_security.py     30 个测试（注入/越权/外带/凭据/XSS、误报与延迟预算、audit vs enforce、审批真执行）
 │   └── test_assurance.py    8 个测试（三维判定 / 覆盖有限不算通过 / 报错后仍有答案 / 不给分数）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── docs/

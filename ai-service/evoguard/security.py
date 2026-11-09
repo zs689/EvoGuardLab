@@ -132,7 +132,9 @@ _det("pii_email", "info", r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
      "邮箱地址", "公开联系邮箱也会命中")
 
 # --- 命令执行 ---
-_det("dangerous_shell_rm", "error", r"\brm\s+-[rf]{1,2}\s+/(?:\s|$|\*)",
+# 结尾用后瞻而不是「空白或行尾」：工具参数常是 JSON，
+# `{"cmd": "rm -rf /"}` 里 / 后面跟的是引号，用 (?=\s|$) 会漏掉（实测踩到）。
+_det("dangerous_shell_rm", "error", r"\brm\s+-[rf]{1,2}\s+/(?=[\s\"',}\]]|$|\*)",
      "删除根目录的破坏性命令", "讲安全的文章里会出现")
 _det("dangerous_shell_pipe", "error",
      r"\b(?:curl|wget)\b[^\n|]{0,120}\|\s*(?:sudo\s+)?(?:ba|z|k)?sh\b",
@@ -323,6 +325,14 @@ def check_peer(from_agent, allowed_peers):
     return None
 
 
+# 参数侧要拦的三类：凭据外发、危险命令、数据外带。
+SECRETS = ("secret_aws_key", "secret_openai_key", "secret_github_token",
+           "secret_private_key", "secret_generic_kv")
+SHELL = ("dangerous_shell_rm", "dangerous_shell_pipe", "dangerous_shell_eval",
+         "dangerous_chmod")
+EXFIL = ("exfil_url_with_secret", "exfil_data_uri", "exfil_encoded_blob")
+
+
 # ---------------- 统一入口 ----------------
 def _decide(findings):
     if not findings:
@@ -403,6 +413,23 @@ def guard_model_output(text, context="html", where="model_output"):
     if enforcing():
         body = encode_for(body, context)
     return {"text": body, "findings": findings, "action": action}
+
+
+def guard_tool_args(agent_type, tool, args, where="tool_call"):
+    """调工具**之前**拦一道：参数里带凭据/危险命令/外带特征就不让它发出去。
+
+    为什么必须在调用前拦：危险命令和外带一旦执行，事后检测只能看到结果，
+    数据已经出门了。检测「发生过的攻击」和「阻止攻击」是两件事，这里做后者。
+    """
+    findings = []
+    deny = check_tool(agent_type, tool)
+    if deny:
+        findings.append(dict(deny, where=where, match=str(tool),
+                             false_positive="白名单配置漏写会误判"))
+    body = _text(args)
+    if body:
+        findings.extend(scan(body, where, only=SECRETS + SHELL + EXFIL))
+    return {"text": body, "findings": findings, "action": _decide(findings)}
 
 
 def guard_peer_message(from_agent, text, allowed_peers=None):
