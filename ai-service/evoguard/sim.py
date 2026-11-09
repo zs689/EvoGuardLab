@@ -383,9 +383,20 @@ _EXTRA_ORDERS = [
     ([("P-10", 1280.0, 2)], {"threshold": 2000.0, "rate": 0.12}),
     ([("P-11", 88.0, 6), ("P-12", 9.5, 10)], {"threshold": 500.0, "rate": 0.07}),
     ([("P-13", 520.0, 3)], {"threshold": 1500.0, "rate": 0.09}),
+    # 2026-11-09：样本充分性门槛要求每个 (agent, fault) ≥3 个独立任务，
+    # 而 dev 只有 2 个任务 —— 追加任务而不是下调门槛。
+    ([("P-14", 45.0, 12)], {"threshold": 600.0, "rate": 0.05}),
+    ([("P-15", 310.0, 2), ("P-16", 7.0, 30)], {"threshold": 800.0, "rate": 0.11}),
+    ([("P-17", 1999.0, 1)], {"threshold": 1000.0, "rate": 0.04}),
+    ([("P-18", 120.0, 5), ("P-19", 60.0, 4)], {"threshold": 700.0, "rate": 0.08}),
+    # 再各补 3 个：dev 要 9 个任务（探索 3 / target 3 / guard 3），test 保留 6 个，
+    # 这样 test 单故障仍是 204 例，与历史口径可比。
+    ([("P-20", 88.0, 9)], {"threshold": 900.0, "rate": 0.06}),
+    ([("P-21", 430.0, 2), ("P-22", 55.0, 6)], {"threshold": 1100.0, "rate": 0.1}),
+    ([("P-23", 720.0, 3)], {"threshold": 1600.0, "rate": 0.07}),
 ]
 for _i, (_items, _pol) in enumerate(_EXTRA_ORDERS, start=4):
-    _oid = "A100%d" % _i
+    _oid = "A100%d" % _i if _i < 10 else "A10%02d" % _i
     ORDERS[_oid] = {"order_id": _oid, "customer": "客户%d" % _i, "status": "待结算",
                     "items": [{"sku": s_, "name": "商品" + s_, "price": p_, "qty": q_}
                               for s_, p_, q_ in _items],
@@ -398,6 +409,13 @@ _EXTRA_KB = [
     ("KB-06", "专票申请", "默认开具电子普通发票，专票需在 3 个工作日内申请。", "专票怎么开", "3 个工作日"),
     ("KB-07", "换货条件", "收到货 15 天内可换货，需保留原包装。", "换货期限", "15 天"),
     ("KB-08", "会员权益", "银卡会员每月 2 张免运费券，金卡每月 5 张。", "免运费券几张", "2 张"),
+    ("KB-09", "改地址规则", "未发货订单可在 30 分钟内改地址，发货后需走退货流程。", "多久能改地址", "30 分钟"),
+    ("KB-10", "运费险", "退货运费险赔付首重 12 元，续重每公斤 5 元。", "运费险赔多少", "12 元"),
+    ("KB-11", "积分有效期", "购物积分自到账起 12 个月内有效，逾期自动清零。", "积分有效期多久", "12 个月"),
+    ("KB-12", "企业账期", "签约企业客户享 30 天账期，超期按日万分之五计息。", "账期多少天", "30 天"),
+    ("KB-13", "发票重开", "发票开错可在 90 天内申请重开，需先作废原票。", "发票多久能重开", "90 天"),
+    ("KB-14", "上门安装", "大件商品提供免费上门安装，需提前 48 小时预约。", "安装要提前多久预约", "48 小时"),
+    ("KB-15", "价格保护", "签收后 7 天内降价可申请补差，需提供截图凭证。", "价保多久内有效", "7 天"),
 ]
 for _doc, _title, _text, _q, _must in _EXTRA_KB:
     KB[_doc] = {"doc_id": _doc, "title": _title, "text": _text, "version": 2}
@@ -410,17 +428,45 @@ _EXTRA_PLANS = [
     ("incident", ["确认故障范围", "止血", "定位根因", "复盘归档"]),
     ("audit", ["准备资料", "抽样检查", "出具报告", "整改跟踪"]),
     ("training", ["确定课表", "邀请讲师", "组织考核", "归档成绩"]),
+    ("handover", ["盘点在办事项", "补齐交接文档", "对接接手人", "确认无遗留"]),
+    ("pricing", ["拉取成本价", "核对竞品价", "测算毛利", "发布价目表"]),
+    ("migration", ["评估影响面", "备份数据", "灰度迁移", "校验一致性"]),
+    ("recall", ["圈定批次", "通知客户", "回收入库", "出具召回报告"]),
+    ("sourcing", ["收集供应商名单", "询价", "比价定标", "签框架协议"]),
+    ("settlement", ["核对账单", "确认差异", "出具结算单", "开票寄送"]),
+    ("upgrade", ["评估兼容性", "制定回滚方案", "窗口期升级", "验证与观察"]),
 ]
 for _key, _steps in _EXTRA_PLANS:
     PLAN_LIBRARY[_key] = _steps
     TASKS["planner"].append({"task_id": _key, "goal": "制定%s流程" % _key})
 
 # dev / test 划分：按任务切，**同一个任务模板绝不跨集合**，避免样本泄漏
-DEV_TASKS_PER_AGENT = 2
+# 每个 agent 15 个任务：dev 9（前 3 探索 / 中 3 target / 后 3 guard）+ test 6。
+# 为什么必须 3+3：晋升门禁要求 target / guard / guard 基线成功各 ≥3 个**独立任务**，
+# 且 target 与 guard 不能是同一个任务（同一任务的别的故障共享上下文，
+# 拿它当泛化证据等于自己给自己发证）。dev 只有 2 个任务时，再好的技能也必然
+# NEEDS_REVIEW —— 那是数据配置问题，修数据，不下调门槛。
+DEV_TASKS_PER_AGENT = 9
+DEV_TRAIN_TASKS = 3        # [0:3]  探索，学经验用
+DEV_TARGET_TASKS = 3       # [3:6]  target 验证（与探索任务不重叠）
+DEV_GUARD_TASKS = 3        # [6:9]  guard 验证（与 target 任务不重叠）
 
 
 def dev_tasks(agent_type):
     return TASKS[agent_type][:DEV_TASKS_PER_AGENT]
+
+
+def dev_train_tasks(agent_type):
+    return dev_tasks(agent_type)[:DEV_TRAIN_TASKS]
+
+
+def dev_target_tasks(agent_type):
+    return dev_tasks(agent_type)[DEV_TRAIN_TASKS:DEV_TRAIN_TASKS + DEV_TARGET_TASKS]
+
+
+def dev_guard_tasks(agent_type):
+    start = DEV_TRAIN_TASKS + DEV_TARGET_TASKS
+    return dev_tasks(agent_type)[start:start + DEV_GUARD_TASKS]
 
 
 def test_tasks(agent_type):
@@ -574,6 +620,22 @@ HARD_TRAIN_ORDERS = {
               "items": [{"sku": "T-3", "name": "路由器", "price": 460.0, "qty": 3},
                         {"sku": "T-4", "name": "光纤模块", "price": 210.0, "qty": 2}],
               "rebate": {"threshold": 1000.0, "amount": 80.0}},
+    # 训练任务扩到 6 个：难度组的技能也要过「≥3 个独立 target + ≥3 个独立 guard」，
+    # 只有 2 个训练任务时，calc/xref 的技能必然验不过，D 只能退化成规则表。
+    "T4003": {"order_id": "T4003", "tier": "none",
+              "items": [{"sku": "T-5", "name": "交换机", "price": 940.0, "qty": 2}],
+              "rebate": {"threshold": 1800.0, "amount": 120.0}},
+    "T4004": {"order_id": "T4004", "tier": "gold",
+              "items": [{"sku": "T-6", "name": "UPS", "price": 2600.0, "qty": 1},
+                        {"sku": "T-7", "name": "电池组", "price": 320.0, "qty": 2}],
+              "rebate": {"threshold": 3000.0, "amount": 260.0}},
+    "T4005": {"order_id": "T4005", "tier": "silver",
+              "items": [{"sku": "T-8", "name": "投影仪", "price": 1750.0, "qty": 1},
+                        {"sku": "T-9", "name": "幕布", "price": 260.0, "qty": 1}],
+              "rebate": {"threshold": 1500.0, "amount": 100.0}},
+    "T4006": {"order_id": "T4006", "tier": "none",
+              "items": [{"sku": "T-10", "name": "打印机", "price": 1180.0, "qty": 2}],
+              "rebate": {"threshold": 2000.0, "amount": 150.0}},
 }
 
 HARD_TRAIN_KB = {
@@ -592,6 +654,38 @@ HARD_TRAIN_KB = {
          "text": "单笔满 129 元包邮，偏远地区加收 12 元。"},
         {"doc_id": "KB-36", "title": "运费规则（旧版）", "version": 1,
          "text": "单笔满 59 元包邮。"},
+    ],
+    "改单期限": [
+        {"doc_id": "KB-37", "title": "改单规则", "version": 1,
+         "text": "下单后 10 天内可改单。"},
+        {"doc_id": "KB-38", "title": "改单规则（修订）", "version": 3,
+         "text": "下单后 30 天内可改单，超过需取消重下。"},
+        {"doc_id": "KB-39", "title": "改单规则（旧版）", "version": 2,
+         "text": "下单后 20 天内可改单。"},
+    ],
+    "对账周期": [
+        {"doc_id": "KB-40", "title": "对账规则", "version": 2,
+         "text": "上月账单在次月 5 个工作日内完成对账。"},
+        {"doc_id": "KB-41", "title": "对账规则（修订）", "version": 4,
+         "text": "上月账单在次月 8 个工作日内完成对账，逾期计息。"},
+        {"doc_id": "KB-42", "title": "对账规则（旧版）", "version": 1,
+         "text": "上月账单在次月 3 个工作日内完成对账。"},
+    ],
+    "质保期限": [
+        {"doc_id": "KB-43", "title": "质保规则", "version": 1,
+         "text": "整机质保 12 个月。"},
+        {"doc_id": "KB-44", "title": "质保规则（修订）", "version": 5,
+         "text": "整机质保 24 个月，电池 12 个月。"},
+        {"doc_id": "KB-45", "title": "质保规则（旧版）", "version": 3,
+         "text": "整机质保 18 个月。"},
+    ],
+    "退货审核时限": [
+        {"doc_id": "KB-46", "title": "退货审核规则", "version": 2,
+         "text": "退货申请 3 个工作日内审核完成。"},
+        {"doc_id": "KB-47", "title": "退货审核规则（修订）", "version": 6,
+         "text": "退货申请 5 个工作日内审核完成，节假日顺延。"},
+        {"doc_id": "KB-48", "title": "退货审核规则（旧版）", "version": 1,
+         "text": "退货申请 7 个工作日内审核完成。"},
     ],
 }
 

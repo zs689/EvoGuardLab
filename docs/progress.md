@@ -274,3 +274,38 @@ P0 06 冻结可复现基线：把报告 / metrics.json / runs.jsonl / C 与 D �
   这是让 D 有意义的前置条件，不是可选项。
 - 复合故障的链式技能同样需要 ≥3 个独立任务才能验证。
 - 不要用下调 `MIN_VALIDATION_TASKS` 的方式让数字变好看。
+
+## 2026-11-09：数据集扩充到「每个 (agent,fault) ≥3 独立任务」
+
+### 为什么做
+
+上一轮门禁后重跑，41 个候选全部 `NEEDS_REVIEW`，理由是
+`target has fewer than 3 independent tasks/families`（`target_n=1`、`guard_n=2`）。
+门槛没错，是数据只有 1 个验证任务 —— 所以改数据，不动门槛。
+
+### 改了什么
+
+- 每个 agent 的任务从 8 个扩到 **15 个**（订单 A1001–A1015 / 知识库 KB-01–KB-15 对应 15 个问题 / 15 条流程）。
+- dev 从 2 个扩到 **9 个**，并按角色切三组、任务不重叠：
+  `dev_train_tasks`（前 3，探索用）/ `dev_target_tasks`（中 3，量增益）/ `dev_guard_tasks`（后 3，量负迁移）。
+- test 仍是 6 个任务 → 单故障测试集**仍是 204 例**，与历史数字可比；复合测试 30 例不变。
+- 难度组训练任务从 2 个扩到 6 个（3 target + 3 guard），calc / xref 的技能才有机会过门禁。
+- `--guard-n` 默认 2 → 3（门禁要求 ≥3 个独立 guard 任务族）。
+- 复合故障按**任务角色**分 train/val，不再按列表奇偶交替 —— 交替会把同一任务的复合用例放进
+  val 而它的单故障在 train，`evaluate` 直接抛 `validation overlaps training task/family`（实测踩到）。
+
+### 验证
+
+- 全量 **189 个测试**通过。
+- mock 全量训练（`experiments/p0_08_20261109/mock_full/`）：157 个探索用例 → **116 个候选**
+  → 判决分布 `PROMOTE 11 / REJECT 66 / NEEDS_REVIEW 39` → **严格库 11 条**（非空），
+  放宽库 116 条。首次出现「严格库非空」，说明划分对了。
+- 仍被 `NEEDS_REVIEW` 的 39 条，理由统一是
+  `guard has fewer than 3 baseline-success tasks/families`（`guard_tasks=3` 但基线只救回 2 个）——
+  这是诚实的证据不足：基线本来就失败的任务，测不出负迁移。
+- `REJECT` 66 条是增益为 0（规则表本来就能救），门禁拒得对。
+
+### 仍未完成
+
+- 真实模型全量重训 + 评测（本轮只做了 mock 验证，未跑 Qwen）。
+- 39 条「guard 基线成功不足」需要换 guard 故障类型或补更多 dev 任务，而不是放宽门槛。

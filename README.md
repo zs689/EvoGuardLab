@@ -37,6 +37,15 @@ python ai-service/evoguard/baseline.py check --manifest experiments/p0_06_202611
 不需要 pip 安装任何东西，Python 3.9+ 标准库即可跑（接本地模型才需要 Ollama）。
 Web 看板是**原生 HTML/CSS/JS 单文件**，不引 CDN、不需要 Node 构建。
 
+### 数据集结构（2026-11-09 起）
+
+每个 agent **15 个任务**：dev 9 + test 6。
+
+- dev 9 再按角色切成三组、**彼此任务不重叠**：前 3 个探索（学经验）、中 3 个 target（量增益）、后 3 个 guard（量负迁移）。
+- test 6 个任务完全不参与训练与验证，所以单故障测试集仍是 **204 例**，与历史口径可比。
+- 为什么必须这么切：晋升门禁要求 target / guard / guard 基线成功各 ≥3 个**独立任务**，且 target 与 guard 不能是同一个任务。之前 dev 只有 2 个任务，41 个候选全被判 `NEEDS_REVIEW`（`target has fewer than 3 independent tasks/families`）—— 那是数据配置问题，修数据，不下调门槛。
+- 难度组同样扩到 6 个训练任务（3 target + 3 guard），calc / xref 的技能才验得过去。
+
 ### 最近一次实测（mock 模型，2026-11-07）
 
 **单故障测试集 204 例**

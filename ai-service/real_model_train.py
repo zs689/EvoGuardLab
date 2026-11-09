@@ -83,8 +83,25 @@ def run_case(store, case, mode, skill=None):
     return run["success"] == 1, run["id"]
 
 
+def _task_roles(agent_type):
+    """返回 (target 任务 id 集合, guard 任务 id 集合)。
+
+    普通 agent 用 sim 的 dev 划分；难度组两个 agent 用 hard_train_tasks 的 3+3。
+    两边都不允许 target 与 guard 重叠 —— 重叠了就不是泛化证据。
+    """
+    if agent_type in sim.HARD_AGENTS:
+        tt = sim.hard_train_tasks(agent_type)
+        return ({t["task_id"] for t in tt[:3]}, {t["task_id"] for t in tt[3:6]})
+    return ({t["task_id"] for t in sim.dev_target_tasks(agent_type)},
+            {t["task_id"] for t in sim.dev_guard_tasks(agent_type)})
+
+
 def split_cases():
-    """dev task #1 探索，dev task #2 验证。test 完全不碰。
+    """dev 里再按角色切三份：探索 / target / guard，彼此任务不重叠；test 完全不碰。
+
+    为什么不能只切两个任务：晋升门禁要 target / guard / guard 基线成功各 ≥3 个
+    **独立任务**，而且 target 与 guard 必须是不同任务。dev 只有 2 个任务时，
+    再好的技能也必然 NEEDS_REVIEW（实测 41 个候选全部被拒就是这个原因）。
 
     复合故障必须**按模式（fault_type）分组后再按任务切**：
     直接 `comp[:half]` 是按列表位置切，而列表是按模式排的 ——
@@ -94,31 +111,38 @@ def split_cases():
     """
     train, val = [], []
     for at in sim.AGENT_TYPES:
-        t = sim.dev_tasks(at)
-        t_train, t_val = t[0], t[1] if len(t) > 1 else t[0]
+        t_train = sim.dev_train_tasks(at)
+        t_val = sim.dev_target_tasks(at) + sim.dev_guard_tasks(at)
         for ft in sim.CASE_FAULTS[at]:
-            train.append({"agent_type": at, "task_id": t_train["task_id"],
-                          "fault_type": ft, "seed": 7})
-            val.append({"agent_type": at, "task_id": t_val["task_id"],
-                        "fault_type": ft, "seed": 7})
+            for t in t_train:
+                train.append({"agent_type": at, "task_id": t["task_id"],
+                              "fault_type": ft, "seed": 7})
+            for t in t_val:
+                val.append({"agent_type": at, "task_id": t["task_id"],
+                            "fault_type": ft, "seed": 7})
     # 难度组的两个 agent 也要学技能，否则评测时 C/D 在它们身上都查不到技能、
     # 双双退化成规则表（那时 C = D 打平，四组对照少一半信息）。
     # 用的是 hard_train_tasks（T4xxx / KB-3x），**不是评测题**，不会泄漏。
+    # 同样按 3 探索 / 3 target / 3 guard 切，难度组技能才验得过去。
     for at in sim.HARD_AGENTS:
         tt = sim.hard_train_tasks(at)
-        if len(tt) < 2:
+        if len(tt) < 6:
             continue
+        h_train, h_val = tt[:3], tt[3:6]
         for ft in sim.HARD_CASE_FAULTS[at]:
-            train.append({"agent_type": at, "task_id": tt[0]["task_id"],
-                          "fault_type": ft, "seed": 7})
-            val.append({"agent_type": at, "task_id": tt[1]["task_id"],
-                        "fault_type": ft, "seed": 7})
-    by_pat = {}
+            for t in h_train:
+                train.append({"agent_type": at, "task_id": t["task_id"],
+                              "fault_type": ft, "seed": 7})
+            for t in h_val:
+                val.append({"agent_type": at, "task_id": t["task_id"],
+                            "fault_type": ft, "seed": 7})
+    # 复合故障按**任务角色**分，不再按列表奇偶交替 ——
+    # 交替切会把「A1001 的复合用例」放进 val，而 A1001 的单故障在 train，
+    # evaluate 会直接报 validation overlaps training task/family。
+    _train_ids = {t["task_id"] for at in sim.AGENT_TYPES
+                  for t in sim.dev_train_tasks(at)}
     for c in sim.composite_cases("dev"):
-        by_pat.setdefault(c["fault_type"], []).append(c)
-    for pat, lst in by_pat.items():
-        for i, c in enumerate(lst):
-            (train if i % 2 == 0 else val).append(dict(c))
+        (train if c["task_id"] in _train_ids else val).append(dict(c))
     return train, val
 
 
@@ -182,7 +206,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--backend", default=os.environ.get("AGENTLAB_LLM", "ollama"))
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--guard-n", type=int, default=2, help="每个候选技能测几个 guard 用例")
+    ap.add_argument("--guard-n", type=int, default=3,
+                    help="每个候选技能测几个 guard 用例（晋升门禁要求 ≥3 个独立任务族）")
     ap.add_argument("--output-dir", help="新的隔离输出目录；已存在时拒绝覆盖")
     args = ap.parse_args()
     if args.guard_n < 0 or args.limit < 0:
@@ -301,11 +326,21 @@ def main():
         # 一个真正有效的两步链增益只剩 100/6≈16pp，甚至被算成 0 而误杀。
         # 这个坑踩过一次：第一版训练把 5 条复合链全拒了，D 反而比迁移库更差。
         from_composite = bool(c.get("fault_chain"))
+        # target 与 guard 必须来自**不同任务**：同一任务的「别的故障」共享上下文，
+        # 拿它当泛化证据等于自己给自己发证。sim 已把 dev 的 9 个任务切成
+        # 3 探索 / 3 target / 3 guard；难度组的 6 个训练任务同样 3+3。
+        _target_ids, _guard_ids = _task_roles(c["agent_type"])
         target = [v for v in val
                   if v["agent_type"] == c["agent_type"] and _in(v)
+                  and v["task_id"] in _target_ids
                   and bool(v.get("fault_chain")) == from_composite]
-        guard = [v for v in val if v["agent_type"] == c["agent_type"] and not _in(v)][
-            :args.guard_n]
+        _guard_pool = [v for v in val
+                       if v["agent_type"] == c["agent_type"] and not _in(v)
+                       and v["task_id"] in _guard_ids]
+        _by_task = {}
+        for _v in _guard_pool:
+            _by_task.setdefault(_v["task_id"], _v)
+        guard = [_by_task[k] for k in sorted(_by_task)][:args.guard_n]
         def runner(case, skill):
             ok, rid = run_case(store, case, "D", skill=skill)
             run = store.get_run(rid)
