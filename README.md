@@ -14,8 +14,10 @@ Self-Evolving Agent Reliability & Autonomous Recovery
 **不是**：
 
 - **不是生产级 WAF / 沙箱**：检测是特征匹配，改个说法就能绕；没有通用执行隔离。
-- **不是「防住提示注入」**：只有 6 个独立攻击向量的工程冒烟，外部基准尚未接入
-  （见 [docs/attack-datasets.md](docs/attack-datasets.md)）。
+- **不是「防住提示注入」**：已接入外部语料 InjecAgent 2108 条，实测**字面注入话术**召回 1.0、
+  **自然语言注入**召回 0.0（训练的第二级模型把它拉到 0.96，但误报 6%，门禁判定暂缓发布）。
+  6 个自构造向量的工程冒烟仍在，两者分开报，不混成一个准确率
+  （见 [docs/attack-datasets.md](docs/attack-datasets.md)、[docs/detector-evolution.md](docs/detector-evolution.md)）。
 - **不是真实业务准确率**：37 条自生成标注只能当回归护栏，没有独立标注者与外部轨迹。
 - **不是多 Agent 安全**：互信函数只在库级，运行时没有多 Agent 链路可验。
 
@@ -29,7 +31,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（482 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口）
+# 2) 回归测试（541 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -495,6 +497,12 @@ AGENTLAB_SECURITY_MODE=enforce python ai-service/api/app.py
 才算「拦住了」，`action` 降级为检测建议。
 详见 [docs/security.md](docs/security.md)，反例回归见 `tests/test_security_contract.py`。
 
+**检测能力自己长（第二级模型 + 两段门禁）**：正则在外部语料上只认字面话术。
+用**没通过**的样本训练字符 n-gram 模型做第二级，只在一级没命中时启用：
+`--by payload` 划分下 test 召回 0.500 → **0.961**，但独立复核误报 **6.0%**
+（换业务域 33.3%），超过 5% 发布线 → **门禁判定暂缓发布，默认关闭**。
+开启方式与全部数字见 [docs/detector-evolution.md](docs/detector-evolution.md)。
+
 **防御演示按真实后果计量**：四档（off / audit / enforce / enforce+wrap）×
 四类攻击 + 各自的合法业务对照，分别统计未授权调用是否执行、模拟接收方是否命中、
 危险操作是否执行、输出是否仍可被当代码、任务是否完成。`FakeSink` 只计数不联网，
@@ -669,7 +677,10 @@ EvoGuardLab/
 │   ├── test_untrusted_input.py 14 个测试（技能候选 / CI 策略 / 契约参数的畸形输入）
 │   ├── test_reproducibility.py 8 个测试（同配置重跑逐字节一致 / 汇总等于逐条之和）
 │   ├── test_safe_extract.py   11 个测试（路径穿越 / 盘符与反斜杠 / 类型白名单 / 体积上限）
-│   └── test_api_smoke.py      14 个测试（真起 HTTP 服务：接口 / 静态穿越 / 安全响应头 / 参数校验）
+│   ├── test_api_smoke.py      14 个测试（真起 HTTP 服务：接口 / 静态穿越 / 安全响应头 / 参数校验）
+│   ├── test_external_attacks.py 13 个测试（语料清单 sha / 口径钉死：PII 不算注入 / 离线报错）
+│   ├── test_ci_effects.py     10 个测试（副作用证据接进 CI：判拒绝却仍执行→阻断）
+│   └── test_deep_scan.py      36 个测试（分组无泄漏 / 最小对照 / 归一化 / 两段门禁 / 落点限制）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── scripts/freeze_mode_compare.py  四模式配置冻结 + 逐 case 对照
 ├── scripts/real_settlement_demo.py 5 个审批与结算验收情形

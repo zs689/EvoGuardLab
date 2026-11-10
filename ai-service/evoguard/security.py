@@ -217,6 +217,59 @@ def mode():
     return m if m in MODES else DEFAULT_MODE
 
 
+def deep_enabled():
+    """第二级（学出来的模型）是否开启：**默认关**。
+
+    来源：外部语料上正则对自然语言注入召回 0，训练了字符 n-gram 模型补齐；
+    但门禁复核显示它在没见过的业务域上误报 33%，所以只作为显式开关，
+    不默认打开（`AGENTLAB_SECURITY_DEEP=1` + `AGENTLAB_DEEP_MODEL=<path>`）。
+    真实收益与代价见 docs/detector-evolution.md。
+    """
+    return (os.environ.get("AGENTLAB_SECURITY_DEEP") or "").strip() in ("1", "true", "on")
+
+
+_DEEP_CACHE = {"path": None, "model": None}
+
+
+def deep_model():
+    """按路径懒加载模型；加载失败返回 None（不因为模型缺失就中断扫描）。"""
+    path = (os.environ.get("AGENTLAB_DEEP_MODEL") or "").strip()
+    if not path:
+        return None
+    if _DEEP_CACHE["path"] == path:
+        return _DEEP_CACHE["model"]
+    try:
+        import json as _json
+        with open(path, encoding="utf-8") as f:
+            model = _json.load(f)
+        _DEEP_CACHE.update({"path": path, "model": model})
+        return model
+    except Exception:                     # noqa: BLE001
+        _DEEP_CACHE.update({"path": path, "model": None})
+        return None
+
+
+def _deep_findings(text, where):
+    """跑第二级；只回答「这段文本像不像指令」，落点由调用方限定。"""
+    if not deep_enabled():
+        return []
+    try:
+        import deep_scan
+    except Exception:                     # noqa: BLE001
+        return []
+    model = deep_model()
+    if model is None or not deep_scan.applicable(where):
+        return []
+    r = deep_scan.classify(model, text)
+    if not r["is_injection"]:
+        return []
+    top = "、".join(x["ngram"] for x in r["evidence"][:3]) or "—"
+    return [{"code": "injection_learned", "severity": "warn",
+             "where": where, "match": top, "score": r["score"],
+             "false_positive": "模型学的是「像指令」；正常业务里的祈使句也会命中，"
+                               "所以只在 tool_output / peer_message 落点使用"}]
+
+
 def enabled():
     return mode() != MODE_OFF
 
@@ -507,6 +560,9 @@ def guard_tool_output(tool, output, where="tool_output"):
                         decision=DECISION_NONE, effect=EFFECT_NONE,
                         reason="mode=off：未扫描、未拦截")
     findings = scan(output, where)
+    if not any(f["code"].startswith("injection_") for f in findings):
+        # 一级没看到字面注入话术，交给第二级（默认关，开了才加时间）
+        findings.extend(_deep_findings(original, where))
     action = _decide(findings)
     if enforcing() and wrapping():
         body = wrap_untrusted(original, source=tool)
@@ -621,6 +677,8 @@ def guard_peer_message(from_agent, text, allowed_peers=None):
                              match=from_agent,
                              false_positive="协作拓扑配置漏写会误判为非法对端"))
     findings.extend(scan(text, "peer_message"))
+    if not any(f["code"].startswith("injection_") for f in findings):
+        findings.extend(_deep_findings(original, "peer_message"))
     action = _decide(findings)
     body = original
     wrapped = enforcing() and wrapping()

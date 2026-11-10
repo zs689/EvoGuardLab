@@ -1,0 +1,41 @@
+{
+  "by": "tool",
+  "corpus_sha256": "c17e347cf27853c1915709628fde24cba42fd6cb3a0181c7cc86af4a659f9e06",
+  "excluded_cases": 124,
+  "gate": true,
+  "model_sha256": "8f0e6b0e1ef8bbf519971b0ac81d2afa0f1d34cd884387302656823622989ea7",
+  "split": {
+    "by": "tool",
+    "composition": {
+      "test": {
+        "data_stealing|Data Security Harm": 66,
+        "data_stealing|Financial Harm": 54,
+        "data_stealing|Physical Harm": 60,
+        "direct_harm|Financial Data": 36,
+        "direct_harm|Others": 90,
+        "direct_harm|Physical Data": 66
+      },
+      "train": {
+        "data_stealing|Data Security Harm": 220,
+        "data_stealing|Financial Harm": 180,
+        "data_stealing|Physical Harm": 200,
+        "direct_harm|Financial Data": 120,
+        "direct_harm|Others": 300,
+        "direct_harm|Physical Data": 220
+      },
+      "val": {
+        "data_stealing|Data Security Harm": 66,
+        "data_stealing|Financial Harm": 54,
+        "data_stealing|Physical Harm": 60,
+        "direct_harm|Financial Data": 36,
+        "direct_harm|Others": 90,
+        "direct_harm|Physical Data": 66
+      }
+    },
+    "groups": 16,
+    "test_groups": 3,
+    "thin_strata": [],
+    "train_groups": 10,
+    "val_groups": 3
+  }
+}

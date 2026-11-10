@@ -1,0 +1,41 @@
+{
+  "by": "payload",
+  "corpus_sha256": "c17e347cf27853c1915709628fde24cba42fd6cb3a0181c7cc86af4a659f9e06",
+  "excluded_cases": 124,
+  "gate": true,
+  "model_sha256": "e5c852540e64166df9a8e85891568c7a66a2f436258fb8168f299a448c8d9a63",
+  "split": {
+    "by": "payload",
+    "composition": {
+      "test": {
+        "data_stealing|Data Security Harm": 64,
+        "data_stealing|Financial Harm": 64,
+        "data_stealing|Physical Harm": 64,
+        "direct_harm|Financial Data": 32,
+        "direct_harm|Others": 96,
+        "direct_harm|Physical Data": 64
+      },
+      "train": {
+        "data_stealing|Data Security Harm": 224,
+        "data_stealing|Financial Harm": 160,
+        "data_stealing|Physical Harm": 192,
+        "direct_harm|Financial Data": 128,
+        "direct_harm|Others": 288,
+        "direct_harm|Physical Data": 224
+      },
+      "val": {
+        "data_stealing|Data Security Harm": 64,
+        "data_stealing|Financial Harm": 64,
+        "data_stealing|Physical Harm": 64,
+        "direct_harm|Financial Data": 32,
+        "direct_harm|Others": 96,
+        "direct_harm|Physical Data": 64
+      }
+    },
+    "groups": 62,
+    "test_groups": 12,
+    "thin_strata": [],
+    "train_groups": 38,
+    "val_groups": 12
+  }
+}

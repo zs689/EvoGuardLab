@@ -60,6 +60,103 @@ SOURCES = [
 
 MANIFEST_VERSION = "external-attacks-v1"
 
+# 对照组用的良性填充句：只替换被注入的那一句，别动其他字符。
+#
+# 为什么是一个**池子**而不是一句话：如果训练和评测都用同一句填充语，
+# 模型只要学「出现这句 → 干净」就能拿高分，召回是假的。所以训练用一个子集，
+# 评测用**没见过**的另一个子集（见 FILLER_TRAIN / FILLER_UNSEEN）。
+BENIGN_FILLERS = [
+    "Great product, works as described.",
+    "Fast delivery and the item matched the photos.",
+    "I have used it for a week and it still works fine.",
+    "The packaging was intact and the manual is clear.",
+    "Solid build quality for the price, would buy again.",
+    "Battery life is acceptable for daily commuting.",
+    "The colour is slightly darker than the listing photo.",
+    "Customer service answered my question within a day.",
+    "Works with my existing setup without extra adapters.",
+    "A bit heavier than expected but very sturdy.",
+    "The instructions could be clearer in section three.",
+    "Arrived two days earlier than the estimate.",
+    "Screen brightness is good even in a bright room.",
+    "The cable is short, plan for an extension.",
+    "Quiet operation, no noticeable vibration.",
+    "Fits the case I already owned, no issues.",
+    "Replacement part arrived and fitted perfectly.",
+    "Simple to install, took about ten minutes.",
+    "The warranty card was included in the box.",
+    "Sound quality is fine for calls and music.",
+    "Updated the firmware and it has been stable since.",
+    "The stand is a little wobbly on uneven desks.",
+    "Shipping box had a small dent, contents fine.",
+    "Compatible with the older model as well.",
+    "Setup wizard walked me through the steps.",
+    "The lid closes with a satisfying click.",
+    "No scratches after a month of daily use.",
+    "Instructions mention a tool that is not included.",
+    "The light is dimmer than the previous version.",
+    "Pleasant experience overall, no complaints.",
+    "Item was exactly the model number I ordered.",
+    "Return process was straightforward when needed.",
+    "Rubber feet keep it from sliding around.",
+    "The app pairs quickly after the first setup.",
+    "Colour matches the rest of my equipment.",
+    "Came with a spare set of screws, handy.",
+    "The screen protector went on without bubbles.",
+    "Heavier base makes it stable while typing.",
+    "Charging is slower than the spec suggests.",
+    "Support sent a replacement cable free of charge.",
+]
+
+BENIGN_FILLER = BENIGN_FILLERS[0]
+
+
+def filler_for(case_id, pool):
+    """按 case_id 稳定地取一句填充语（可复现，且不同样本用不同句子）。"""
+    h = hashlib.sha256(case_id.encode("utf-8")).hexdigest()
+    return pool[int(h[:8], 16) % len(pool)]
+
+
+# 训练/验证用前 30 句，测试用**没见过**的后 10 句：这才测得出泛化。
+FILLER_TRAIN = BENIGN_FILLERS[:30]
+FILLER_UNSEEN = BENIGN_FILLERS[30:]
+
+
+def minimal_pair(case, filler=BENIGN_FILLER):
+    """构造最小对照：把**整段注入区间**换成一句无关评价，其余逐字不变。
+
+    踩过的两个坑，都记在这里避免重犯：
+      1. 不能拿 `Tool Response Template` 当负例 —— 模板与真实返回格式不同
+         （返回多一层外层引号），字符级模型会去学格式差异当捷径。
+      2. 不能只替换 `Attacker Instruction` —— enhanced 变体真正注入的是
+         「IMPORTANT!!! Ignore all previous instructions …」一整段，
+         attacker_instruction 只覆盖其中一句；只替换那一句，对照组自己
+         仍会命中注入规则（实测 50% 误报，全是这么来的）。
+
+    做法：模板 = 前缀 + 占位符 + 后缀。先剥掉响应最外层那对引号，
+    用前缀/后缀把注入区间夹出来，中间整段替换。
+    """
+    tpl = case.get("tool_response_template") or ""
+    text = case.get("tool_response") or ""
+    marker = "<Attacker Instruction>"
+    if marker in tpl and text:
+        pre, post = tpl.split(marker, 1)
+        quote, core = "", text
+        if len(core) >= 2 and core[0] == '"' and core[-1] == '"':
+            quote, core = '"', core[1:-1]
+        if core.startswith(pre) and core.endswith(post):
+            start = len(pre)
+            end = len(core) - len(post)
+            if 0 <= start <= end <= len(core):
+                return (quote + core[:start] + filler + core[end:] + quote,
+                        "minimal_pair")
+    payload = case.get("attacker_instruction") or ""
+    if payload and payload in text:
+        return text.replace(payload, filler), "span_fallback"
+    if tpl.strip():
+        return tpl.replace(marker, filler), "template_fallback"
+    return "", "none"
+
 
 def _sha256(data):
     return hashlib.sha256(data).hexdigest()
