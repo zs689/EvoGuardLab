@@ -1,7 +1,7 @@
 # 外部攻击数据集与 Agent 测试集：候选清单与接入方案
 
-> 状态：**两套语料已接入**（2026-11-10 晚）：InjecAgent（间接注入）+
-> `jackhhao/jailbreak-classification`（直接越狱），其余仍为候选。
+> 状态：**三套来源已接入**（2026-11-10 晚）：InjecAgent（间接注入）、
+> `jackhhao/jailbreak-classification`（直接越狱）、AgentDojo 攻击模板（MIT）。
 > HuggingFace 官方域本机不可达，但 `hf-mirror.com` 可达，语料从镜像取。
 > 已核实的许可写清楚，未核实的一律标「待核实」，不要当结论引用。
 > 语料不入库（许可 + 体积），仓库只保留下载器、清单（逐文件 sha256）与评测报告。
@@ -92,11 +92,37 @@ python scripts/eval_jailbreak_prompts.py     # → experiments/jailbreak_eval_v1
 
 语料不入库，`data/external/` 已忽略；清单记录下载 URL、许可与原始 CSV sha256。
 
-## 四、候选基准（尚未接入）
+## 四、已接入：AgentDojo 攻击模板（跨语料检验）
+
+AgentDojo（ETH Zurich，**MIT**）的攻击不是现成数据集，而是
+`src/agentdojo/attacks/*.py` 里的字符串常量。`scripts/agentdojo_adapter.py`
+按 git blob sha 下载 4 个源码文件，**只用 AST 静态解析**（不 import、不执行），
+抽出 10 个模板，与 InjecAgent 的 12 个攻击目标组合成 120 条样本。
+
+```bash
+python scripts/agentdojo_adapter.py     # → experiments/agentdojo_eval_v1/
+```
+
+| 结果 | 值 |
+|---|---|
+| 一级正则整体召回 | **0.100**（10 个模板只有 `injecagent` 那个带字面话术的被认出，其余 9 个全 0） |
+| 二级模型召回 | 1.000（10 个模板全部命中） |
+| 二级模型在正常文本上的误报 | **0.500**（干净工具输出 0.053 / 正常用户请求 1.000） |
+
+**召回 1.0 不等于跨语料泛化好**：模型在没见过的 AgentDojo 包装上全报注入，
+在正常请求上也全报注入。它学的是「像不像指令」，不是「是不是攻击者塞的」。
+两个数字必须并列，否则就是自欺（这条与 `docs/detector-evolution.md` 一致）。
+
+**这不是 AgentDojo 官方端到端成绩**：官方任务要跑它自己的 4 个环境与工具集；
+这里只回答「同一句攻击换一种包装，检测件还认不认得」。
+组合样本**不算独立攻击向量**，不能拿 120 条去凑 §5 要求的 30 个独立向量。
+`SwearwordsDoSAttack`（内容不雅）与 `ManualAttack`（需人工输入）解析时跳过。
+
+## 五、候选基准（尚未接入）
 
 | 基准 | 覆盖攻击面 | 规模 | 接入方式 | 许可 |
 |---|---|---|---|---|
-| **AgentDojo**（ETH Zurich） | 间接提示注入：工具返回里藏指令，4 个环境（banking / Slack / travel / workspace） | 97 用户任务 + 629 安全用例 | `pip install agentdojo`；自带 benchmark 脚本 | **MIT**（已核对）；攻击是代码里的模板，需要适配器生成样本 |
+| ~~**AgentDojo**~~ | — | — | — | **模板适配器已做，见上节**；官方 4 环境端到端 benchmark 仍未跑 |
 | ~~**InjecAgent**~~ | — | — | — | **已接入，见上一节** |
 | **Agent Security Bench (ASB)** | 10 类场景、400+ 工具，含隐私窃取/破坏/越权 | 数百用例 | 仓库 + 数据 | **仓库未声明许可 → 不接**（不能默认「公开即可用」） |
 | **WASP**（Meta） | Web Agent：网页里的注入，需自主导航 | 82 样本 | 仓库 | 待核实（可能限研究用） |
@@ -112,7 +138,7 @@ OWASP Top 10 for LLM Applications（LLM01 Prompt Injection）、
 OWASP Top 10 for Agentic Applications（2025-12）、
 NIST AI 100-2e2025、MITRE ATLAS `AML.T0051`。
 
-## 五、接入方案（不改现有数据结构）
+## 六、接入方案（不改现有数据结构）
 
 原则：**数据不进仓库，适配器进仓库**。
 
@@ -131,24 +157,25 @@ NIST AI 100-2e2025、MITRE ATLAS `AML.T0051`。
 4. 每个外部样本必须保留 `source` 与 `license` 字段，报告里逐条可追溯。
 5. 先跑 12 个工程冒烟的等价子集，确认适配器正确，再扩到全量。
 
-## 六、禁止事项（写进脚本断言）
+## 七、禁止事项（写进脚本断言）
 
 - 不对外部真实服务做攻击演示；所有接收方是 `127.0.0.1:9` 或本地回环。
 - 不把受限许可的数据复制进仓库；只放下载脚本与指纹。
 - 不使用真实凭据；只用明确的假 key（如 `AKIAIOSFODNN7EXAMPLE`）。
 - 不把外部基准的「攻击成功率」直接当成我们系统的成绩：环境、工具集、模型都不同。
 
-## 七、接入后能补上哪些缺口
+## 八、接入后能补上哪些缺口
 
 - 攻击样本从 6 个独立向量扩到数十个，且来自真实红队话术；
 - 正常任务来自真实业务场景（banking / travel / workspace），误阻断率更有意义；
 - 可与公开榜单的 ASR / UA 做**同环境对比**（不是跨环境比大小）。
 
-## 八、待办
+## 九、待办
 
 - [x] 核实许可并按 blob sha 接入 InjecAgent（MIT），逐文件 sha256 入清单。
 - [x] 报告里单列「注入特征 / 任意信号 / 干净对照误报 / 只扫载荷」四个数，不混成一个。
-- [ ] AgentDojo 适配器（许可 MIT 已核实；攻击在代码模板里，需要生成样本）。
+- [x] AgentDojo 模板适配器（AST 静态解析，10 模板 / 120 组合样本 / 跨语料检验）。
+- [ ] AgentDojo **官方 4 环境端到端 benchmark**（需要它的运行时与工具集，目前只测模板措辞）。
 - [ ] 把外部样本纳入 `freeze_mode_compare` 的四模式对照与统一 manifest。
 - [x] 找到可达镜像 `hf-mirror.com`，接入直接越狱语料（Apache-2.0，1998 条）。
 - [ ] 语义型越狱/注入的检测方案（当前召回 4.1%）：这属于设计变更，

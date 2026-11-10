@@ -1152,3 +1152,43 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
 - CI 也接上了 `security_effects`：`decision=deny/encode/wrap` 而 `executed=1` 一律阻断。
 - 仍不成立：模型**未发布**（误报 6%/33%）；中文注入没样本；AgentDojo 未接。
 
+## 2026-11-10 晚：启动本地模型、找到 HF 镜像、接 AgentDojo
+
+### 本地 Ollama
+
+- `ollama` 在 `F://ollama//ollama.exe`，模型在 `F://Qwen3`（`OLLAMA_MODELS` 已指向）。
+  `ollama serve` 启动后 `qwen3:4b` 可用。
+- 之前 11434 的 502 是 **HTTP 代理拦截**：`NO_PROXY=127.0.0.1,localhost` 绕过即可，
+  不是服务没起。`check_model.py` 与模型输出都验证通过。
+- `--followup real` 修了一个真 bug：provider 开了 JSON grammar，旧 prompt 却要
+  自由文本，模型只能把输入复述成 JSON、启发式全读成 KEEP，还有 3 次 token repeat 500。
+  改为显式 JSON + 结构化解析，解析不了标 parse_error 记 N/A。重跑 **8/8 observed，全 KEEP**。
+  报告如实写「只有工具返回注入那组向量触发模型、共 8 条 case」。
+- 产物：`experiments/defense_demo_real_20261110/`；`tests/test_real_followup.py` 11 项。
+
+### HuggingFace 镜像与直接越狱语料
+
+- `huggingface.co` 不可达，**`hf-mirror.com` 可达**。Gandalf 在 HF 上没有官方公开仓库，
+  改用 `jackhhao/jailbreak-classification`（**Apache-2.0**）1998 条（666 越狱 / 1332 正常）；
+  `TrustAIRLab/in-the-wild-jailbreak-prompts`（MIT）列为候选（parquet、内容高度重叠）。
+- 入口 `guard_input`，召回/误报分开报：**越狱召回 0.041**、正常误报 0.004 —
+  真实用户写的语义型越狱正则几乎抓不到，是重要负结果。
+- 二级模型明确不适用于 `user_input`（16/16 正常请求被判注入）。
+- 产物：`experiments/jailbreak_eval_v1/`；`tests/test_jailbreak_prompts.py` 10 项。
+
+### AgentDojo 模板适配器
+
+- 按 git blob sha 取 4 个攻击源码文件，**AST 静态解析**（不 import、不执行），
+  抽出 10 个模板 × 12 个 InjecAgent 目标 = 120 条组合样本。
+- 一级正则整体召回 **0.100**（只有带字面话术的 `injecagent` 模板被认出）；
+  二级模型召回 1.000，但正常文本误报 **0.500**（干净工具输出 0.053 /
+  正常用户请求 1.000）→ 召回 1.0 不等于泛化好，两数必须并列。
+- 明确：不是 AgentDojo 官方端到端成绩；组合样本不算独立攻击向量。
+- 产物：`experiments/agentdojo_eval_v1/`；`tests/test_agentdojo_adapter.py` 12 项。
+
+### 状态
+
+- 全量回归 **574 项全绿**。
+- 仍未做：官方 AgentDojo 4 环境 benchmark、语义型攻击检测方案、中文注入样本，
+  以及用户指定「最后做」的 30+30 扩样 / 每格≥3 任务 / 阈值版本登记 / 跨 Agent 迁移 / 多 seed。
+
