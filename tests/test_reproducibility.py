@@ -88,6 +88,29 @@ class TestReproducibleArtifacts(unittest.TestCase):
         self.assertIn("<masked>", text)
         self.assertIn("127.0.0.1:<port>", text, "回环端口未脱敏")
 
+    def test_e02_e03_and_label_registry_are_byte_identical(self):
+        """E02 家族划分、E03 检索反例、外部标注清单：都不许有随机成分。"""
+        cases = [("conditional_skill_eval.py",
+                  ["manifest.json", "report.md", "results.json"]),
+                 ("experience_scope_demo.py", ["demo.json", "report.md"]),
+                 ("build_external_label_registry.py",
+                  ["protocol.md", "registry.json"]),
+                 ("eval_labeled.py", ["report.md", "result.json"])]
+        for script, expect in cases:
+            outs = [tempfile.mkdtemp(prefix="repro_a_"),
+                    tempfile.mkdtemp(prefix="repro_b_")]
+            for o in outs:
+                _run(script, o)
+            first, second = (_files(o) for o in outs)
+            self.assertEqual(first, second, "%s 两次产物清单不同" % script)
+            self.assertTrue(first, "%s 没产出任何文件" % script)
+            if expect:
+                self.assertEqual(sorted(first), sorted(expect), script)
+            for name in first:
+                self.assertEqual(_read(os.path.join(outs[0], name)),
+                                 _read(os.path.join(outs[1], name)),
+                                 "%s/%s 两次内容不同" % (script, name))
+
     def test_no_absolute_out_dir_leaks_into_artifacts(self):
         """产物不能内嵌输出目录，否则换个目录就不可比。"""
         out = tempfile.mkdtemp(prefix="repro_leak_")

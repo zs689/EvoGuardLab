@@ -29,7 +29,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（456 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 7 可复现性）
+# 2) 回归测试（468 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -667,7 +667,8 @@ EvoGuardLab/
 │   ├── test_edge_cases.py     34 个测试（边界与非法状态迁移 / off 档不判 / 待批票复用 / 账本冲突）
 │   ├── test_guard_fuzz.py      8 个测试（固定 seed 模糊 / 六字段契约恒成立 / effect 不许虚报）
 │   ├── test_untrusted_input.py 14 个测试（技能候选 / CI 策略 / 契约参数的畸形输入）
-│   └── test_reproducibility.py 7 个测试（同配置重跑逐字节一致 / 汇总等于逐条之和）
+│   ├── test_reproducibility.py 8 个测试（同配置重跑逐字节一致 / 汇总等于逐条之和）
+│   └── test_safe_extract.py   11 个测试（路径穿越 / 盘符与反斜杠 / 类型白名单 / 体积上限）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── scripts/freeze_mode_compare.py  四模式配置冻结 + 逐 case 对照
 ├── scripts/real_settlement_demo.py 5 个审批与结算验收情形
