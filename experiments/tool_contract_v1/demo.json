@@ -105,7 +105,7 @@
         "total.max_amount"
       ],
       "reasons": [
-        "total.max_amount 不合规（上限：10000.0）"
+        "total.max_amount 不合规（上限：10000.0；金额必须是有限非负数）"
       ],
       "regex_only": false,
       "structural_only": true,

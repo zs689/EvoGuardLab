@@ -55,13 +55,50 @@ def load_policy(path):
     return merged
 
 
+# 类型不对就按更严格的一侧取值：策略文件写错不该变成「悄悄放行」。
+_STRICT_BOOL = {
+    "allow_limited": False, "allow_unknown": False, "review_on_risk": False,
+    "block_on_input_load_failure": True, "require_security_coverage": True,
+    "require_all_dimension_coverage": True,
+}
+
+
+def _normalize(p):
+    """校验策略字段类型，返回 (策略, 问题列表)。问题只影响 ci_action。"""
+    out = dict(p)
+    problems = []
+    for key in ("allow_verdicts", "allow_missing_config"):
+        v = out.get(key)
+        if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+            problems.append("策略字段 %s 必须是字符串列表（当前 %r）" % (key, v))
+            out[key] = []
+    for key in _STRICT_BOOL:
+        if not isinstance(out.get(key), bool):
+            problems.append("策略字段 %s 必须是布尔值（当前 %r）"
+                            % (key, out.get(key)))
+            out[key] = _STRICT_BOOL[key]
+    if not isinstance(out.get("version"), int):
+        problems.append("策略字段 version 必须是整数")
+        out["version"] = int(DEFAULT_POLICY["version"])
+    if not isinstance(out.get("protocol"), str):
+        problems.append("策略字段 protocol 必须是字符串")
+        out["protocol"] = DEFAULT_POLICY["protocol"]
+    return out, problems
+
+
 def evaluate(data, policy=None, load_failures=0):
     """返回流水线决策。**不修改** data 里的报告判定。"""
     p = dict(DEFAULT_POLICY)
     p.update(policy or {})
+    p, policy_problems = _normalize(p)
     reasons = []
     action = "pass"
     v = data.get("verdict")
+
+    if policy_problems:
+        # 策略本身不可信：先阻断，再谈判定。列全问题，便于定位。
+        action = "block"
+        reasons.extend("策略格式非法：%s" % x for x in policy_problems)
 
     def _block(reason):
         nonlocal action
@@ -98,9 +135,15 @@ def evaluate(data, policy=None, load_failures=0):
         _block("未知的报告判定 %r" % v)
 
     # 关键安全规则不可评：要求补配置或人工复核，不能静默通过。
-    dim_cov = data.get("dimension_coverage", {})
-    sec = dim_cov.get("security", {})
-    if p["require_security_coverage"] and sec and not sec.get("coverage_ok", False):
+    raw_cov = data.get("dimension_coverage")
+    dim_cov = raw_cov if isinstance(raw_cov, dict) else {}
+    raw_sec = dim_cov.get("security")
+    sec = raw_sec if isinstance(raw_sec, dict) else {}
+    if p["require_security_coverage"] and not sec:
+        # 连维度覆盖都没有，就无从确认安全规则是否可评；不能当成「没问题」。
+        _block("缺少安全维度覆盖信息（dimension_coverage 缺失或格式非法），"
+               "无法确认关键安全规则是否可评")
+    elif p["require_security_coverage"] and not sec.get("coverage_ok", False):
         missing = sec.get("missing_config") or []
         # 只有「缺失项明确、且逐项在允许清单内、且没有规则被跳过」才允许人工复核；
         # 连原因都列不出来的覆盖不足必须阻断，不能静默放行。
@@ -114,7 +157,7 @@ def evaluate(data, policy=None, load_failures=0):
 
     if p["require_all_dimension_coverage"]:
         for name, c in dim_cov.items():
-            if c and not c.get("coverage_ok", False):
+            if isinstance(c, dict) and not c.get("coverage_ok", False):
                 _review("%s 维度覆盖不足，需人工确认" % name)
 
     # 输入解析失败或被截断：明确失败，列出未检查范围。
@@ -132,6 +175,7 @@ def evaluate(data, policy=None, load_failures=0):
         "block_pipeline": action == "block",
         "exit_code": 3 if action == "block" else 0,
         "reasons": reasons,
+        "policy_problems": policy_problems,
         "policy_fingerprint": fingerprint(p),
         "policy_rationale": POLICY_RATIONALE,
         "note": "报告判定与流水线是否阻断分开保存；退出码 0 不等于全面安全，"

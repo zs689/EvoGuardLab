@@ -31,6 +31,19 @@
 状态在 SQLite 里，不在内存：关掉 `Store` 再重开，`resume(run_id)` 能读回检查点、
 pending 与 approved；**恢复只还原状态，不自动继续写操作**。
 
+**待批票不重复开**：同一 `run_id` + 工具 + 参数摘要重试时，复用已有的 `pending`
+票并返回同一个 `request_id`；若这期间权限/契约指纹变了，旧票标 `expired`
+（原因写「权限/工具契约已变更，待批票作废」）再开新票。理由很实际：
+不这么做，Agent 每重试一次就多一张同一操作的票，人工面对一堆票不知道该批哪张。
+
+## 一（补）、结算账本的幂等键
+
+`settlement_ledger` 以 `idempotency_key` 为主键，同键同内容只落一笔。
+**同键不同内容不再静默通过**：金额（浮点按 `1e-6` 比）或订单号不一致时抛
+`E_LEDGER_CONFLICT`（`LedgerConflict`），并写明两次的订单与金额。
+原因：`INSERT OR IGNORE` 会把「同一个键、金额被改过」当成「已结过」返回，
+金额类书证最怕这种静默覆盖。
+
 ## 二、统一执行门禁
 
 `runtime.Ctx` 新增可选 `approval_gate`。挂上之后，`Ctx.call` 对

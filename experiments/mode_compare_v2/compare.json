@@ -246,7 +246,7 @@
     },
     "output_sink": "api/app.py: encode_for(html) + CSP/nosniff；本演示只核验 guard 返回值是否真的被采用",
     "code_fingerprint": {
-      "ai-service/evoguard/security.py": "1ae688540d98e7a5f41203c8ba52d5aee90a829ac882630be45608da192ca63c",
+      "ai-service/evoguard/security.py": "6aead116acf7a00803f7ed5fdbb16db31c95c995586c665c947a346ee628ac06",
       "ai-service/evoguard/runtime.py": "6b661865d330b0558183aa072832af894f4af99826afe22f19b349c04ca8687c",
       "scripts/defense_demo.py": "0983f7be5cc5b492f271658720883b1c78d09a2e3a7b9b480d5082bacf6528a0",
       "scripts/freeze_mode_compare.py": "a9a64332de88f54678326a11ff1f366996cdc67aa4ba02ff634b262b0e7de771"

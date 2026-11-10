@@ -137,7 +137,7 @@ def validate_schema(skill):
 
 
 def validate_permissions(skill, policy):
-    """技能声明的工具必须是事先冻结策略的子集；不得声明写工具。"""
+    """技能声明的工具必须是事先冻结策略的子集；不得声明写/外副作用工具。"""
     errors = []
     allowed = set(policy.get("allowed_tools") or [])
     tools = set(skill.get("allowed_tools") or [])
@@ -145,6 +145,15 @@ def validate_permissions(skill, policy):
     if extra:
         errors.append("技能越权声明工具：%s" % sorted(extra))
     write = set(policy.get("write_tools") or ())
+    # 策略没写 write_tools 不等于没有写工具：再核一遍冻结契约的副作用声明，
+    # 否则「漏配一个字段」就能让声明式技能拿到写/外发权限。
+    try:
+        import tool_contract as _tc
+        for name, c in _tc.DEFAULT_CONTRACTS.items():
+            if (c.get("side_effect") or "") in ("write", "external", "arbitrary"):
+                write.add(name)
+    except Exception:                        # noqa: BLE001
+        write &= set(policy.get("write_tools") or ())
     if tools & write:
         errors.append("技能不得声明写工具 %s（写操作必须走审批门禁）"
                       % sorted(tools & write))
@@ -153,6 +162,8 @@ def validate_permissions(skill, policy):
 
 def accept(skill, policy):
     """模型提出候选 → 外部执行器校验。不合规直接抛 SkillRejected。"""
+    if not isinstance(skill, dict):
+        raise SkillRejected(["技能必须是对象（收到 %s）" % type(skill).__name__])
     errors = validate_schema(skill) + validate_permissions(skill, policy)
     if errors:
         raise SkillRejected(errors)

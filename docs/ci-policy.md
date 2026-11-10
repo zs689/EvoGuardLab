@@ -70,6 +70,14 @@ python -m evoguard_inspect.cli \
 `require_all_dimension_coverage` / `allow_missing_config`。
 策略改动会改变 `policy_fingerprint`，便于审计。
 
+**策略文件本身不可信时先阻断**：字段类型不对（`allow_verdicts: null`、
+`allow_limited: "false"`、`require_all_dimension_coverage: "yes"`、`version: "1"`）
+按更严格的一侧取值并直接 `block`，问题逐条写进 `policy_problems`；
+`ci_decision.json` 里新增该字段便于定位。理由：策略写错不该变成「悄悄放行」，
+旧实现在 `allow_verdicts: null` 上会抛 `TypeError`。
+同理，报告里**没有** `dimension_coverage`（或格式非法）时也阻断——
+连覆盖信息都没有，就无从确认关键安全规则是否可评，不能当成没问题。
+
 **一个刻意补的漏洞**：`coverage_ok=False` 却列不出具体缺失项时，
 旧逻辑会因为「空列表全都在允许清单里」而放行复核；现在只有
 「缺失项明确、逐项在允许清单、且没有规则被跳过」才允许复核，否则阻断。

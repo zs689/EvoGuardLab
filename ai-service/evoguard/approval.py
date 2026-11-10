@@ -66,6 +66,15 @@ class ApprovalDenied(core.ApiError):
         self.reason = reason
 
 
+class LedgerConflict(core.ApiError):
+    """幂等键相同、内容不同：不能当成「已结过」放过去。"""
+
+    def __init__(self, idempotency_key, reason):
+        super().__init__("E_LEDGER_CONFLICT", reason, 409)
+        self.idempotency_key = idempotency_key
+        self.reason = reason
+
+
 def canonical(value):
     """规范化：去字符串首尾空白、浮点定精度、字典键排序。
 
@@ -212,7 +221,19 @@ class ApprovalGate:
                     "checkpoint_id": r["checkpoint_id"],
                     "idempotency_key": r["idempotency_key"]}
 
-        # 没有可复用审批：暂停、存检查点、抛可定位的异常。
+        # 没有可复用审批：先看有没有同一操作的待批票，有就复用，别越堆越多。
+        with self.store.conn() as c:
+            pend = [dict(r) for r in c.execute(
+                "SELECT * FROM approval_requests WHERE run_id=? AND tool=? "
+                "AND args_digest=? AND status=? ORDER BY created_at DESC",
+                (run_id, tool, ad, PENDING))]
+        for r in pend:
+            if r["policy_digest"] and r["policy_digest"] != pd:
+                # 权限/契约变了，旧待批票不能再被批准，先作废再重开。
+                self._set(r["id"], EXPIRED, "权限/工具契约已变更，待批票作废")
+                continue
+            return self._raise(r["id"], tool, r["checkpoint_id"])
+
         if checkpoint_id is None:
             cp = self.store.latest_checkpoint(run_id)
             checkpoint_id = cp["id"] if cp else None
@@ -315,8 +336,23 @@ class SettlementLedger:
 
     def settle(self, idempotency_key, *, run_id, order_id, total,
                rule_version, payload=None):
+        """幂等结算：同键同内容只落一笔；同键不同内容视为冲突，不静默通过。"""
         now = core.now()
+        total = float(total)
         with self.store.conn() as c:
+            prev = c.execute(
+                "SELECT * FROM settlement_ledger WHERE idempotency_key=?",
+                (idempotency_key,)).fetchone()
+            if prev is not None:
+                same_total = abs(float(prev["total"]) - total) < 1e-6
+                if prev["order_id"] != order_id or not same_total:
+                    raise LedgerConflict(
+                        idempotency_key,
+                        "幂等键 %s 已用于另一笔结算（订单 %s/金额 %s），"
+                        "本次为订单 %s/金额 %s：金额或订单不一致，拒绝静默覆盖"
+                        % (idempotency_key, prev["order_id"], prev["total"],
+                           order_id, total))
+                return False, dict(prev)
             cur = c.execute(
                 "INSERT OR IGNORE INTO settlement_ledger("
                 "idempotency_key,run_id,order_id,total,rule_version,created_at,payload) "

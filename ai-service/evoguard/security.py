@@ -607,6 +607,13 @@ def guard_tool_args(agent_type, tool, args, where="tool_call"):
 
 def guard_peer_message(from_agent, text, allowed_peers=None):
     """Agent 间消息：先查对端身份，再当不可信数据扫描。"""
+    original = _text(text)
+    if not enabled():
+        # off 必须对其他守卫一样彻底关闭，否则「对照档」在 A2A 路径上仍在检测，
+        # 四档对比就不是同一件事被关掉了。
+        return contract({"text": original, "findings": [], "action": "none"},
+                        decision=DECISION_NONE, effect=EFFECT_NONE,
+                        reason="mode=off：未校验对端、未扫描")
     findings = []
     deny = check_peer(from_agent, allowed_peers)
     if deny:
@@ -615,7 +622,6 @@ def guard_peer_message(from_agent, text, allowed_peers=None):
                              false_positive="协作拓扑配置漏写会误判为非法对端"))
     findings.extend(scan(text, "peer_message"))
     action = _decide(findings)
-    original = _text(text)
     body = original
     wrapped = enforcing() and wrapping()
     if wrapped:

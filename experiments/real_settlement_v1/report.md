@@ -3,6 +3,8 @@
 > 由 `scripts/real_settlement_demo.py` 生成；每个情形用独立临时库。
 > 通过 5 / 5
 
+> 审批 id 与回环端口是运行时地址，已脱敏为 `appr_<masked>` / `127.0.0.1:<port>`，目的是让本文件可逐字节重跑；脱敏不影响任何结论。
+
 ## 结果
 
 | 情形 | 结果 | 说明 |
@@ -19,8 +21,8 @@
 
 ```json
 {
-  "request_id": "appr_39a8887dfe21",
-  "checkpoint_id": "ckpt_18211db5519b",
+  "request_id": "appr_<masked>",
+  "checkpoint_id": "ckpt_<masked>",
   "status": "pending",
   "ledger_rows": 0,
   "tool_executed": false
@@ -43,7 +45,7 @@
 
 ```json
 {
-  "http_source": "http://127.0.0.1:60031/order/A1001",
+  "http_source": "http://127.0.0.1:<port>/order/A1001",
   "rules_path": "tests\\fixtures\\settlement_rules.json",
   "rule_version": "rules-v1",
   "compute": {

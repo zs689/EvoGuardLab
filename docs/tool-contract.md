@@ -26,7 +26,12 @@
 
 每次 `authorize()` 逐项产出 `checks`（`field / rule / value / ok / detail`），
 失败项给出 `reasons`。`enforce` 下失败 → `deny`；`audit` 下 → `report`（不拦但留原因）；
-`off` 下不启用。
+`off` 下**一项都不查**，直接 `allow` 并置 `detection=False`，`note` 写明
+「allow 只表示没拦，不代表调用合规」—— 对照档必须是真关掉，否则四档对比不成立。
+未登记的模式名按 `audit` 处理，不能静默变成放行。
+
+金额检查要求**有限非负数**：`NaN`、`±inf`、负数一律不合规。
+原因很直白——`float('-inf') <= 10000` 为真，只比上限会被负无穷绕过去。
 
 ## 两个必须成立的反例
 

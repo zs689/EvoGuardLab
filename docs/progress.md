@@ -1007,7 +1007,62 @@ E02 在**独立任务家族**上证明增量：建 train / dev / validation / te
 - ❌「外部攻击已覆盖」：只做了清单与接入方案，一个外部样本都没接。
 - ❌「可发布即生产可用」：README 已写明不是 WAF / 沙箱 / 真实准确率。
 
+## 2026-11-10 边界测试与入口硬化（第四轮）
 
+正常路径的 393 项测试全绿，不代表边界分支没洞。这一轮专门打异常路径：
+新增 4 个测试文件（63 项），过程中查出并修掉 6 个真问题。
 
+### 新增测试
 
+| 文件 | 项数 | 打的是什么 |
+|---|---|---|
+| `tests/test_edge_cases.py` | 34 | 非法状态迁移、空/缺字段、off 档不判定、账本与票据边界 |
+| `tests/test_guard_fuzz.py` | 8 | 固定 seed 模糊（危险串 / 畸形串 / 嵌套 / 代理字符 / NaN），四档全跑 |
+| `tests/test_untrusted_input.py` | 14 | 技能候选、CI 策略、契约参数这些「来源不可信」的输入 |
+| `tests/test_reproducibility.py` | 7 | 同配置重跑逐字节一致；汇总数必须等于逐条之和 |
+
+模糊测试守的是三条铁律：六字段执行契约必须齐全、`decision` 只能是登记取值、
+`executed=True` 必须对应真的改了正文的 effect（不许空口说拦住了）。
+
+### 查出并修掉的问题
+
+1. **`guard_peer_message` 不认 off 档** —— 其余四个守卫都先查 `enabled()`，只有
+   它在 off 下照样查对端、照样扫消息。四档对比里 A2A 路径的「对照档」其实还在检测，
+   等于少关了一半。已补齐，与其它守卫一致。
+2. **待批票会越堆越多** —— 同一 run/工具/参数重试一次就新开一张 pending 票，
+   人工面对 N 张同一个操作的票。改成复用同参数的待批票；权限/契约漂移时把旧票
+   标 `expired`（写明原因）再重开，不复用。
+3. **结算账本幂等键冲突被静默吞掉** —— `INSERT OR IGNORE` 让「同键不同金额/不同订单」
+   的第二次提交直接返回「已结过」。金额类书证不能被静默覆盖：现抛
+   `LedgerConflict`，并在同键同内容（浮点按 1e-6 比）时照旧只落一笔。
+4. **`tool_contract` 的 off 档仍在判定** —— off 下结构化检查照跑、失败给 `report`，
+   对照档不是真对照。改为 off 直接 `allow` + `detection=False`，并在 note 里写明
+   「allow 只表示没拦，不代表合规」。
+5. **金额上限能被 `-inf` 绕过** —— `float('-inf') <= 10000` 为真，负无穷金额过检。
+   改为要求有限非负数（NaN / ±inf / 负数一律不合规），detail 文案同步。
+6. **不可信输入的崩溃点** —— 技能候选不是对象时 `accept` 抛 `AttributeError`
+   （`None.get`）而不是 `SkillRejected`；CI 策略里 `allow_verdicts: null` 抛
+   `TypeError`；`dimension_coverage` 为 null 时 `evaluate` 崩溃。现在：
+   技能非对象直接 `SkillRejected`；策略字段类型不对按更严一侧取值并**阻断**
+   （新增 `policy_problems` 字段），缺维度覆盖信息也阻断而不是当没问题。
+   另外技能声明写工具时，除策略 `write_tools` 外再核一遍冻结契约的副作用声明
+   —— 漏配一个字段不该成为拿到写/外发权限的缺口。
+
+### 顺带修的可复现性
+
+- `real_settlement_v1` 的产物里混着随机审批 id 与内核分配的回环端口，两次运行
+  不可能一样。报告与 json 统一脱敏为 `appr_<masked>` / `127.0.0.1:<port>`，
+  并在报告里写明「脱敏不影响任何结论」。现在这条链也纳入了「逐字节重跑一致」的测试。
+
+### 冻结产物变化
+
+- `experiments/mode_compare_v2/`：只有 `security.py` 的 code_fingerprint 变了，**指标逐项不变**。
+- `experiments/tool_contract_v1/demo.json`：只有一条 detail 文案（金额规则说明）变了，判定不变。
+- `experiments/real_settlement_v1/`：id/端口脱敏，5 个情形仍 5/5 通过。
+- `experiments/defense_demo_v2/`、`experiments/ablation_v1/`：与提交版**逐字节相同**。
+
+### 状态
+
+- 全量回归 **456 项全绿**。
+- 仍不成立：外部攻击样本一个都没接；CI 策略还没读 `security_effects` 表做独立核验。
 

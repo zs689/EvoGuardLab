@@ -14,6 +14,7 @@
 刻意独立成模块，不改 security.guard_tool_args 的默认行为（351 项回归可比）。
 """
 import json
+import math
 import os
 import re
 import sys
@@ -129,11 +130,14 @@ def _checks(agent, tool, args, contract, policy):
     if key:
         cap = contract.get("max_amount")
         try:
-            ok = cap is not None and float(amount) <= float(cap)
+            val = float(amount)
+            # NaN/-inf 用比较会被「<=」放过去；负数金额本身也不合法。
+            ok = (cap is not None and math.isfinite(val) and val >= 0
+                  and val <= float(cap))
         except (TypeError, ValueError):
             ok = False
         add(key, "max_amount", amount, ok,
-            "上限：%s" % ("N/A" if cap is None else cap))
+            "上限：%s；金额必须是有限非负数" % ("N/A" if cap is None else cap))
 
     # 5) 资源 ID 格式
     key, rid = _find(args, RESOURCE_KEYS)
@@ -166,12 +170,21 @@ def authorize(agent, tool, args, *, mode="audit", contracts=None,
     table = contracts or DEFAULT_CONTRACTS
     pol = policy or {"allowed_tools": [], "write_tools": ["order.settle"]}
     contract = table.get(tool)
+    if mode not in ("off", "audit", "enforce"):
+        mode = "audit"        # 未知模式按默认档处理，不能静默变成放行
     result = {
         "version": CONTRACT_VERSION, "agent": agent, "tool": tool,
         "mode": mode, "contract_known": contract is not None,
         "policy_digest": policy_digest_value,
         "checks": [], "regex_signals": [], "decision": "allow", "reasons": [],
     }
+    if mode == "off":
+        # 对照档：不做检测、不下判定。allow 只表示「没拦」，不表示「合规」。
+        result["detection"] = False
+        result["note"] = ("off 为对照档，未执行任何结构化检查；"
+                          "allow 仅表示未拦截，不代表调用合规")
+        return result
+    result["detection"] = True
     if contract is None:
         result["checks"] = [{"field": "tool", "rule": "known_contract",
                              "value": tool, "ok": False,

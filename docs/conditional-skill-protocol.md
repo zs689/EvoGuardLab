@@ -32,6 +32,11 @@
   `sys.` / `subprocess` / `lambda ` / `compile(`。**先不生成任意 Python 代码**。
 - 权限：`allowed_tools ⊆ 冻结策略.allowed_tools`，且不得声明写工具
   （写操作必须走审批门禁）。执行前会**再校验一次**，策略收紧后旧技能不能绕过。
+  写工具的判定不只靠策略的 `write_tools`：再核一遍 `tool_contract.DEFAULT_CONTRACTS`
+  的副作用声明（`write` / `external` / `arbitrary`），否则策略漏配一个字段
+  就等于给技能开了写或外发的口子。
+- 候选不是对象（`None` / 列表 / 字符串 / 数字）时直接抛 `SkillRejected`，
+  不抛 `AttributeError` —— 技能来自模型，形态不可控，校验层必须干净地拒绝。
 - 技能不得修改评测标准、审批状态、系统策略或允许工具集合。
 
 模型提出候选 → `accept(skill, policy)` 校验 → `execute(skill, context, policy)`

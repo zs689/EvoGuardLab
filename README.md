@@ -29,7 +29,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（392 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 11 公平消融）
+# 2) 回归测试（456 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 7 可复现性）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -657,13 +657,17 @@ EvoGuardLab/
 │   ├── test_security_contract.py 8 个测试（S01 反例 / 六字段契约 / 真实执行点留痕）
 │   ├── test_defense_demo_v2.py 12 个测试（按后果计量 / 不虚报外泄 / 正常对照 / 输出隔离）
 │   ├── test_docs_consistency.py 12 个测试（当前口径 / 冻结历史不被改写）
-│   ├── test_mode_compare.py 14 个测试（审批开关反例 / 配置指纹 / 分母与 N/A / 冻结历史）
+│   ├── test_mode_compare.py 15 个测试（审批开关反例 / 配置指纹 / 分母与 N/A / 冻结历史）
 │   ├── test_approval.py     15 个测试（5 个必须验收情形 / 统一门禁 / 进程重启 / 幂等）
 │   ├── test_permission_and_ci.py 21 个测试（Q01–Q05：权限反例 / kappa / 维度覆盖 / CI 策略）
 │   ├── test_conditional_skill.py 21 个测试（声明式 schema / 越权拒绝 / 确定性执行 / 配对验证）
 │   ├── test_tool_contract.py  12 个测试（结构化授权 / 正则只作信号 / 反例）
 │   ├── test_e02_e03.py        17 个测试（四组家族 / 负结果 / 越权 / BM25 / 撤销反例）
-│   └── test_ablation.py       11 个测试（六组消融 / 单变量 / 八项指标 / manifest）
+│   ├── test_ablation.py       12 个测试（六组消融 / 单变量 / 八项指标 / manifest）
+│   ├── test_edge_cases.py     34 个测试（边界与非法状态迁移 / off 档不判 / 待批票复用 / 账本冲突）
+│   ├── test_guard_fuzz.py      8 个测试（固定 seed 模糊 / 六字段契约恒成立 / effect 不许虚报）
+│   ├── test_untrusted_input.py 14 个测试（技能候选 / CI 策略 / 契约参数的畸形输入）
+│   └── test_reproducibility.py 7 个测试（同配置重跑逐字节一致 / 汇总等于逐条之和）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── scripts/freeze_mode_compare.py  四模式配置冻结 + 逐 case 对照
 ├── scripts/real_settlement_demo.py 5 个审批与结算验收情形

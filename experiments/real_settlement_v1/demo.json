@@ -4,8 +4,8 @@
     {
       "pass": true,
       "evidence": {
-        "request_id": "appr_39a8887dfe21",
-        "checkpoint_id": "ckpt_18211db5519b",
+        "request_id": "appr_<masked>",
+        "checkpoint_id": "ckpt_<masked>",
         "status": "pending",
         "ledger_rows": 0,
         "tool_executed": false
@@ -28,7 +28,7 @@
     {
       "pass": true,
       "evidence": {
-        "http_source": "http://127.0.0.1:60031/order/A1001",
+        "http_source": "http://127.0.0.1:<port>/order/A1001",
         "rules_path": "tests\\fixtures\\settlement_rules.json",
         "rule_version": "rules-v1",
         "compute": {

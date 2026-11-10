@@ -7,6 +7,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 
@@ -211,12 +212,31 @@ CASES = [
 ]
 
 
+def _stable(obj):
+    """把运行时地址（随机 id、临时端口）脱敏，让产物可逐字节重跑。
+
+    为什么必须脱敏：本仓库的主张是「同配置重跑结果一致」。审批 id 是 uuid、
+    回环端口是内核随机分配，只要它们进报告，两次运行的产物就不可能一样，
+    而它们又不承载任何结论 —— 保留形状（`appr_<masked>`）比保留值有用。
+    """
+    if isinstance(obj, dict):
+        return {k: _stable(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_stable(v) for v in obj]
+    if isinstance(obj, str):
+        s = re.sub(r"\b(appr|ckpt)_[0-9a-f]{6,}", r"\1_<masked>", obj)
+        return re.sub(r"127\.0\.0\.1:\d{2,5}", "127.0.0.1:<port>", s)
+    return obj
+
+
 def _markdown(data):
     L = ["# 审批状态机与真实副作用闭环：5 个验收情形", "",
          "> 由 `scripts/real_settlement_demo.py` 生成；每个情形用独立临时库。",
          "> 通过 %d / %d" % (sum(1 for r in data["cases"] if r["pass"]),
                             len(data["cases"])), "",
-         "## 结果", "",
+         "> 审批 id 与回环端口是运行时地址，已脱敏为 `appr_<masked>` / "
+         "`127.0.0.1:<port>`，目的是让本文件可逐字节重跑；脱敏不影响任何结论。",
+         "", "## 结果", "",
          "| 情形 | 结果 | 说明 |", "|---|---|---|"]
     for r in data["cases"]:
         L.append("| %s | %s | %s |" % (r["name"], "通过" if r["pass"] else "未通过",
@@ -248,9 +268,9 @@ def main(argv=None):
             r = fn(d)
             r["name"] = name
             results.append(r)
-    data = {"version": 1, "cases": results,
-            "passed": sum(1 for r in results if r["pass"]),
-            "total": len(results)}
+    data = _stable({"version": 1, "cases": results,
+                    "passed": sum(1 for r in results if r["pass"]),
+                    "total": len(results)})
     os.makedirs(args.out, exist_ok=True)
     with open(os.path.join(args.out, "demo.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
