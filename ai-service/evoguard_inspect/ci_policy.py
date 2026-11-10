@@ -25,6 +25,9 @@ DEFAULT_POLICY = {
     "require_security_coverage": True,
     "require_all_dimension_coverage": False,
     "allow_missing_config": [],
+    # §8「存在未授权执行 → 关联调用前证据与副作用记录」：这个开关控制
+    # 副作用表里出现「已判拒绝却仍执行」时是否直接阻断。
+    "block_on_unauthorized_execution": True,
     "note": "策略是工程经验值，需登记版本与适用场景；不在最终测试集上反复调阈值追求通过。",
 }
 
@@ -58,6 +61,7 @@ def load_policy(path):
 # 类型不对就按更严格的一侧取值：策略文件写错不该变成「悄悄放行」。
 _STRICT_BOOL = {
     "allow_limited": False, "allow_unknown": False, "review_on_risk": False,
+    "block_on_unauthorized_execution": True,
     "block_on_input_load_failure": True, "require_security_coverage": True,
     "require_all_dimension_coverage": True,
 }
@@ -86,7 +90,51 @@ def _normalize(p):
     return out, problems
 
 
-def evaluate(data, policy=None, load_failures=0):
+DENY_LIKE = ("deny", "encode", "wrap")
+
+
+def summarize_effects(rows):
+    """把 `security_effects` 行压成可判定的计数，不做解读。
+
+    `denied_but_executed` 是最关键的一项：安全层判了拒绝/编码，调用却还是执行了
+    （S01 那类「报告说拦住了、其实没拦」）。这一项大于 0 就说明「说得」和
+    「做得」不一致，必须先停下来查，而不是继续看别的指标。
+    """
+    rows = list(rows or [])
+    out = {"rows": len(rows), "executed": 0, "denied_but_executed": 0,
+           "attempted": 0, "reported_only": 0, "examples": []}
+    for r in rows:
+        executed = bool(r.get("executed"))
+        decision = (r.get("decision") or "").strip().lower()
+        if r.get("attempted"):
+            out["attempted"] += 1
+        if executed:
+            out["executed"] += 1
+        if decision == "report" and not executed:
+            out["reported_only"] += 1
+        if executed and decision in DENY_LIKE:
+            out["denied_but_executed"] += 1
+            if len(out["examples"]) < 5:
+                out["examples"].append({
+                    "run_id": r.get("run_id"), "where": r.get("where"),
+                    "tool": r.get("tool"), "decision": decision,
+                    "effect": r.get("effect"), "reason": r.get("reason")})
+    return out
+
+
+def load_effects(path):
+    """从 jsonl 读副作用记录（每行一条）；空文件视为「没有记录」，不是「没问题」。"""
+    import json as _json
+    rows = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(_json.loads(line))
+    return rows
+
+
+def evaluate(data, policy=None, load_failures=0, effects=None):
     """返回流水线决策。**不修改** data 里的报告判定。"""
     p = dict(DEFAULT_POLICY)
     p.update(policy or {})
@@ -164,6 +212,16 @@ def evaluate(data, policy=None, load_failures=0):
     if load_failures and p["block_on_input_load_failure"]:
         _block("%d 份输入解析失败或被截断，未检查范围未知" % load_failures)
 
+    # 副作用证据：只看「判了拒绝却仍然执行」这一种，别的计数不改判定。
+    eff = summarize_effects(effects) if effects is not None else None
+    if eff and eff["denied_but_executed"] and p["block_on_unauthorized_execution"]:
+        ex = eff["examples"][0] if eff["examples"] else {}
+        _block("存在未授权执行：%d 次调用在判定为 %s 之后仍被执行"
+               "（例：run=%s where=%s tool=%s effect=%s）"
+               % (eff["denied_but_executed"], "、".join(DENY_LIKE),
+                  ex.get("run_id"), ex.get("where"), ex.get("tool"),
+                  ex.get("effect")))
+
     if action == "pass":
         reasons.append("三个维度证据齐全且无问题；结论只对本次配置与样本成立")
 
@@ -176,6 +234,7 @@ def evaluate(data, policy=None, load_failures=0):
         "exit_code": 3 if action == "block" else 0,
         "reasons": reasons,
         "policy_problems": policy_problems,
+        "security_effects": eff,
         "policy_fingerprint": fingerprint(p),
         "policy_rationale": POLICY_RATIONALE,
         "note": "报告判定与流水线是否阻断分开保存；退出码 0 不等于全面安全，"

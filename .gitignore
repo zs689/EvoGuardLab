@@ -5,9 +5,15 @@ data/*.db
 .venv/
 data/*.db-wal
 data/*.db-shm
+
+# 外部攻击语料：只保留下载器与清单，语料本身不入库（许可 + 体积）
+data/external/
 experiments/**/*.db
 experiments/**/*.db-wal
 experiments/**/*.db-shm
 
 # 求职材料不随开源仓库发布（保留在本地）
 docs/resume-bullets.md
+
+# 下载缓存（框架源码、外部语料原始 blob），不进版本控制
+_sandbox/

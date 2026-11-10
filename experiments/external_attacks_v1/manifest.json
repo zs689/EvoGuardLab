@@ -1,0 +1,87 @@
+{
+  "corpus": {
+    "by_category": {
+      "Data Security Harm": 374,
+      "Financial Data": 204,
+      "Financial Harm": 306,
+      "Others": 510,
+      "Physical Data": 374,
+      "Physical Harm": 340
+    },
+    "by_goal": {
+      "data_stealing": 1020,
+      "direct_harm": 1088
+    },
+    "cases_file": "cases.jsonl",
+    "cases_sha256": "c17e347cf27853c1915709628fde24cba42fd6cb3a0181c7cc86af4a659f9e06",
+    "files": [
+      {
+        "bytes": 672918,
+        "cases": 510,
+        "git_sha": "976ad4e2108a553a3b885951e8eb119aa91f9445",
+        "goal": "data_stealing",
+        "path": "data/test_cases_dh_base.json",
+        "records": 510,
+        "sha256": "0a8186468d21389af432e8c7b399ae42264d1b93a07b65c7a489468508604305",
+        "variant": "base"
+      },
+      {
+        "bytes": 721878,
+        "cases": 510,
+        "git_sha": "803bd383695faaaeb2a03863aafc83d8b46a7e78",
+        "goal": "data_stealing",
+        "path": "data/test_cases_dh_enhanced.json",
+        "records": 510,
+        "sha256": "885602716b72c18af80695ce6c2e1f242fa03163bc90b0788b0c5e4ab6216d50",
+        "variant": "enhanced"
+      },
+      {
+        "bytes": 765370,
+        "cases": 544,
+        "git_sha": "16f82d8a34349182eba883871333e569bafc6b93",
+        "goal": "direct_harm",
+        "path": "data/test_cases_ds_base.json",
+        "records": 544,
+        "sha256": "4daab35c62a3845e8b9400f4dca58b9c9f37e57cd33b2337552557fbb26282e9",
+        "variant": "base"
+      },
+      {
+        "bytes": 817594,
+        "cases": 544,
+        "git_sha": "f4580cb98e195d3a77ec92149294cc1bf37c0f5d",
+        "goal": "direct_harm",
+        "path": "data/test_cases_ds_enhanced.json",
+        "records": 544,
+        "sha256": "7bc510868df032511053fc40e8470e68a041fb7148d055112093594bf73ab0ce",
+        "variant": "enhanced"
+      }
+    ],
+    "note": "语料不入库：本文件只记录来源、许可、逐文件 sha256 与条数，跑 import_external_attacks.py 可复现同一份字节。",
+    "sources": [
+      {
+        "homepage": "https://github.com/uiuc-kang-lab/InjecAgent",
+        "license": "MIT",
+        "license_url": "https://github.com/uiuc-kang-lab/InjecAgent/blob/main/LICENSE",
+        "name": "injecagent",
+        "paper": "InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents (ACL 2024 Findings)",
+        "ref": "git blob sha（不用分支名，分支会动）",
+        "repo": "uiuc-kang-lab/InjecAgent"
+      }
+    ],
+    "total_cases": 2108,
+    "usage_limit": "只用于检测能力的对照评测；语料本身不随仓库分发，引用请遵循上游许可与论文。",
+    "version": "external-attacks-v1"
+  },
+  "evaluator": {
+    "benign_filler": "Great product, works as described.",
+    "entry_point": "security.guard_tool_output",
+    "injection_codes": [
+      "injection_delimiter",
+      "injection_override",
+      "injection_prompt_leak",
+      "injection_role_switch",
+      "injection_tool_directive"
+    ],
+    "mode": "audit"
+  }
+}

@@ -139,6 +139,9 @@ def main(argv=None):
                     help="出现该级别及以上的发现时退出码 3（给 CI 卡质量用）")
     ap.add_argument("--strict-input", action="store_true",
                     help="任一份输入解析失败就以退出码 2 结束（默认只在终端提示）")
+    ap.add_argument("--effects", default=None,
+                    help="security_effects 的 jsonl 导出（配合 --policy）："
+                         "把「判了拒绝却仍执行」的证据接进流水线决策")
     ap.add_argument("--policy", default=None,
                     help="CI 发布策略 JSON（配合 --assurance）：显式声明风险容忍，"
                          "把报告判定与流水线是否阻断分开保存")
@@ -221,7 +224,10 @@ def main(argv=None):
         if args.policy:
             from . import ci_policy
             policy = ci_policy.load_policy(args.policy)
-            decision = ci_policy.evaluate(data, policy, len(load_failures))
+            effects = (ci_policy.load_effects(args.effects)
+                       if args.effects else None)
+            decision = ci_policy.evaluate(data, policy, len(load_failures),
+                                          effects=effects)
             if args.out:
                 with open(os.path.join(args.out, "ci_decision.json"), "w",
                           encoding="utf-8") as f:
