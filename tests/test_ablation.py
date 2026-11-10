@@ -25,14 +25,19 @@ class TestFairAblation(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             cls.r = AB.main(["--out", cls.tmp])
 
-    def test_six_ablations_and_thirteen_configs(self):
+    def test_six_ablations_plus_2x2(self):
         self.assertEqual(len(self.r["ablations"]), 6)
-        self.assertEqual(len(self.r["runs"]), 13)
+        # 6 组单变量共 13 个配置 + 审批×隔离 2×2 共 4 个
+        self.assertEqual(len(self.r["runs"]), 17)
         self.assertTrue(self.r["single_variable_checked"])
+        cross = [k for k in self.r["runs"] if k.startswith("2×2")]
+        self.assertEqual(len(cross), 4)
 
     def test_each_config_changes_exactly_one_field(self):
         for label, cfg in [(k, v) for k, v in self.r["runs"].items()]:
             run = self.r["runs"][label]
+            if label.startswith("2×2"):
+                continue          # 2×2 是交叉设计，不是单变量消融
             field = run["changed_field"]
             others = {k: v for k, v in AB.BASE.items() if k != field}
             # 用配置指纹反查：脚本已断言过，这里再核一遍设计声明
@@ -132,12 +137,34 @@ class TestFairAblation(unittest.TestCase):
         self.assertIn("不从已执行轨迹反推", m["independent_authorization_policy"])
         self.assertIn("不能事后补猜", m["note"])
 
+    def test_two_by_two_cross(self):
+        """固定审批看隔离、固定隔离看审批；两者独立，不互相抵消。"""
+        def s(label):
+            return self.r["runs"][label]["summary"]
+        req_off = s("2×2[审批=required,隔离=off]")
+        req_on = s("2×2[审批=required,隔离=on]")
+        auto_off = s("2×2[审批=auto,隔离=off]")
+        auto_on = s("2×2[审批=auto,隔离=on]")
+        # 固定审批：只切隔离 → 只有 content_isolated 变
+        self.assertEqual(req_off["business_success"], req_on["business_success"])
+        self.assertEqual(req_off["pending_approval"], req_on["pending_approval"])
+        self.assertEqual(req_off["content_isolated_cases"], 0)
+        self.assertEqual(req_on["content_isolated_cases"], 1)
+        # 固定隔离：只切审批 → 写操作从待审批变放行，攻击达成随之出现
+        self.assertEqual(req_off["pending_approval"], 1)
+        self.assertEqual(auto_off["pending_approval"], 0)
+        self.assertEqual(req_off["attack_goal_achieved"], 0)
+        self.assertEqual(auto_off["attack_goal_achieved"], 1)
+        # 交叉格同时体现两者
+        self.assertEqual(auto_on["pending_approval"], 0)
+        self.assertEqual(auto_on["content_isolated_cases"], 1)
+
     def test_files_written(self):
         for name in ("report.md", "results.json", "manifest.json"):
             self.assertTrue(os.path.isfile(os.path.join(self.tmp, name)), name)
         with open(os.path.join(self.tmp, "results.json"), encoding="utf-8") as f:
             saved = json.load(f)
-        self.assertEqual(len(saved["runs"]), 13)
+        self.assertEqual(len(saved["runs"]), 17)
 
 
 if __name__ == "__main__":

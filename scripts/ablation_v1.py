@@ -95,6 +95,13 @@ ABLATIONS = [
      "conditional_skill", [False, True]),
 ]
 
+# 严格 2×2：审批策略（required / auto）× 内容隔离（off / on）。
+# 固定 enforce、权限、工具面、任务、模型、seed，只让这两个控制维度交叉。
+CROSS_2X2 = [
+    ("required", False), ("required", True),
+    ("auto", False), ("auto", True),
+]
+
 
 def _canonical(obj):
     return json.dumps(obj, sort_keys=True, ensure_ascii=False,
@@ -260,6 +267,28 @@ def main(argv=None):
                 "cases": rows, "summary": summarize(rows),
             }
 
+    # ---- 严格 2×2：审批策略 × 内容隔离 ----
+    # 计划 §5 要求「先固定审批策略比内容隔离；再固定隔离方式比审批策略」。
+    # 「审批策略」是一个**控制维度**，由 approval_policy + 两个 auto 开关共同表达，
+    # 不是三个独立变量；这里显式写清，避免被读成「一次改了三个东西」。
+    for approval, wrap in CROSS_2X2:
+        cfg = dict(BASE, approval_policy=approval,
+                   auto_approve=(approval == "auto"),
+                   allow_auto_approve=(approval == "auto"), wrap=wrap)
+        label = "2×2[审批=%s,隔离=%s]" % (approval, "on" if wrap else "off")
+        assert label not in runs
+        configs[label] = cfg
+        fingerprints[label] = fingerprint(cfg)
+        rows = [run_case(t, cfg) for t in cfg["tasks"]]
+        runs[label] = {
+            "ablation": "审批×隔离 2×2",
+            "fixed_conditions": "enforce、权限、工具面、任务、模型、seed",
+            "changed_field": "approval_policy + wrap",
+            "changed_value": {"approval": approval, "wrap": wrap},
+            "config_fingerprint": fingerprints[label],
+            "cases": rows, "summary": summarize(rows),
+        }
+
     manifest = {
         "version": 1, "session": "§10 公平消融",
         "threat_model_version": BASE["threat_model_version"],
@@ -354,6 +383,20 @@ def _markdown(r):
           "只变一个变量，业务成功数随之变化。",
           "- 条件技能消融：只影响「规则表原本不会处理的独立任务族」，"
           "不是全量提升。", "",
+          "## 严格 2×2：审批策略 × 内容隔离（固定 enforce / 权限 / 工具面 / seed）", "",
+          "| 审批 | 隔离 | 业务成功 | 安全完成 | 待审批 | 攻击达成 | 内容隔离 |",
+          "|---|---|---|---|---|---|---|"]
+    for approval in ("required", "auto"):
+        for wrap in (False, True):
+            label = "2×2[审批=%s,隔离=%s]" % (approval, "on" if wrap else "off")
+            s = r["runs"][label]["summary"]
+            L.append("| %s | %s | %d | %d | %d | %d | %d |"
+                     % (approval, "on" if wrap else "off",
+                        s["business_success"], s["safe_completion"],
+                        s["pending_approval"], s["attack_goal_achieved"],
+                        s["content_isolated_cases"]))
+    L += ["", "> 读法：固定审批看隔离列（只 `content_isolated` 变）；"
+          "固定隔离看审批列（待审批/业务成功变）。两者不互相抵消。", "",
           "## 边界", ""] + ["- %s" % x for x in r["limits"]]
     return "\n".join(L)
 

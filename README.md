@@ -5,6 +5,20 @@ Self-Evolving Agent Reliability & Autonomous Recovery
 
 > 一句话：不只让 Agent 从错误里「学到经验」，还要用**独立测试**证明这条经验真的有用、且没有把原本能做的事弄坏。
 
+## 这是什么 / 不是什么
+
+**是**：一个可复现的本地研究原型 —— Agent 轨迹检查器（31 条轨迹规则 + 20 条静态规则）、
+技能晋升门禁（前后配对 + 负迁移 + 样本充分性）、三维保障判定（可靠 / 防护 / 可运行）、
+可恢复审批状态机、结构化工具授权、按**真实执行后果**计量的防御演示。
+
+**不是**：
+
+- **不是生产级 WAF / 沙箱**：检测是特征匹配，改个说法就能绕；没有通用执行隔离。
+- **不是「防住提示注入」**：只有 6 个独立攻击向量的工程冒烟，外部基准尚未接入
+  （见 [docs/attack-datasets.md](docs/attack-datasets.md)）。
+- **不是真实业务准确率**：37 条自生成标注只能当回归护栏，没有独立标注者与外部轨迹。
+- **不是多 Agent 安全**：互信函数只在库级，运行时没有多 Agent 链路可验。
+
 ---
 
 ## 现在能跑什么（真实状态，不是路线图）
@@ -550,7 +564,7 @@ python scripts/real_settlement_demo.py     # 默认写 experiments/real_settleme
 | §5 12 个工程冒烟场景 | 6 场景 / 12 条 case / 6 个独立攻击向量组 | 新增参数假凭据、参数外带 URL 两个新入口，不是改措辞；四模式对照已按 12 重算 |
 | E02 独立家族增量 | `scripts/conditional_skill_eval.py` | train/dev/validation/test 四组，同 task/seed 前后配对；validation gain 0.167、test 0.25；无收益候选发布负结果，越权候选 REJECT |
 | E03 经验适用范围 | `ai-service/evoguard/experience_scope.py` | 工具契约/数据版本/权限/有效期/撤销先结构过滤，再 BM25；反例：文本最像但已撤销的记录不进候选 |
-| §10 公平消融 | `scripts/ablation_v1.py` | 六组消融 / 13 配置、一次只变一个变量；八项业务与防护指标同时报告；统一 manifest 登记 |
+| §10 公平消融 | `scripts/ablation_v1.py` | 六组单变量消融 13 配置 + 审批×隔离 2×2 交叉 4 配置；八项业务与防护指标同时报告；统一 manifest 登记 |
 
 ```bash
 python scripts/tool_contract_demo.py
@@ -740,6 +754,22 @@ python ai-service/real_model_bench.py --suite hard --fresh
 
 ---
 
+## 相关工作与引用
+
+- **AgentDojo**（Debenedetti et al., NeurIPS 2024 Datasets & Benchmarks）——
+  97 个用户任务 + 629 个安全用例，间接注入的公开基准；本项目下一步的外部评测来源。
+- **InjecAgent** —— 1K API 调用用例，测「注入诱导 Agent 调用恶意 API」。
+- **Agent Security Bench (ASB)**、**WASP**（Meta）—— 更广的工具面与 Web Agent 攻击面。
+- **OWASP Top 10 for LLM Applications**（LLM01 Prompt Injection）；
+  **OWASP Top 10 for Agentic Applications**（2025-12）。
+- **NIST AI 100-2e2025**（对抗性机器学习分类法）；**MITRE ATLAS** `AML.T0051`。
+- 红队工具：**garak**（NVIDIA）、**PyRIT**（Microsoft）、**promptmap**、**Gandalf**（Lakera）。
+
+本项目的定位与这些基准一致：**测的是「在这组任务与配置下的可观察后果」，
+不是通用安全能力**。外部基准的 ASR / UA 不能跨环境直接比大小。
+
+---
+
 ## 已知限制（别当成能力）
 
 1. **验证集仍偏小**：dev 已按 3 / 3 / 3 切成 train / target / guard，但每个 (agent, fault)
@@ -826,9 +856,8 @@ python ai-service/real_model_bench.py --suite hard --fresh
   `docs/security.md`（检测与 S01 契约）、`docs/approval-protocol.md`、
   `docs/tool-contract.md`、`docs/mode-compare-protocol.md`、
   `docs/external-labeling-protocol.md`、`docs/ci-policy.md`、
-  `docs/conditional-skill-protocol.md`、`docs/ablation-protocol.md`；
-  `docs/resume-bullets.md` 是简历口径（数字已随本轮更新）；
-  `docs/plan-alignment.md` 只对 11-08 旧计划有效。
+  `docs/conditional-skill-protocol.md`、`docs/ablation-protocol.md`、
+  `docs/attack-datasets.md`；`docs/plan-alignment.md` 只对 11-08 旧计划有效。
 - **三条铁律**：未改正文、未停止调用不算拦截成功（S01 契约）；
   业务收益不能抵消未授权操作（E02）；相似度不能替代可信性（E03）。
 

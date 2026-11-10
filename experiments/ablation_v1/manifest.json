@@ -15,10 +15,12 @@
     true
   ],
   "auto_approve": [
-    false
+    false,
+    true
   ],
   "allow_auto_approve": [
-    false
+    false,
+    true
   ],
   "effective_tool_contract": {
     "kb.search": {
@@ -53,10 +55,14 @@
     "内容隔离消融[wrap=False]": "25e6311c5d6742bb4a25b34518c65be5ebef67f72e28908ca1e926cbfc5c8b7d",
     "内容隔离消融[wrap=True]": "48e926f2f9f04b5f26ba371e7cb1051a015adb4556528db2e0dfe1872f615e06",
     "条件技能消融[conditional_skill=False]": "25e6311c5d6742bb4a25b34518c65be5ebef67f72e28908ca1e926cbfc5c8b7d",
-    "条件技能消融[conditional_skill=True]": "b98aee7dda204b01e90705b460c2994750489c357883b3fa7999b335bff45bda"
+    "条件技能消融[conditional_skill=True]": "b98aee7dda204b01e90705b460c2994750489c357883b3fa7999b335bff45bda",
+    "2×2[审批=required,隔离=off]": "25e6311c5d6742bb4a25b34518c65be5ebef67f72e28908ca1e926cbfc5c8b7d",
+    "2×2[审批=required,隔离=on]": "48e926f2f9f04b5f26ba371e7cb1051a015adb4556528db2e0dfe1872f615e06",
+    "2×2[审批=auto,隔离=off]": "019e0cd77387ae84e9b236e3a3139a8bd5065ed8e0caf5e016275e188db20830",
+    "2×2[审批=auto,隔离=on]": "56a1d4f69db4a980e571a6e8ce790beef0399ad8ce7fec9f7109ab068257a2c0"
   },
   "code_fingerprint": {
-    "ablation_v1.py": "bbc67ed2953c067902d6986bfbb28a29d68165f3801c2dfc52fe91b1ead33af8"
+    "ablation_v1.py": "1f94fb0eac19742e855c90d123619abd38a890835c7610370d6d5db1799ee28b"
   },
   "note": "历史真实模型 metrics 未完整登记这些安全开关时，只能说明旧记录中的模型与技能条件，不能事后补猜成某种安全模式。"
 }

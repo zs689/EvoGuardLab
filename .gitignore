@@ -8,3 +8,6 @@ data/*.db-shm
 experiments/**/*.db
 experiments/**/*.db-wal
 experiments/**/*.db-shm
+
+# 求职材料不随开源仓库发布（保留在本地）
+docs/resume-bullets.md
