@@ -1309,3 +1309,32 @@ PromptGuard / CodeShield / PIICheck 因依赖外部模型或引擎，不融合�
 - 顺手修了 `eval_jailbreak_prompts.py` 把 p50/p95 耗时写进产物导致不可复现的问题，
   并把该链路纳入 `test_reproducibility.py` 的逐字节比对。
 
+## 2026-11-10 追加：性能复测 + 能力差集 + 两个防护
+
+用户问「变多慢」并强调「时间长没事，要保证安全」，据此重新定取舍：
+**性能优化必须语义等价，不许截断解码范围**。
+
+| 输入（10KB 除短文本） | 改前 | 改后 |
+|---|---|---|
+| 短文本 12 字 | 0.008 ms | 0.009 ms |
+| 10KB 正常中文 | 0.353 ms | 0.383 ms |
+| 10KB 埋 1 个隐藏字符 | 0.338 ms | **2.375 ms** |
+| 10KB 全是 tag | 0.117 ms | **2.118 ms** |
+
+只有含隐藏字符的文本才付这份开销；`strip_invisible` 用 C 层 `re` + `str.translate`，
+与逐字符参考实现做 400 组随机等价校验、128 个 tag 码位全覆盖、塞 5000 个 tag 后
+尾部指令仍检出。中间踩过一次「用 re.sub(lambda) 解码」→ 1 万 tag 要 7.7ms 的慢速面，已换掉。
+
+**能力差集**（详见 docs/llamafirewall-merge.md「能力差集」节）：已补 HiddenASCII / 角色流水线 /
+轨迹回放 / AlignmentCheck；**没有等价物**的是 PromptGuard 2（BERT 分类器）、
+CustomCheckScanner 自定义 schema 框架、DoS 攻击模板、OpenAI/LangChain 适配器。
+
+**新补两个防护**：
+- `code_guard.py`：CodeShield 思路的自研版（Python AST + JS/SQL/Shell/HTML 正则，按 CWE 分类，
+  只扫代码块，不装 Semgrep）。修了两个实测盲区：单行 `password="..."` 不被识别成代码、
+  JS 解构后裸 `exec()` 漏检。
+- `security.guard_tool_intent()`：执行前意图门禁，复用 judge_alignment；
+  deny / review / allow / none 四态，`executed` 恒 False；模型不可用转人工，不静默放行。
+
+全量回归 **653 项全绿**。
+

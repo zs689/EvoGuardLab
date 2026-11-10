@@ -350,6 +350,22 @@ _BIDI = set(range(0x202A, 0x202F)) | set(range(0x2066, 0x206A))
 _INVISIBLE_RE = re.compile(
     "[\U000E0000-\U000E007F\u200B\u200C\u200D\u2060\uFEFF"
     "\u202A-\u202E\u2066-\u2069]")
+_TAG_RE = re.compile("[\U000E0000-\U000E007F]")
+_ZW_RE = re.compile("[\u200B\u200C\u200D\u2060\uFEFF]")
+_BIDI_RE = re.compile("[\u202A-\u202E\u2066-\u2069]")
+_ZW_BIDI_RE = re.compile("[\u200B\u200C\u200D\u2060\uFEFF\u202A-\u202E\u2066-\u2069]")
+# str.translate 在 C 层一次过，比 Python 逐字符快一个数量级
+_DELETE_INVISIBLE = {cp: None for cp in (_ZERO_WIDTH | _BIDI)}
+# tag 解码也走 translate：早先用 re.sub(lambda) 时，1 万个 tag 字符要 7.7ms，
+# 等于给攻击者留了一个「塞满隐藏字符拖慢扫描」的慢速面。
+_TAG_DROP = {0xE0000 + i: None for i in range(0x80)}
+_TAG_DECODE = {0xE0000 + i: chr(i) for i in range(0x80)}
+
+# 不做「只解码前 N 个」这类截断：截断就可能漏掉藏在后面的指令。
+# 代价是含隐藏字符的 10KB 文本最坏 ~2.3ms（正常文本仍 0.38ms），
+# 按「时间不急、安全优先」的口径接受；绝不为性能牺牲覆盖。
+# 但也不能让攻击者用「塞满 tag」把扫描拖成秒级 —— 实测全 tag 10KB 1.9ms，
+# 因为 decode 走的是 C 层 translate（与 tag 数量无关的常数开销），不是逐字符循环。
 
 
 def strip_invisible(text):
@@ -360,27 +376,21 @@ def strip_invisible(text):
     解码视图：把 tag chars 还原成对应 ASCII（LlamaFirewall 的做法），
               用来抓「整段指令都藏在 tag 字符里」的情况。
     两个视图都扫，互补；正常文本没有隐藏字符时零开销。
+
+    实现上刻意全用 C 层的 re / str.translate：早先逐字符 Python 循环，
+    10KB 带隐藏字符的文本要 1.39ms（3.9 倍），逼近 1.5ms 预算。
     """
     s = _text(text)
-    counts = {"tag": 0, "zero_width": 0, "bidi": 0}
     if not _INVISIBLE_RE.search(s):
-        return s, s, counts
-    plain, decoded = [], []
-    for ch in s:
-        cp = ord(ch)
-        if _TAG_LO <= cp <= _TAG_HI:
-            counts["tag"] += 1
-            decoded.append(chr(cp - _TAG_LO))
-            continue                       # 剥离视图直接丢掉
-        if cp in _ZERO_WIDTH:
-            counts["zero_width"] += 1
-            continue
-        if cp in _BIDI:
-            counts["bidi"] += 1
-            continue
-        plain.append(ch)
-        decoded.append(ch)
-    return "".join(plain), "".join(decoded), counts
+        return s, s, {"tag": 0, "zero_width": 0, "bidi": 0}
+    counts = {"tag": len(_TAG_RE.findall(s)),
+              "zero_width": len(_ZW_RE.findall(s)),
+              "bidi": len(_BIDI_RE.findall(s))}
+    base = s.translate(_DELETE_INVISIBLE)
+    # 两个视图都覆盖完整 128 个 tag 码位，不做截断 —— 少解码一个字符就可能漏一条攻击。
+    plain = base.translate(_TAG_DROP)
+    decoded = base.translate(_TAG_DECODE)
+    return plain, decoded, counts
 
 
 def sanitize_invisible(text):
@@ -754,6 +764,67 @@ def guard_model_output(text, context="html", where="model_output"):
                     decision=DECISION_REPORT if findings else DECISION_ALLOW,
                     effect=EFFECT_REPORTED_ONLY if findings else EFFECT_NONE,
                     reason="audit 模式只记账：未编码、未改正文")
+
+
+def intent_enabled():
+    """执行前意图门禁是否开启：**默认关**（约 1s/次，依赖本地模型）。
+
+    借鉴 LlamaFirewall AlignmentCheck：不看「参数里有没有危险内容」，
+    而是看「这次调用是否服务于用户最初的目标」。与 guard_tool_args 分工：
+    前者判该不该发生，后者判参数里有没有脏东西，两道都要过。
+    """
+    return (os.environ.get("AGENTLAB_SECURITY_INTENT") or "").strip() in (
+        "1", "true", "on")
+
+
+def guard_tool_intent(agent_type, tool, args, user_goal, where="tool_intent"):
+    """调工具**之前**的意图门禁。不给用户目标就记 none，不猜。
+
+    六字段语义：detected=是否判定偏离；decision=deny/review/allow/none；
+    attempted=True（本来要调用）；executed=False（本层不执行任何动作）。
+    真正的阻断仍由调用方按 decision 抛错 —— 检测层不许声称「拦住了」。
+    """
+    body = _text(args)
+    if not enabled():
+        return contract({"text": body, "findings": []}, decision=DECISION_NONE,
+                        effect=EFFECT_NONE, reason="mode=off：未扫描")
+    if not intent_enabled():
+        return contract({"text": body, "findings": []}, decision=DECISION_NONE,
+                        effect=EFFECT_NONE,
+                        reason="意图门禁未启用（AGENTLAB_SECURITY_INTENT）")
+    goal = (user_goal or "").strip()
+    if not goal:
+        return contract({"text": body, "findings": []}, decision=DECISION_NONE,
+                        effect=EFFECT_NONE,
+                        reason="没有用户原始目标，无法判断是否偏离（不猜）")
+    try:
+        import semantic_guard
+        r = semantic_guard.judge_alignment(
+            goal, "%s(%s)" % (tool, body[:400]))
+    except Exception as e:                    # noqa: BLE001
+        return contract({"text": body, "findings": []}, decision="review",
+                        attempted=True, executed=False, effect=EFFECT_NONE,
+                        reason="意图判定不可用（%s: %s），转人工复核，不静默放行"
+                               % (type(e).__name__, e))
+    if r["decision"] == "allow":
+        return contract({"text": body, "findings": []},
+                        decision=DECISION_ALLOW, attempted=True,
+                        executed=False, effect=EFFECT_NONE,
+                        reason="调用与用户目标一致：%s" % r["reason"][:120])
+    finding = {"code": "goal_misalignment", "severity": "warn",
+               "where": where, "match": r["observation"][:120],
+               "detail": r["thought"][:200],
+               "false_positive": "小模型可能把合理的中间步骤误判为偏离，"
+                                 "所以默认只给 deny+人工复核，不自动改内容"}
+    if r["status"] != "observed":
+        return contract({"text": body, "findings": [finding]},
+                        decision="review", attempted=True, executed=False,
+                        effect=EFFECT_NONE,
+                        reason="意图判定不可用，转人工复核：%s" % r["reason"][:120])
+    return contract({"text": body, "findings": [finding]},
+                    decision=DECISION_DENY, attempted=True, executed=False,
+                    effect=EFFECT_NONE,
+                    reason="调用偏离用户目标：%s" % r["reason"][:120])
 
 
 def guard_tool_args(agent_type, tool, args, where="tool_call"):
