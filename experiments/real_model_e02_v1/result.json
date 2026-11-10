@@ -1,0 +1,901 @@
+{
+  "rows": [
+    {
+      "baseline": {
+        "answer": "专票需在 3 个工作日内申请。",
+        "ms": 474.8,
+        "raw": "{\n  \"answer\": \"专票需在 3 个工作日内申请。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "train",
+      "key": "train/专票怎么开/7",
+      "must": "3 个工作日",
+      "seed": 7,
+      "task_id": "专票怎么开",
+      "with_skill": {
+        "answer": "专票需在 3 个工作日内申请。",
+        "ms": 1147.4,
+        "raw": "{\n  \"answer\": \"专票需在 3 个工作日内申请。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "签收后 7 天内",
+        "ms": 916.7,
+        "raw": "{\n  \"answer\": \"签收后 7 天内\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "train",
+      "key": "train/价保多久内有效/7",
+      "must": "7 天",
+      "seed": 7,
+      "task_id": "价保多久内有效",
+      "with_skill": {
+        "answer": "签收后 7 天内降价可申请补差，需提供截图凭证",
+        "ms": 1184.5,
+        "raw": "{\n  \"answer\": \"签收后 7 天内降价可申请补差，需提供截图凭证\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "12个月",
+        "ms": 931.7,
+        "raw": "{\n  \"answer\": \"12个月\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "train",
+      "key": "train/保修多久/7",
+      "must": "12 个月",
+      "seed": 7,
+      "task_id": "保修多久",
+      "with_skill": {
+        "answer": "12个月",
+        "ms": 756.1,
+        "raw": "{\n  \"answer\": \"12个月\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "银卡会员每月 2 张免运费券，金卡每月 5 张。",
+        "ms": 1297.0,
+        "raw": "{\n  \"answer\": \"银卡会员每月 2 张免运费券，金卡每月 5 张。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "dev",
+      "key": "dev/免运费券几张/7",
+      "must": "2 张",
+      "seed": 7,
+      "task_id": "免运费券几张",
+      "with_skill": {
+        "answer": "2",
+        "ms": 924.5,
+        "raw": "{\n  \"answer\": \"2\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "单笔订单满 99 元包邮，偏远地区加收 8 元",
+        "ms": 1336.8,
+        "raw": "{\n  \"answer\": \"单笔订单满 99 元包邮，偏远地区加收 8 元\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "dev",
+      "key": "dev/包邮门槛/7",
+      "must": "99 元",
+      "seed": 7,
+      "task_id": "包邮门槛",
+      "with_skill": {
+        "answer": "99",
+        "ms": 1225.2,
+        "raw": "{\n  \"answer\": \"99\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "电子发票在订单完成后 5 个工作日内开具，不支持修改抬头。",
+        "ms": 1250.9,
+        "raw": "{\n  \"answer\": \"电子发票在订单完成后 5 个工作日内开具，不支持修改抬头。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "dev",
+      "key": "dev/发票什么时候开/7",
+      "must": "5 个工作日",
+      "seed": 7,
+      "task_id": "发票什么时候开",
+      "with_skill": {
+        "answer": "电子发票在订单完成后 5 个工作日内开具",
+        "ms": 1032.4,
+        "raw": "{\n  \"answer\": \"电子发票在订单完成后 5 个工作日内开具\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "90天内",
+        "ms": 881.7,
+        "raw": "{\n  \"answer\": \"90天内\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "validation",
+      "key": "validation/发票多久能重开/7",
+      "must": "90 天",
+      "seed": 7,
+      "task_id": "发票多久能重开",
+      "with_skill": {
+        "answer": "发票开错可在 90 天内申请重开，需先作废原票。",
+        "ms": 1023.7,
+        "raw": "{\n  \"answer\": \"发票开错可在 90 天内申请重开，需先作废原票。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "未发货订单可在 30 分钟内改地址，发货后需走退货流程。",
+        "ms": 1210.2,
+        "raw": "{\n  \"answer\": \"未发货订单可在 30 分钟内改地址，发货后需走退货流程。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "validation",
+      "key": "validation/多久能改地址/7",
+      "must": "30 分钟",
+      "seed": 7,
+      "task_id": "多久能改地址",
+      "with_skill": {
+        "answer": "未发货订单可在 30 分钟内改地址，发货后需走退货流程。",
+        "ms": 1063.1,
+        "raw": "{\n  \"answer\": \"未发货订单可在 30 分钟内改地址，发货后需走退货流程。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "48小时",
+        "ms": 943.8,
+        "raw": "{\n  \"answer\": \"48小时\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "validation",
+      "key": "validation/安装要提前多久预约/7",
+      "must": "48 小时",
+      "seed": 7,
+      "task_id": "安装要提前多久预约",
+      "with_skill": {
+        "answer": "48小时",
+        "ms": 896.4,
+        "raw": "{\n  \"answer\": \"48小时\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "收到货15天内可换货，需保留原包装",
+        "ms": 1286.6,
+        "raw": "{\n  \"answer\": \"收到货15天内可换货，需保留原包装\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "test",
+      "key": "test/换货期限/7",
+      "must": "15 天",
+      "seed": 7,
+      "task_id": "换货期限",
+      "with_skill": {
+        "answer": "收到货 15 天内可换货，需保留原包装。",
+        "ms": 953.7,
+        "raw": "{\n  \"answer\": \"收到货 15 天内可换货，需保留原包装。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "12个月",
+        "ms": 984.0,
+        "raw": "{\n  \"answer\": \"12个月\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "test",
+      "key": "test/积分有效期多久/7",
+      "must": "12 个月",
+      "seed": 7,
+      "task_id": "积分有效期多久",
+      "with_skill": {
+        "answer": "12个月",
+        "ms": 915.8,
+        "raw": "{\n  \"answer\": \"12个月\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "30",
+        "ms": 1148.0,
+        "raw": "{\n  \"answer\": \"30\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "test",
+      "key": "test/账期多少天/7",
+      "must": "30 天",
+      "seed": 7,
+      "task_id": "账期多少天",
+      "with_skill": {
+        "answer": "30",
+        "ms": 907.5,
+        "raw": "{\n  \"answer\": \"30\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "专票需在 3 个工作日内申请。",
+        "ms": 845.6,
+        "raw": "{\n  \"answer\": \"专票需在 3 个工作日内申请。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "train",
+      "key": "train/专票怎么开/11",
+      "must": "3 个工作日",
+      "seed": 11,
+      "task_id": "专票怎么开",
+      "with_skill": {
+        "answer": "专票需在 3 个工作日内申请。",
+        "ms": 851.9,
+        "raw": "{\n  \"answer\": \"专票需在 3 个工作日内申请。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "签收后 7 天内",
+        "ms": 988.7,
+        "raw": "{\n  \"answer\": \"签收后 7 天内\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "train",
+      "key": "train/价保多久内有效/11",
+      "must": "7 天",
+      "seed": 11,
+      "task_id": "价保多久内有效",
+      "with_skill": {
+        "answer": "签收后 7 天内降价可申请补差，需提供截图凭证",
+        "ms": 1074.2,
+        "raw": "{\n  \"answer\": \"签收后 7 天内降价可申请补差，需提供截图凭证\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "12个月",
+        "ms": 6279.5,
+        "raw": "{\n  \"answer\": \"12个月\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "train",
+      "key": "train/保修多久/11",
+      "must": "12 个月",
+      "seed": 11,
+      "task_id": "保修多久",
+      "with_skill": {
+        "answer": "",
+        "ms": null,
+        "raw": "TimeoutError: timed out",
+        "status": "unavailable",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "银卡会员每月 2 张免运费券，金卡每月 5 张",
+        "ms": 2246.7,
+        "raw": "{\n  \"answer\": \"银卡会员每月 2 张免运费券，金卡每月 5 张\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "dev",
+      "key": "dev/免运费券几张/11",
+      "must": "2 张",
+      "seed": 11,
+      "task_id": "免运费券几张",
+      "with_skill": {
+        "answer": "2",
+        "ms": 16282.1,
+        "raw": "{\n  \"answer\": \"2\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "单笔订单满 99 元包邮，偏远地区加收 8 元",
+        "ms": 1250.7,
+        "raw": "{\n  \"answer\": \"单笔订单满 99 元包邮，偏远地区加收 8 元\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "dev",
+      "key": "dev/包邮门槛/11",
+      "must": "99 元",
+      "seed": 11,
+      "task_id": "包邮门槛",
+      "with_skill": {
+        "answer": "99",
+        "ms": 1298.9,
+        "raw": "{\n  \"answer\": \"99\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "电子发票在订单完成后 5 个工作日内开具，不支持修改抬头。",
+        "ms": 1164.1,
+        "raw": "{\n  \"answer\": \"电子发票在订单完成后 5 个工作日内开具，不支持修改抬头。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "dev",
+      "key": "dev/发票什么时候开/11",
+      "must": "5 个工作日",
+      "seed": 11,
+      "task_id": "发票什么时候开",
+      "with_skill": {
+        "answer": "电子发票在订单完成后 5 个工作日内开具",
+        "ms": 987.4,
+        "raw": "{\n  \"answer\": \"电子发票在订单完成后 5 个工作日内开具\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "90天内",
+        "ms": 916.5,
+        "raw": "{\n  \"answer\": \"90天内\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "validation",
+      "key": "validation/发票多久能重开/11",
+      "must": "90 天",
+      "seed": 11,
+      "task_id": "发票多久能重开",
+      "with_skill": {
+        "answer": "发票开错可在 90 天内申请重开，需先作废原票。",
+        "ms": 1227.7,
+        "raw": "{\n  \"answer\": \"发票开错可在 90 天内申请重开，需先作废原票。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "未发货订单可在 30 分钟内改地址，发货后需走退货流程。",
+        "ms": 1149.4,
+        "raw": "{\n  \"answer\": \"未发货订单可在 30 分钟内改地址，发货后需走退货流程。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "validation",
+      "key": "validation/多久能改地址/11",
+      "must": "30 分钟",
+      "seed": 11,
+      "task_id": "多久能改地址",
+      "with_skill": {
+        "answer": "未发货订单可在 30 分钟内改地址，发货后需走退货流程。",
+        "ms": 1134.4,
+        "raw": "{\n  \"answer\": \"未发货订单可在 30 分钟内改地址，发货后需走退货流程。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "48小时",
+        "ms": 962.4,
+        "raw": "{\n  \"answer\": \"48小时\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "validation",
+      "key": "validation/安装要提前多久预约/11",
+      "must": "48 小时",
+      "seed": 11,
+      "task_id": "安装要提前多久预约",
+      "with_skill": {
+        "answer": "48小时",
+        "ms": 1190.3,
+        "raw": "{\n  \"answer\": \"48小时\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "收到货15天内可换货，需保留原包装",
+        "ms": 932.7,
+        "raw": "{\n  \"answer\": \"收到货15天内可换货，需保留原包装\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "test",
+      "key": "test/换货期限/11",
+      "must": "15 天",
+      "seed": 11,
+      "task_id": "换货期限",
+      "with_skill": {
+        "answer": "收到货 15 天内可换货，需保留原包装。",
+        "ms": 1262.9,
+        "raw": "{\n  \"answer\": \"收到货 15 天内可换货，需保留原包装。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "12个月",
+        "ms": 753.3,
+        "raw": "{\n  \"answer\": \"12个月\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "test",
+      "key": "test/积分有效期多久/11",
+      "must": "12 个月",
+      "seed": 11,
+      "task_id": "积分有效期多久",
+      "with_skill": {
+        "answer": "12个月",
+        "ms": 1058.6,
+        "raw": "{\n  \"answer\": \"12个月\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "30",
+        "ms": 882.0,
+        "raw": "{\n  \"answer\": \"30\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "test",
+      "key": "test/账期多少天/11",
+      "must": "30 天",
+      "seed": 11,
+      "task_id": "账期多少天",
+      "with_skill": {
+        "answer": "30",
+        "ms": 838.2,
+        "raw": "{\n  \"answer\": \"30\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "专票需在 3 个工作日内申请。",
+        "ms": 985.3,
+        "raw": "{\n  \"answer\": \"专票需在 3 个工作日内申请。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "train",
+      "key": "train/专票怎么开/23",
+      "must": "3 个工作日",
+      "seed": 23,
+      "task_id": "专票怎么开",
+      "with_skill": {
+        "answer": "专票需在 3 个工作日内申请。",
+        "ms": 1021.9,
+        "raw": "{\n  \"answer\": \"专票需在 3 个工作日内申请。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "签收后 7 天内",
+        "ms": 963.0,
+        "raw": "{\n  \"answer\": \"签收后 7 天内\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "train",
+      "key": "train/价保多久内有效/23",
+      "must": "7 天",
+      "seed": 23,
+      "task_id": "价保多久内有效",
+      "with_skill": {
+        "answer": "签收后 7 天内降价可申请补差，需提供截图凭证",
+        "ms": 6435.9,
+        "raw": "{\n  \"answer\": \"签收后 7 天内降价可申请补差，需提供截图凭证\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "",
+        "ms": null,
+        "raw": "TimeoutError: timed out",
+        "status": "unavailable",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "train",
+      "key": "train/保修多久/23",
+      "must": "12 个月",
+      "seed": 23,
+      "task_id": "保修多久",
+      "with_skill": {
+        "answer": "12个月",
+        "ms": 1641.3,
+        "raw": "{\n  \"answer\": \"12个月\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "",
+        "ms": null,
+        "raw": "TimeoutError: timed out",
+        "status": "unavailable",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "dev",
+      "key": "dev/免运费券几张/23",
+      "must": "2 张",
+      "seed": 23,
+      "task_id": "免运费券几张",
+      "with_skill": {
+        "answer": "2",
+        "ms": 8527.3,
+        "raw": "{\n  \"answer\": \"2\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "单笔订单满 99 元包邮，偏远地区加收 8 元",
+        "ms": 1026.6,
+        "raw": "{\n  \"answer\": \"单笔订单满 99 元包邮，偏远地区加收 8 元\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "dev",
+      "key": "dev/包邮门槛/23",
+      "must": "99 元",
+      "seed": 23,
+      "task_id": "包邮门槛",
+      "with_skill": {
+        "answer": "99",
+        "ms": 903.1,
+        "raw": "{\n  \"answer\": \"99\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "电子发票在订单完成后 5 个工作日内开具，不支持修改抬头。",
+        "ms": 996.5,
+        "raw": "{\n  \"answer\": \"电子发票在订单完成后 5 个工作日内开具，不支持修改抬头。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "dev",
+      "key": "dev/发票什么时候开/23",
+      "must": "5 个工作日",
+      "seed": 23,
+      "task_id": "发票什么时候开",
+      "with_skill": {
+        "answer": "电子发票在订单完成后 5 个工作日内开具",
+        "ms": 949.5,
+        "raw": "{\n  \"answer\": \"电子发票在订单完成后 5 个工作日内开具\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "90天内",
+        "ms": 806.8,
+        "raw": "{\n  \"answer\": \"90天内\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "validation",
+      "key": "validation/发票多久能重开/23",
+      "must": "90 天",
+      "seed": 23,
+      "task_id": "发票多久能重开",
+      "with_skill": {
+        "answer": "发票开错可在 90 天内申请重开，需先作废原票。",
+        "ms": 1120.9,
+        "raw": "{\n  \"answer\": \"发票开错可在 90 天内申请重开，需先作废原票。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "未发货订单可在 30 分钟内改地址，发货后需走退货流程。",
+        "ms": 1046.0,
+        "raw": "{\n  \"answer\": \"未发货订单可在 30 分钟内改地址，发货后需走退货流程。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      },
+      "family": "validation",
+      "key": "validation/多久能改地址/23",
+      "must": "30 分钟",
+      "seed": 23,
+      "task_id": "多久能改地址",
+      "with_skill": {
+        "answer": "未发货订单可在 30 分钟内改地址，发货后需走退货流程。",
+        "ms": 24048.2,
+        "raw": "{\n  \"answer\": \"未发货订单可在 30 分钟内改地址，发货后需走退货流程。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "48小时",
+        "ms": 17325.1,
+        "raw": "{\n  \"answer\": \"48小时\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "validation",
+      "key": "validation/安装要提前多久预约/23",
+      "must": "48 小时",
+      "seed": 23,
+      "task_id": "安装要提前多久预约",
+      "with_skill": {
+        "answer": "48小时",
+        "ms": 972.7,
+        "raw": "{\n  \"answer\": \"48小时\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "收到货15天内可换货，需保留原包装",
+        "ms": 1031.0,
+        "raw": "{\n  \"answer\": \"收到货15天内可换货，需保留原包装\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "test",
+      "key": "test/换货期限/23",
+      "must": "15 天",
+      "seed": 23,
+      "task_id": "换货期限",
+      "with_skill": {
+        "answer": "收到货 15 天内可换货，需保留原包装。",
+        "ms": 1088.7,
+        "raw": "{\n  \"answer\": \"收到货 15 天内可换货，需保留原包装。\"\n}",
+        "status": "observed",
+        "success": true,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "12个月",
+        "ms": 847.8,
+        "raw": "{\n  \"answer\": \"12个月\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "test",
+      "key": "test/积分有效期多久/23",
+      "must": "12 个月",
+      "seed": 23,
+      "task_id": "积分有效期多久",
+      "with_skill": {
+        "answer": "12个月",
+        "ms": 818.7,
+        "raw": "{\n  \"answer\": \"12个月\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    },
+    {
+      "baseline": {
+        "answer": "30",
+        "ms": 1008.6,
+        "raw": "{\n  \"answer\": \"30\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      },
+      "family": "test",
+      "key": "test/账期多少天/23",
+      "must": "30 天",
+      "seed": 23,
+      "task_id": "账期多少天",
+      "with_skill": {
+        "answer": "30",
+        "ms": 867.7,
+        "raw": "{\n  \"answer\": \"30\"\n}",
+        "status": "observed",
+        "success": false,
+        "unsafe": false
+      }
+    }
+  ],
+  "summary": {
+    "by_family": {
+      "dev": {
+        "baseline_rate": 0.889,
+        "cases": 9,
+        "gain": -0.556,
+        "negative_transfer_rate": 0.556,
+        "skill_rate": 0.333,
+        "usable_cases": 8,
+        "verdict": "NEEDS_REVIEW"
+      },
+      "test": {
+        "baseline_rate": 0.0,
+        "cases": 9,
+        "gain": 0.333,
+        "negative_transfer_rate": 0.0,
+        "skill_rate": 0.333,
+        "usable_cases": 9,
+        "verdict": "PROMOTE"
+      },
+      "train": {
+        "baseline_rate": 0.667,
+        "cases": 9,
+        "gain": 0.0,
+        "negative_transfer_rate": 0.0,
+        "skill_rate": 0.667,
+        "usable_cases": 7,
+        "verdict": "NEEDS_REVIEW"
+      },
+      "validation": {
+        "baseline_rate": 0.333,
+        "cases": 9,
+        "gain": 0.333,
+        "negative_transfer_rate": 0.0,
+        "skill_rate": 0.667,
+        "usable_cases": 9,
+        "verdict": "PROMOTE"
+      }
+    },
+    "model": "qwen3:4b",
+    "multi_seed": {
+      "mean": 0.5,
+      "per_seed": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "stable_tasks": 12,
+      "stdev": 0.0,
+      "total_tasks": 12
+    },
+    "na_count": 3,
+    "overall_blocked_by": [
+      "dev"
+    ],
+    "overall_note": "增益必须跨核心家族稳定；dev 出现负迁移即整体不晋升，不能只挑 validation/test 的正增益报喜。",
+    "overall_verdict": "REJECT",
+    "rows": 36,
+    "seeds": [
+      7,
+      11,
+      23
+    ],
+    "skill_rule_sha256": "ad33d507503815cc4bd087f208c5fc6d80f1747253f649628bc492d5562dd08e",
+    "system_prompt_sha256": "dee4d57c409fa82b9aac9670653743bb27587419f8dd4ab87faec9801a856cfd",
+    "unsafe_count": 0,
+    "verdict_note": "零增益不晋升；有 N/A 的家族记 NEEDS_REVIEW，不把「模型没答出来」包装成负结果或正结果。"
+  },
+  "version": 1
+}

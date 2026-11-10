@@ -1,0 +1,148 @@
+{
+  "calibration": {
+    "baseline": {
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "threshold": 0.2,
+      "tp": 60
+    },
+    "best": {
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "threshold": 0.15,
+      "tp": 60
+    },
+    "grid": [
+      {
+        "f1": 0.774,
+        "fn": 0,
+        "fp": 35,
+        "precision": 0.632,
+        "recall": 1.0,
+        "threshold": 0.05,
+        "tp": 60
+      },
+      {
+        "f1": 0.902,
+        "fn": 0,
+        "fp": 13,
+        "precision": 0.822,
+        "recall": 1.0,
+        "threshold": 0.1,
+        "tp": 60
+      },
+      {
+        "f1": 1.0,
+        "fn": 0,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "threshold": 0.15,
+        "tp": 60
+      },
+      {
+        "f1": 1.0,
+        "fn": 0,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "threshold": 0.2,
+        "tp": 60
+      },
+      {
+        "f1": 0.992,
+        "fn": 1,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.983,
+        "threshold": 0.25,
+        "tp": 59
+      },
+      {
+        "f1": 0.899,
+        "fn": 11,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.817,
+        "threshold": 0.3,
+        "tp": 49
+      },
+      {
+        "f1": 0.696,
+        "fn": 28,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.533,
+        "threshold": 0.35,
+        "tp": 32
+      },
+      {
+        "f1": 0.462,
+        "fn": 42,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.3,
+        "threshold": 0.4,
+        "tp": 18
+      },
+      {
+        "f1": 0.378,
+        "fn": 46,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.233,
+        "threshold": 0.45,
+        "tp": 14
+      },
+      {
+        "f1": 0.154,
+        "fn": 55,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.083,
+        "threshold": 0.5,
+        "tp": 5
+      }
+    ]
+  },
+  "candidate_config": "config/thresholds_v2_calibrated.json",
+  "candidate_enabled": false,
+  "development_set": {
+    "error_rate_p50": 0.228,
+    "n": 120,
+    "sha256": "c2a96caa3c2bdbfb9c14672e6074c1604a9f675c15d5eeecd7a55ee3e4aa3b99",
+    "type": "合成健康度快照（带已知标签与标注噪声）"
+  },
+  "holdout": {
+    "baseline_0_20": {
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 20
+    },
+    "candidate": {
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 20
+    }
+  },
+  "holdout_set": {
+    "error_rate_p50": 0.123,
+    "n": 60,
+    "sha256": "3dd71a536a325a894ad127c5cc3988ea21a358981ce987a78d2e2dff790fd108",
+    "type": "独立随机源的留出集，只验收一次"
+  },
+  "note": "候选阈值未启用；默认仍为 thresholds-v1 / 20%，不改写历史可比数字。启用需人工确认。",
+  "version": 1
+}

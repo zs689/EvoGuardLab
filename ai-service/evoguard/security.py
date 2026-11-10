@@ -270,6 +270,40 @@ def _deep_findings(text, where):
                                "所以只在 tool_output / peer_message 落点使用"}]
 
 
+_SEMANTIC = None
+
+
+def semantic_enabled():
+    """第三级（本地语义判定）是否开启：**默认关**。
+
+    它比前两级慢约 3 个数量级（实测 p50 ~1s），只适合离线复核或低流量入口；
+    显式设 `AGENTLAB_SECURITY_SEMANTIC=1` 才启用。
+    """
+    return (os.environ.get("AGENTLAB_SECURITY_SEMANTIC") or "").strip() in (
+        "1", "true", "on")
+
+
+def _semantic_findings(text, where):
+    if not semantic_enabled():
+        return []
+    global _SEMANTIC
+    try:
+        import semantic_guard
+        if _SEMANTIC is None:
+            _SEMANTIC = semantic_guard.SemanticGuard()
+        if not semantic_guard.applicable(where):
+            return []
+        r = _SEMANTIC.judge(where, text)
+        if r["status"] != "observed" or not r["is_attack"]:
+            return []
+        return [{"code": "injection_semantic", "severity": "warn",
+                 "where": where, "match": r["reason"][:120],
+                 "false_positive": "语义判定由本地小模型给出，需人工复核；"
+                                   "不自动改正文、不停止调用"}]
+    except Exception:                     # noqa: BLE001 - 模型不可用不能拖垮扫描
+        return []
+
+
 def enabled():
     return mode() != MODE_OFF
 
@@ -563,6 +597,11 @@ def guard_tool_output(tool, output, where="tool_output"):
     if not any(f["code"].startswith("injection_") for f in findings):
         # 一级没看到字面注入话术，交给第二级（默认关，开了才加时间）
         findings.extend(_deep_findings(original, where))
+    if not any(f["code"].startswith("injection_") for f in findings):
+        # 前两级都没认出来才进第三级（默认关，约 1s/条）
+        findings.extend(_semantic_findings(original,
+                                           "tool_output" if where == "tool_output"
+                                           else "peer_message"))
     action = _decide(findings)
     if enforcing() and wrapping():
         body = wrap_untrusted(original, source=tool)
@@ -679,6 +718,8 @@ def guard_peer_message(from_agent, text, allowed_peers=None):
     findings.extend(scan(text, "peer_message"))
     if not any(f["code"].startswith("injection_") for f in findings):
         findings.extend(_deep_findings(original, "peer_message"))
+    if not any(f["code"].startswith("injection_") for f in findings):
+        findings.extend(_semantic_findings(original, "peer_message"))
     action = _decide(findings)
     body = original
     wrapped = enforcing() and wrapping()

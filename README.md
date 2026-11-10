@@ -32,7 +32,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（591 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样）
+# 2) 回归测试（615 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样 + 24 收尾轮）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -686,7 +686,8 @@ EvoGuardLab/
 │   ├── test_real_followup.py  11 个测试（真实模型结构化决策 / 失败记 N/A / 复核覆盖不夸大）
 │   ├── test_jailbreak_prompts.py 10 个测试（直接越狱入口 / 口径 / 二级模型不适用）
 │   ├── test_agentdojo_adapter.py 12 个测试（AST 不执行源码 / 组合样本口径 / 召回并列误报）
-│   └── test_final_expansion.py  17 个测试（阈值版本 / 多 seed / 跨 Agent / 30+30 独立性 / 任务格）
+│   ├── test_final_expansion.py  17 个测试（阈值版本 / 多 seed / 跨 Agent / 30+30 独立性 / 任务格）
+│   └── test_final_round.py      24 个测试（语义开关 / 缓存与降级 / E02 门禁 / kappa / 标定 / 中文）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── scripts/freeze_mode_compare.py  四模式配置冻结 + 逐 case 对照
 ├── scripts/real_settlement_demo.py 5 个审批与结算验收情形
@@ -868,6 +869,13 @@ python ai-service/real_model_bench.py --suite hard --fresh
 - [x] 阈值版本登记 + 开发集分布 + 指纹（`config/thresholds_v1.json`）
 - [x] 跨 Agent 迁移实验：架构**不允许**直接迁移，模拟迁移判定 REJECT（见 stability_v1）
 - [x] 仿真多 seed（5 个 seed，标准差 0；不等于真实模型稳定）
+- [x] 语义型检测换设计：本地模型第三级判定器（`AGENTLAB_SECURITY_SEMANTIC`，默认关），
+      外部越狱召回 0.05 → 0.575、误报 0（详见 `docs/final-round.md`）
+- [x] 真实模型 E02 四家族 + 真实模型多 seed（整体门禁 REJECT：dev 负迁移）
+- [x] 阈值开发集标定（候选 0.15，未启用；留出集 F1 与默认相同，不宣称更优）
+- [x] 双人 kappa 代理标注（kappa 0.325 / 分歧 58 条，**不是真人标注**）
+- [x] 中文注入样本（30 条翻译生成，一级/三级在中文上召回接近 0，明确盲区）
+- [x] 官方 AgentDojo 4 环境 harness 接通（各 1 任务；**不是榜单成绩**）
 
 ### 未完成（按前置条件分类，不是「再写点代码」就能做完）
 
@@ -877,18 +885,17 @@ python ai-service/real_model_bench.py --suite hard --fresh
       37 条全是自生成样本，**不能当真实业务准确率**。
 - [ ] 负迁移压力测试：批量投毒，测晋升门槛在不同投毒比例下的召回 / 误报。
 
-需要**真实模型重跑**（耗时、需 Ollama）：
-- [ ] 真实模型上的 E02 四组家族验证与不确定性范围。
-- [ ] 真实模型的多 seed 量化（仿真已做，真实模型未做）。
+需要**外部条件或人**：
+- [ ] 真人独立双标 + 双人 Cohen's kappa（代理标注已做，真人仍缺）。
+- [ ] 可授权的真实中文攻击语料（翻译样本不能替代）。
+- [ ] 官方榜单全量评测（需官方评测模型与 API；本地 harness 只跑了 4 个任务）。
 
 需要**补实验设计**：
-- [ ] 独立标注者 + 双人 Cohen's kappa（目前只有协议）。
 - [ ] 负迁移压力测试：批量投毒，测晋升门槛在不同投毒比例下的召回 / 误报。
-- [ ] 语义型攻击检测方案：30 个独立向量上内容召回 0.467，
-      外部直接越狱语料上 0.041，靠加正则补不上。
-- [ ] 阈值本身的开发集标定（版本与分布已登记，阈值仍是经验值）。
+- [ ] **自然语言间接注入**检测：三级语义在该类上召回仅 0.05，
+      中文上更是接近 0；这是当前最大的盲区。
+- [ ] 阈值用真实业务开发集标定（当前合成集区分度不足，候选未启用）。
 - [ ] 提任务难度：多步计算 / 跨文档推理，让模型真的会答错。
-- [ ] 官方 AgentDojo 4 环境端到端 benchmark（目前只测了模板措辞）。
 
 ---
 
@@ -899,7 +906,7 @@ python ai-service/real_model_bench.py --suite hard --fresh
   `approval.py`（可恢复审批 + 幂等账本）、`real_tasks.py`（本地 HTTP/规则/SQLite）、
   `conditional_skill.py`（声明式技能）、`tool_contract.py`（结构化授权）、
   `experience_scope.py`（经验适用范围 + BM25）。
-- **回归**：`python -m unittest discover -s tests -q` —— 当前 **591 项全绿**。
+- **回归**：`python -m unittest discover -s tests -q` —— 当前 **615 项全绿**。
 - **冻结证据（只读，不要覆盖）**：`experiments/p0_09_20261109/`、
   `experiments/real_model_20261109/` 与 `...20261109b/`、`experiments/defense_demo/`、
   `experiments/labeled_eval/`。当前版本产物在 `*_v1` / `*_v2` 目录，

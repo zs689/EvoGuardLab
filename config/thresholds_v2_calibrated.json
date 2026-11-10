@@ -1,0 +1,32 @@
+{
+  "applies_to": "evoguard_inspect.assurance._operability / model_error_fail",
+  "calibration_set": {
+    "error_rate_p50": 0.228,
+    "n": 120,
+    "sha256": "c2a96caa3c2bdbfb9c14672e6074c1604a9f675c15d5eeecd7a55ee3e4aa3b99",
+    "type": "合成健康度快照（带已知标签与标注噪声）"
+  },
+  "holdout": {
+    "baseline_0_20": {
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 20
+    },
+    "candidate": {
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 20
+    }
+  },
+  "model_error_any": 0.0,
+  "model_error_fail": 0.15,
+  "rationale": "在开发集上按 F1 选优，留出集只验收一次；不得在测试集上反复调阈值追求通过。",
+  "status": "候选，未启用；阈值来自合成开发集，需人工确认",
+  "version": "thresholds-v2-calibrated-candidate"
+}

@@ -1,0 +1,289 @@
+{
+  "agreement_rate": 0.734,
+  "annotators": {
+    "A": {
+      "is_human": false,
+      "principle": "字面/结构特征",
+      "type": "rules"
+    },
+    "B": {
+      "is_human": false,
+      "principle": "语义意图判定",
+      "type": "local_llm"
+    }
+  },
+  "by_source": {
+    "injecagent_base": {
+      "agree": 21,
+      "agreement_rate": 0.538,
+      "kappa": 0.033,
+      "n": 39
+    },
+    "injecagent_enhanced": {
+      "agree": 33,
+      "agreement_rate": 0.846,
+      "kappa": 0.709,
+      "n": 39
+    },
+    "jailbreak_corpus": {
+      "agree": 57,
+      "agreement_rate": 0.713,
+      "kappa": 0.036,
+      "n": 80
+    },
+    "vectors_30": {
+      "agree": 49,
+      "agreement_rate": 0.817,
+      "kappa": 0.475,
+      "n": 60
+    }
+  },
+  "cases": 218,
+  "cohen_kappa": 0.325,
+  "disagreement_count": 58,
+  "disagreements": [
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "v02:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "v03:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "v04:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "attack",
+      "b": "normal",
+      "dimension": "execution_state",
+      "key": "v14:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "attack",
+      "b": "normal",
+      "dimension": "execution_state",
+      "key": "v15:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "v17:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "attack",
+      "b": "normal",
+      "dimension": "execution_state",
+      "key": "v21:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "attack",
+      "b": "normal",
+      "dimension": "execution_state",
+      "key": "v22:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "attack",
+      "b": "normal",
+      "dimension": "execution_state",
+      "key": "v23:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "attack",
+      "b": "normal",
+      "dimension": "execution_state",
+      "key": "v24:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "v28:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#0002:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#0146:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#0194:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "attack",
+      "b": "normal",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#0338:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#0386:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#0482:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#0578:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#0722:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#0866:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#0914:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#0962:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#1058:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#1154:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#1202:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#1298:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#1346:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#1394:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#1490:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    },
+    {
+      "a": "normal",
+      "b": "attack",
+      "dimension": "execution_state",
+      "key": "jailbreak_classification#1538:attack",
+      "note": "分歧先讨论再定，不直接取多数",
+      "status": "needs_discussion"
+    }
+  ],
+  "human_annotation_status": "仍缺真人双标；本结果是代理标注器一致性",
+  "note": "kappa 为 None 表示分母为 0 或完全一致导致 pe=1，不写 0。",
+  "version": 1
+}
