@@ -1010,7 +1010,7 @@ E02 在**独立任务家族**上证明增量：建 train / dev / validation / te
 ## 2026-11-10 边界测试与入口硬化（第四轮）
 
 正常路径的 393 项测试全绿，不代表边界分支没洞。这一轮专门打异常路径：
-新增 5 个测试文件（74 项），过程中查出并修掉 6 个真问题。
+新增 6 个测试文件（88 项），过程中查出并修掉 6 个真问题。
 
 ### 新增测试
 
@@ -1021,6 +1021,7 @@ E02 在**独立任务家族**上证明增量：建 train / dev / validation / te
 | `tests/test_untrusted_input.py` | 14 | 技能候选、CI 策略、契约参数这些「来源不可信」的输入 |
 | `tests/test_reproducibility.py` | 8 | 同配置重跑逐字节一致；汇总数必须等于逐条之和 |
 | `tests/test_safe_extract.py` | 11 | 第三方 zip 的路径穿越 / 盘符 / 反斜杠 / 类型 / 体积上限 |
+| `tests/test_api_smoke.py` | 14 | 真起 HTTP 服务：接口可用、静态穿越挡住、安全响应头齐全、参数校验 |
 
 模糊测试守的是三条铁律：六字段执行契约必须齐全、`decision` 只能是登记取值、
 `executed=True` 必须对应真的改了正文的 effect（不许空口说拦住了）。
@@ -1059,6 +1060,20 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
 （还验证了「声明大小可以撒谎」的实际行为：`zipfile` 以声明大小为读取上限，
 所以不会因为头里写小就写出巨量内容。）
 
+### 看板服务补冒烟测试
+
+`ai-service/api/app.py` 是 README 让人 `python ai-service/api/app.py` 直接开的门面，
+此前**一条测试都没有**。补了 14 项：在 127.0.0.1 随机端口真起服务（DB 与报告路径
+指向临时目录，不碰仓库 `data/`），逐个打接口，并专门验两件事：
+
+- `_static()` 的路径穿越：`/../ai-service/api/app.py`、`/..%2f..%2fREADME.md`、
+  `/%2e%2e/%2e%2e/README.md`、`/../.git/config` 全部 404，且响应体里没有仓库内容。
+- 每个响应都带 `nosniff` / `X-Frame-Options: DENY` / CSP / `no-store`，
+  JSON 错误不会被浏览器当 HTML 解析。
+
+顺带把 POST `/api/run` 的校验分支钉住：空体走默认值（前端「点一下就跑」的便利），
+但非法 `agent_type` / `mode` / 故障类型、以及畸形 JSON 必须 400。
+
 ### 顺带修的可复现性
 
 - `real_settlement_v1` 的产物里混着随机审批 id 与内核分配的回环端口，两次运行
@@ -1074,6 +1089,6 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
 
 ### 状态
 
-- 全量回归 **468 项全绿**。
+- 全量回归 **482 项全绿**。
 - 仍不成立：外部攻击样本一个都没接；CI 策略还没读 `security_effects` 表做独立核验。
 
