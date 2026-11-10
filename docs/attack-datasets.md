@@ -1,6 +1,8 @@
 # 外部攻击数据集与 Agent 测试集：候选清单与接入方案
 
-> 状态：**InjecAgent 已接入并跑出结果**（2026-11-10 晚），其余仍为候选。
+> 状态：**两套语料已接入**（2026-11-10 晚）：InjecAgent（间接注入）+
+> `jackhhao/jailbreak-classification`（直接越狱），其余仍为候选。
+> HuggingFace 官方域本机不可达，但 `hf-mirror.com` 可达，语料从镜像取。
 > 已核实的许可写清楚，未核实的一律标「待核实」，不要当结论引用。
 > 语料不入库（许可 + 体积），仓库只保留下载器、清单（逐文件 sha256）与评测报告。
 
@@ -54,7 +56,43 @@ python scripts/eval_external_attacks.py     # → experiments/external_attacks_v
 **不能说的**：这个数不是端到端攻击成功率，也不是「防住了提示注入」——
 本仓库的 Agent 是规则式的，检测结果要接进执行控制才谈得上拦住。
 
-## 三、候选基准（尚未接入）
+## 三、已接入：直接越狱话术（补齐「用户输入侧」这一面）
+
+`huggingface.co` 在本机不可达，实测 **`hf-mirror.com` 可达**（镜像站，200）。
+Gandalf 官方数据集在 HF 上没有公开仓库，所以用两个许可清楚的公开语料替代：
+
+| 语料 | 许可 | 规模 | 状态 |
+|---|---|---|---|
+| `jackhhao/jailbreak-classification` | **Apache-2.0**（已核对 README） | 1998 条：越狱 666 / 正常 1332 | **已接入** |
+| `TrustAIRLab/in-the-wild-jailbreak-prompts` | **MIT**（已核对 README） | 666 条野生越狱（parquet） | 候选（内容与上面高度重叠，且需要额外依赖） |
+
+入口是 `guard_input`，不是 `guard_tool_output` —— 两类攻击不能混成一个准确率。
+
+```bash
+python scripts/import_jailbreak_prompts.py
+python scripts/eval_jailbreak_prompts.py     # → experiments/jailbreak_eval_v1/
+```
+
+结果（`experiments/jailbreak_eval_v1/report.md`）：
+
+| 指标 | 值 |
+|---|---|
+| 越狱召回（任意信号） | **0.041** |
+| 越狱召回（注入类信号） | 0.036 |
+| 正常误报（任意信号） | 0.004 |
+| 正常误报（注入类信号） | 0.000 |
+
+**这是本轮最难看的数字，也是最有用的一条**：真实用户写出来的越狱话术
+（角色扮演、编码、DAN 之类）几乎全是语义攻击，正则只认字面特征，
+1998 条里只抓到 4.1%。所以「覆盖攻击手段」远没做到 —— 靠堆关键词补不上。
+
+**第二级模型不适用于这个入口**：它在 16/16 条正常用户请求上全报注入
+（学的是「像不像指令」），挂到 `user_input` 会把所有请求都拦掉。
+见 `docs/detector-evolution.md`。
+
+语料不入库，`data/external/` 已忽略；清单记录下载 URL、许可与原始 CSV sha256。
+
+## 四、候选基准（尚未接入）
 
 | 基准 | 覆盖攻击面 | 规模 | 接入方式 | 许可 |
 |---|---|---|---|---|
@@ -63,7 +101,7 @@ python scripts/eval_external_attacks.py     # → experiments/external_attacks_v
 | **Agent Security Bench (ASB)** | 10 类场景、400+ 工具，含隐私窃取/破坏/越权 | 数百用例 | 仓库 + 数据 | **仓库未声明许可 → 不接**（不能默认「公开即可用」） |
 | **WASP**（Meta） | Web Agent：网页里的注入，需自主导航 | 82 样本 | 仓库 | 待核实（可能限研究用） |
 | **CyberSecEval**（Meta） | 注入、 insecure code、cyberattack 辅助 | 多套 | 仓库 | 待核实 |
-| **Gandalf**（Lakera） | 真实用户尝试过的越狱/注入话术 | 大规模众包 | HuggingFace | 待核实；**本机 HuggingFace 不可达**，需代理 |
+| ~~**Gandalf**（Lakera）~~ | 真实用户尝试过的越狱/注入话术 | 大规模众包 | HuggingFace | HF 上**没有官方公开仓库**；已用上方两套许可清楚的语料替代 |
 
 工具链（不是数据集，可作红队补充）：
 **garak**（NVIDIA，Apache-2.0）、**PyRIT**（Microsoft，MIT）、
@@ -74,7 +112,7 @@ OWASP Top 10 for LLM Applications（LLM01 Prompt Injection）、
 OWASP Top 10 for Agentic Applications（2025-12）、
 NIST AI 100-2e2025、MITRE ATLAS `AML.T0051`。
 
-## 四、接入方案（不改现有数据结构）
+## 五、接入方案（不改现有数据结构）
 
 原则：**数据不进仓库，适配器进仓库**。
 
@@ -93,25 +131,28 @@ NIST AI 100-2e2025、MITRE ATLAS `AML.T0051`。
 4. 每个外部样本必须保留 `source` 与 `license` 字段，报告里逐条可追溯。
 5. 先跑 12 个工程冒烟的等价子集，确认适配器正确，再扩到全量。
 
-## 五、禁止事项（写进脚本断言）
+## 六、禁止事项（写进脚本断言）
 
 - 不对外部真实服务做攻击演示；所有接收方是 `127.0.0.1:9` 或本地回环。
 - 不把受限许可的数据复制进仓库；只放下载脚本与指纹。
 - 不使用真实凭据；只用明确的假 key（如 `AKIAIOSFODNN7EXAMPLE`）。
 - 不把外部基准的「攻击成功率」直接当成我们系统的成绩：环境、工具集、模型都不同。
 
-## 六、接入后能补上哪些缺口
+## 七、接入后能补上哪些缺口
 
 - 攻击样本从 6 个独立向量扩到数十个，且来自真实红队话术；
 - 正常任务来自真实业务场景（banking / travel / workspace），误阻断率更有意义；
 - 可与公开榜单的 ASR / UA 做**同环境对比**（不是跨环境比大小）。
 
-## 七、待办
+## 八、待办
 
 - [x] 核实许可并按 blob sha 接入 InjecAgent（MIT），逐文件 sha256 入清单。
 - [x] 报告里单列「注入特征 / 任意信号 / 干净对照误报 / 只扫载荷」四个数，不混成一个。
 - [ ] AgentDojo 适配器（许可 MIT 已核实；攻击在代码模板里，需要生成样本）。
 - [ ] 把外部样本纳入 `freeze_mode_compare` 的四模式对照与统一 manifest。
-- [ ] 接 HuggingFace 上的 Gandalf 话术（本机不可达，需要代理或离线包）。
+- [x] 找到可达镜像 `hf-mirror.com`，接入直接越狱语料（Apache-2.0，1998 条）。
+- [ ] 语义型越狱/注入的检测方案（当前召回 4.1%）：这属于设计变更，
+      得先有「不靠关键词」的方案再动，不能拿这批测试集调正则。
+- [ ] `TrustAIRLab` 的 parquet 需要额外依赖，且与现有 666 条高度重叠，暂不接。
 - [ ] 对自然语言注入补检测手段（当前基础版 0%）：这属于设计变更，
       得先有「不靠关键词」的方案再动，不能拿测试集调正则。
