@@ -30,7 +30,13 @@ class TestSemanticGuard(unittest.TestCase):
         a = SG.prompt_fingerprints()
         b = SG.prompt_fingerprints()
         self.assertEqual(a, b)
-        self.assertEqual(set(a), {"tool_output", "user_input"})
+        self.assertEqual(set(a), {"tool_output", "user_input",
+                                 "goal_alignment"})
+        # 落点 prompt 变了会让旧缓存全部失效，等于偷偷重跑一遍实验
+        self.assertTrue(a["tool_output"].startswith("ab9860c1"),
+                        "tool_output prompt 被改动，旧缓存会失效")
+        self.assertTrue(a["user_input"].startswith("240a360f"),
+                        "user_input prompt 被改动，旧缓存会失效")
 
     def test_canonical_key_sensitive_to_all_inputs(self):
         self.assertEqual(SG.canonical("tool_output", "x"),

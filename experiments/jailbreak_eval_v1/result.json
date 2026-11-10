@@ -18125,8 +18125,7 @@
     "fp_injection_signal": 0.0,
     "jailbreak": 666,
     "latency_ms": {
-      "p50": 0.028,
-      "p95": 0.53
+      "note": "机器负载相关，不写入产物；仅在终端显示"
     },
     "recall_any_signal": 0.041,
     "recall_injection_signal": 0.036,

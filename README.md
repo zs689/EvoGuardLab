@@ -32,7 +32,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（615 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样 + 24 收尾轮）
+# 2) 回归测试（638 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样 + 24 收尾轮 + 23 LlamaFirewall 融合）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -687,7 +687,8 @@ EvoGuardLab/
 │   ├── test_jailbreak_prompts.py 10 个测试（直接越狱入口 / 口径 / 二级模型不适用）
 │   ├── test_agentdojo_adapter.py 12 个测试（AST 不执行源码 / 组合样本口径 / 召回并列误报）
 │   ├── test_final_expansion.py  17 个测试（阈值版本 / 多 seed / 跨 Agent / 30+30 独立性 / 任务格）
-│   └── test_final_round.py      24 个测试（语义开关 / 缓存与降级 / E02 门禁 / kappa / 标定 / 中文）
+│   ├── test_final_round.py      24 个测试（语义开关 / 缓存与降级 / E02 门禁 / kappa / 标定 / 中文）
+│   └── test_llamafirewall_merge.py 23 个测试（不可见字符绕过 / 角色流水线 / 轨迹回放 / 目标对齐）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── scripts/freeze_mode_compare.py  四模式配置冻结 + 逐 case 对照
 ├── scripts/real_settlement_demo.py 5 个审批与结算验收情形
@@ -876,6 +877,9 @@ python ai-service/real_model_bench.py --suite hard --fresh
 - [x] 双人 kappa 代理标注（kappa 0.325 / 分歧 58 条，**不是真人标注**）
 - [x] 中文注入样本（30 条翻译生成，一级/三级在中文上召回接近 0，明确盲区）
 - [x] 官方 AgentDojo 4 环境 harness 接通（各 1 任务；**不是榜单成绩**）
+- [x] 融合 LlamaFirewall（MIT）的三类方法：不可见字符归一化（补上一个真实绕过）、
+      按角色可插拔扫描器 + 轨迹回放、AlignmentCheck 目标对齐审查的本地版
+      （见 [docs/llamafirewall-merge.md](docs/llamafirewall-merge.md)）
 
 ### 未完成（按前置条件分类，不是「再写点代码」就能做完）
 
@@ -906,7 +910,7 @@ python ai-service/real_model_bench.py --suite hard --fresh
   `approval.py`（可恢复审批 + 幂等账本）、`real_tasks.py`（本地 HTTP/规则/SQLite）、
   `conditional_skill.py`（声明式技能）、`tool_contract.py`（结构化授权）、
   `experience_scope.py`（经验适用范围 + BM25）。
-- **回归**：`python -m unittest discover -s tests -q` —— 当前 **615 项全绿**。
+- **回归**：`python -m unittest discover -s tests -q` —— 当前 **638 项全绿**。
 - **冻结证据（只读，不要覆盖）**：`experiments/p0_09_20261109/`、
   `experiments/real_model_20261109/` 与 `...20261109b/`、`experiments/defense_demo/`、
   `experiments/labeled_eval/`。当前版本产物在 `*_v1` / `*_v2` 目录，

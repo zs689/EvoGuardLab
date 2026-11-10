@@ -95,7 +95,10 @@ class TestReproducibleArtifacts(unittest.TestCase):
                  ("experience_scope_demo.py", ["demo.json", "report.md"]),
                  ("build_external_label_registry.py",
                   ["protocol.md", "registry.json"]),
-                 ("eval_labeled.py", ["report.md", "result.json"])]
+                 ("eval_labeled.py", ["report.md", "result.json"]),
+                 # 这条曾经把 p50/p95 耗时写进产物，两次重跑必然不同；
+                 # 现在耗时只在终端显示，产物必须逐字节一致。
+                 ("eval_jailbreak_prompts.py", ["report.md", "result.json"])]
         for script, expect in cases:
             outs = [tempfile.mkdtemp(prefix="repro_a_"),
                     tempfile.mkdtemp(prefix="repro_b_")]

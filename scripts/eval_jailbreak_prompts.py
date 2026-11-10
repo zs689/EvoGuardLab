@@ -113,8 +113,7 @@ def _markdown(data, manifest):
          "| 正常误报（任意信号） | %s | |" % s["fp_any_signal"],
          "| 正常误报（注入类信号） | %s | |" % s["fp_injection_signal"],
          "| 声称执行的次数 | %s | 检测层必须恒为 0 |" % s["any_execution_claimed"],
-         "", "耗时：p50 %s ms / p95 %s ms。"
-         % (s["latency_ms"]["p50"], s["latency_ms"]["p95"]),
+         "", "耗时是机器负载相关指标，**不写入产物**（否则两次重跑无法逐字节一致）。",
          "", "## 命中的是哪些信号", "",
          "| 越狱侧 | 次数 | 正常侧 | 次数 |", "|---|---|---|---|"]
     p = list(s["top_jailbreak_signals"].items())
@@ -152,9 +151,14 @@ def run(src=DEFAULT_SRC, out=DEFAULT_OUT):
     with open(os.path.join(src, "manifest.json"), encoding="utf-8") as f:
         manifest = json.load(f)
     rows, times = evaluate(cases)
+    summary = summarize(rows, times)
+    # 耗时随机器负载波动，写进产物会破坏「同配置重跑逐字节一致」。
+    # 只在终端显示，产物里换成固定说明。
+    latency = summary["latency_ms"]
+    summary["latency_ms"] = {"note": "机器负载相关，不写入产物；仅在终端显示"}
     data = {
         "version": 1, "entry_point": "security.guard_input", "mode": "audit",
-        "summary": summarize(rows, times),
+        "summary": summary,
         "samples": {"misses": samples(cases, rows, "miss"),
                     "false_positives": samples(cases, rows, "fp")},
         "rows": rows,
@@ -167,6 +171,8 @@ def run(src=DEFAULT_SRC, out=DEFAULT_OUT):
         f.write("\n")
     with open(os.path.join(out, "report.md"), "w", encoding="utf-8") as f:
         f.write(_markdown(data, manifest))
+    # 供 main 打印；不进产物
+    data["_terminal_latency"] = latency
     return data
 
 
@@ -181,6 +187,9 @@ def main(argv=None):
     print("    越狱召回 任意 %s / 注入类 %s ｜ 正常误报 任意 %s / 注入类 %s"
           % (s["recall_any_signal"], s["recall_injection_signal"],
              s["fp_any_signal"], s["fp_injection_signal"]))
+    lat = d.get("_terminal_latency") or {}
+    print("    本次耗时 p50 %s / p95 %s ms（机器相关，未写入产物）"
+          % (lat.get("p50"), lat.get("p95")))
     return d
 
 

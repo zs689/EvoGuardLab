@@ -1268,3 +1268,44 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
 - 仍未做：真人双标、真实中文攻击语料、自然语言间接注入检测、阈值用真实业务集标定、
   官方榜单全量（需官方模型 API）。
 
+## 2026-11-10 融合 LlamaFirewall（读源码 → 改代码 → 验证）
+
+来源 `E:/agent/learn/LlamaFirewall`（meta-llama/PurpleLlama，MIT，固定提交 f64eebd…）。
+那份是轻量源码学习版：没装依赖、没下模型权重、没跑过示例，所以结论来自**读代码**，
+不是复现上游效果。详见 `docs/llamafirewall-merge.md`。
+
+### 学到的三个方法
+
+- 按 Role 挂不同扫描器（Configuration）；
+- register/create_scanner 可插拔 + scan_replay 逐条带历史扫描、BLOCK/人工复核即停；
+- HiddenASCIIScanner（不可见 tag 字符）与 AlignmentCheck（用户目标 vs 当前动作）。
+
+### 融进来的三块
+
+1. `security.py:340-460`：补上一个**真实绕过**——关键词插一个不可见字符时，
+   `_PRE` 前置子串和正则一起失效（改前 `plain -> injection_override`、
+   `tag-char -> []`、`zero-width -> []`）。现在用「剥离视图 + tag 解码视图」双扫，
+   并产出 hidden_tag_chars / hidden_zero_width / hidden_bidi_control 三条可复核发现。
+   比上游多覆盖零宽与 bidi，而且是**先归一化再检测**（只告警不归一化等于绕过还在）。
+   C 层正则快速路径让 10KB 扫描从 ~1ms 回到 **0.37ms**（预算 1.5ms）。
+2. 新 `scan_pipeline.py`：Role / 三档决策 / 注册 / scan_replay / build_trace /
+   `to_ci_action`（→ CI 的 pass/review/block）。**不照抄**上游「命中邮箱也 BLOCK」：
+   按 severity 分级，info 不拦、warn 转人工复核、扫描器异常不静默放行。
+3. `semantic_guard.py:173-215`：AlignmentCheck 本地版 `judge_alignment`，
+   输出 observation/thought/reason，命中转人工复核而非 BLOCK；模型不可用时记 N/A
+   并同样升级人工处置。`AlignmentScanner` 默认不挂（约 1s/次）。
+
+### 上游缺点（写在文档里，没照抄）
+
+默认配置根本没挂 HIDDEN_ASCII；RegexScanner 命中邮箱/电话就 BLOCK；
+`scan()` 与 `scan_async()` 的多扫描器聚合逻辑不一致，sync 每条还新建事件循环。
+PromptGuard / CodeShield / PIICheck 因依赖外部模型或引擎，不融合。
+
+### 状态
+
+- 全量回归 **638 项全绿**（新增 `tests/test_llamafirewall_merge.py` 23 项）。
+- 历史指标不变：expanded_vectors_v1 / external_attacks_v1 / agentdojo_eval_v1
+  重跑逐字节一致；jailbreak_eval_v1 召回/误报逐项一致。
+- 顺手修了 `eval_jailbreak_prompts.py` 把 p50/p95 耗时写进产物导致不可复现的问题，
+  并把该链路纳入 `test_reproducibility.py` 的逐字节比对。
+

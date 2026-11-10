@@ -335,6 +335,82 @@ def _text(v):
         return str(v)
 
 
+# ---------------- 不可见 Unicode（借鉴 LlamaFirewall HiddenASCIIScanner） ----------------
+# 上游只查 U+E0000..U+E007F（ASCII tag chars）。实测还有两类更常见的载体：
+# 零宽字符（U+200B/200C/200D/2060/FEFF）与双向控制符（U+202A..202E / U+2066..2069）。
+# 它们肉眼看不见，却会拆开 `ignore` 这类关键词，让 _PRE 前置子串检查和正则一起失效
+# —— 实测 plain → injection_override，插一个 U+E004E 或 U+200B 后 → []。
+# 所以不能只「报一条发现」，必须先把文本归一化再扫，否则检测等于没做。
+_TAG_LO, _TAG_HI = 0xE0000, 0xE007F
+_ZERO_WIDTH = {0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF}
+_BIDI = set(range(0x202A, 0x202F)) | set(range(0x2066, 0x206A))
+# 快速路径：正则在 C 层扫一遍，正常文本（占绝大多数）不做 Python 逐字符循环。
+# 没有这一步，10KB 文本每字符过一遍 Python 会让 scan 从 ~0.5ms 涨到 ~1ms，
+# 逼近 tests/test_security.py 的 1.5ms 预算，并在负载高时偶发超时。
+_INVISIBLE_RE = re.compile(
+    "[\U000E0000-\U000E007F\u200B\u200C\u200D\u2060\uFEFF"
+    "\u202A-\u202E\u2066-\u2069]")
+
+
+def strip_invisible(text):
+    """返回 (剥离视图, 解码视图, 各类计数)。
+
+    剥离视图：删掉所有不可见字符，让被拆开的关键词重新连上
+              （`Ig\\u200Bnore` → `Ignore`）。
+    解码视图：把 tag chars 还原成对应 ASCII（LlamaFirewall 的做法），
+              用来抓「整段指令都藏在 tag 字符里」的情况。
+    两个视图都扫，互补；正常文本没有隐藏字符时零开销。
+    """
+    s = _text(text)
+    counts = {"tag": 0, "zero_width": 0, "bidi": 0}
+    if not _INVISIBLE_RE.search(s):
+        return s, s, counts
+    plain, decoded = [], []
+    for ch in s:
+        cp = ord(ch)
+        if _TAG_LO <= cp <= _TAG_HI:
+            counts["tag"] += 1
+            decoded.append(chr(cp - _TAG_LO))
+            continue                       # 剥离视图直接丢掉
+        if cp in _ZERO_WIDTH:
+            counts["zero_width"] += 1
+            continue
+        if cp in _BIDI:
+            counts["bidi"] += 1
+            continue
+        plain.append(ch)
+        decoded.append(ch)
+    return "".join(plain), "".join(decoded), counts
+
+
+def sanitize_invisible(text):
+    """显式剥离不可见字符（调用方要用才调，默认路径不改内容）。"""
+    return strip_invisible(text)[0]
+
+
+def _hidden_findings(counts, decoded, where, only=None):
+    out = []
+    rules = [
+        ("tag", "hidden_tag_chars", "error",
+         "ASCII tag 字符（U+E0000..U+E007F）可把指令藏成肉眼不可见文本；"
+         "解码后片段：%s" % (decoded[:120] or "—"),
+         "极少合法出现；若确为富文本标签残留需人工确认"),
+        ("zero_width", "hidden_zero_width", "warn",
+         "零宽字符可拆开关键词绕过检测，已剥离后重新扫描",
+         "部分编辑器/复制粘贴会带入零宽空格，需人工看上下文"),
+        ("bidi", "hidden_bidi_control", "warn",
+         "双向控制符可造成视觉顺序与实际顺序不一致（Trojan Source）",
+         "阿拉伯语/希伯来语等 RTL 文本会合法使用，属可接受误报"),
+    ]
+    for key, code, severity, detail, fp in rules:
+        if not counts[key] or (only and code not in only):
+            continue
+        out.append({"code": code, "severity": severity, "where": where,
+                    "match": "%s ×%d" % (key, counts[key]),
+                    "detail": detail, "false_positive": fp})
+    return out
+
+
 _CALLS, _FINDINGS, _NANOS = 0, 0, 0
 
 
@@ -343,13 +419,8 @@ def stats():
             "avg_us": round(_NANOS / _CALLS / 1000.0, 1) if _CALLS else None}
 
 
-def scan(text, where="text", only=None):
-    """扫一段文本，返回发现列表。不改内容。"""
-    global _CALLS, _FINDINGS, _NANOS
-    s = _text(text)
-    if not s:
-        return []
-    t0 = time.perf_counter()
+def _scan_view(s, where, only=None):
+    """在一个已归一化的视图上跑特征表。"""
     low = s.lower()
     out = []
     for d in DETECTORS:
@@ -363,6 +434,31 @@ def scan(text, where="text", only=None):
         out.append({"code": d["code"], "severity": d["severity"], "where": where,
                     "match": s[max(0, m.start() - 20):m.end() + 20][:120],
                     "detail": d["detail"], "false_positive": d["false_positive"]})
+    return out
+
+
+def scan(text, where="text", only=None):
+    """扫一段文本，返回发现列表。不改内容。
+
+    有不可见字符时跑两个视图（剥离 + tag 解码），并额外产出可复核的
+    hidden_* 发现。这是从 LlamaFirewall HiddenASCIIScanner 学来的方法，
+    但补了它没覆盖的零宽 / 双向控制符，并且是「先归一化再检测」而不是
+    「只报一条告警」—— 只告警不归一化等于把绕过留着。
+    """
+    global _CALLS, _FINDINGS, _NANOS
+    s = _text(text)
+    if not s:
+        return []
+    t0 = time.perf_counter()
+    clean, decoded, counts = strip_invisible(s)
+    out = _scan_view(clean, where, only)
+    if counts["tag"] and decoded != clean:
+        seen = {f["code"] for f in out}
+        for f in _scan_view(decoded, where, only):
+            if f["code"] not in seen:
+                out.append(f)
+                seen.add(f["code"])
+    out.extend(_hidden_findings(counts, decoded, where, only))
     _CALLS += 1
     _NANOS += int((time.perf_counter() - t0) * 1e9)
     _FINDINGS += len(out)
