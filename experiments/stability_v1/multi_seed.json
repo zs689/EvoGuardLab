@@ -1,0 +1,43 @@
+{
+  "cases_per_seed": 27,
+  "interpretation": "仿真器的故障注入是确定性的（seed 只登记在 manifest，不改变落点），所以方差为 0 是设计结果，不能据此宣称真实模型下也稳定。",
+  "mean_rate": 1.0,
+  "per_seed": {
+    "11": {
+      "cases": 27,
+      "rate": 1.0,
+      "success": 27
+    },
+    "23": {
+      "cases": 27,
+      "rate": 1.0,
+      "success": 27
+    },
+    "41": {
+      "cases": 27,
+      "rate": 1.0,
+      "success": 27
+    },
+    "59": {
+      "cases": 27,
+      "rate": 1.0,
+      "success": 27
+    },
+    "7": {
+      "cases": 27,
+      "rate": 1.0,
+      "success": 27
+    }
+  },
+  "recheck_cases": 27,
+  "seeds": [
+    7,
+    11,
+    23,
+    41,
+    59
+  ],
+  "stable_cases": 27,
+  "stdev": 0.0,
+  "total_cases": 27
+}

@@ -1,0 +1,13 @@
+{
+  "architecture_allows_transfer": false,
+  "architecture_cases": 18,
+  "architecture_note": "runtime._decide 要求 skill.task_type == agent_type；order 的技能直接用到 kb/planner 时不会被采用。",
+  "simulated_transfer": {
+    "cases": 18,
+    "gain": 0.0,
+    "negative_transfer_rate": 0.0,
+    "note": "把 task_type 改成目标 agent 是**模拟**迁移，不等于架构已支持；业务收益不能抵消负迁移。",
+    "regressions": 0,
+    "verdict": "REJECT"
+  }
+}

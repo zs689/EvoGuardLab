@@ -1192,3 +1192,52 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
 - 仍未做：官方 AgentDojo 4 环境 benchmark、语义型攻击检测方案、中文注入样本，
   以及用户指定「最后做」的 30+30 扩样 / 每格≥3 任务 / 阈值版本登记 / 跨 Agent 迁移 / 多 seed。
 
+## 2026-11-10 收尾：用户指定「最后搞」的五项，全部落地
+
+### 1. 30+30 独立向量扩样（`scripts/expanded_vectors_v1.py`）
+
+- 30 个攻击向量 + 30 条结构相似、意图合法的对照。独立性靠三条硬校验：
+  `vector_id` 唯一、`(入口 × 手法)` 唯一、payload 两两字符 3-gram
+  Jaccard < 0.85（实测最大 0.691，v11/v30）。重复 payload 直接判不独立。
+- 检测层结果：**内容召回 0.467、内容误报 0.000、声称执行 0 次**。
+  另有 14 条合法对照命中**配置类信号**（`tool_policy_missing` /
+  `peer_not_allowed`）——按 Q01 三真值口径单列，不混进内容误报
+  （第一版把它们混进去，误报虚高到 46.7%，已修）。
+- 结论要如实说：30 个向量是工程冒烟的覆盖面，不是「所有攻击手段」；
+  语义型攻击仍然靠不住（外部越狱语料召回 0.041）。
+
+### 2. 每格 ≥3 条独立任务
+
+- 102 个 `(agent × fault × difficulty)` 格子，每格 3 个不同 `task_id`，
+  违规 0。任务全部取自既有 `sim.TASKS`，不改模板、不动历史 204 例口径：
+  这是**任务矩阵定义的扩充**，不是把新数字混进冻结评测集。
+
+### 3. 阈值版本登记
+
+- `config/thresholds_v1.json`：版本、适用维度、20%/0% 阈值、开发集分布
+  （从 `tests/fixtures/trace_*.json` 真实统计）、理由与「不在测试集上反复调阈值」声明。
+- `assurance.load_thresholds()` / `thresholds_fingerprint()`；
+  `build()` 输出新增 `thresholds.version / fingerprint / source`。
+  配置缺失或非法时回退内置值并标 `source=builtin`，不静默换口径。
+- **阈值本身仍是经验值，未标定** —— 登记的是版本与适用场景，不是「已标定」。
+
+### 4. 跨 Agent 迁移
+
+- 架构现状：`runtime._decide` 要求 `skill.task_type == agent_type`，
+  order 的技能直接用到 kb/planner **不会被采用**（实测 `skill_applied` 全 False）。
+- 模拟迁移（把 `task_type` 改成目标 agent）：成对用例增益为负/零、
+  判定 **REJECT**。业务收益不能抵消负迁移。模拟不等于架构已支持。
+
+### 5. 多 seed
+
+- 5 个 seed（7/11/23/41/59），27 条 case/seed，成功率标准差 **0.0**、稳定用例 27/27。
+- 如实写：仿真器的故障注入是确定性的（seed 只登记在 manifest、不改落点），
+  方差为 0 是设计结果，**不能据此宣称真实模型也稳定**。
+
+### 状态
+
+- 全量回归 **591 项全绿**（新增 `tests/test_final_expansion.py` 17 项）。
+- 冻结产物未改写；README 的「已完成 / 未完成」清单已按实情重排。
+- 仍未做：真实模型上的 E02 / 多 seed、语义型攻击检测方案、阈值标定、
+  官方 AgentDojo 4 环境 benchmark、独立标注者与 kappa、中文注入样本。
+

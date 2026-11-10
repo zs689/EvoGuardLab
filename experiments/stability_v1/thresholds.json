@@ -1,0 +1,7 @@
+{
+  "config_path": "config/thresholds_v1.json",
+  "config_sha256": "88c9714bd61ed75ff5f75aca07ddfc7703ad4ee78d03463b010ea96d85d479b2",
+  "development_traces": 6,
+  "fingerprint": "a1da73c48569036623b7e408f8885cb6a045871d0d45f5751531c0b4a0f62ea4",
+  "observed_error_rate": 0.0
+}

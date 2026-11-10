@@ -14,6 +14,7 @@
   防护 security      – 有没有被注入/越权/外带/凭据泄漏/危险命令/XSS（security 组）
   可运行 operability – 模型与工具是否健康、有没有预算超限、有没有「静默降级」
 """
+import hashlib
 import json
 import os
 import sys
@@ -115,8 +116,49 @@ def _verdict(issues, coverage_ok, empty):
     return PASS
 
 
-def _operability(hl):
-    """可运行性判定。阈值写死在这里，改之前先想清楚为什么。"""
+DEFAULT_THRESHOLDS = {
+    "version": "thresholds-v1",
+    "model_error_fail": 0.2,
+    "model_error_any": 0.0,
+    "note": "内置兜底值：工程经验值，尚未在独立开发集上标定。",
+}
+
+
+def thresholds_path():
+    return os.path.normpath(os.path.join(
+        _HERE, "..", "..", "config", "thresholds_v1.json"))
+
+
+def load_thresholds(path=None):
+    """读版本化阈值。文件缺失/坏掉就回退内置值并标来源，绝不静默换口径。"""
+    p = path or thresholds_path()
+    try:
+        with open(p, encoding="utf-8") as f:
+            t = json.load(f)
+        fail = float(t["model_error_fail"])
+        any_ = float(t["model_error_any"])
+        if not (0 <= any_ <= fail <= 1):
+            raise ValueError("阈值必须满足 0 <= any <= fail <= 1")
+        t = dict(t, model_error_fail=fail, model_error_any=any_,
+                 source="file", path=os.path.abspath(p))
+    except Exception as e:                # noqa: BLE001
+        t = dict(DEFAULT_THRESHOLDS, source="builtin",
+                 fallback_reason="%s: %s" % (type(e).__name__, e))
+    return t
+
+
+def thresholds_fingerprint(t):
+    payload = {k: v for k, v in t.items()
+               if k not in ("source", "path", "fallback_reason")}
+    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False,
+                      separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _operability(hl, th=None):
+    """可运行性判定。阈值来自版本化配置，报告里登记指纹。"""
+    th = th or load_thresholds()
+    fail_at, any_at = th["model_error_fail"], th["model_error_any"]
     reasons = []
     verdict = PASS
     if hl["traces"] == 0:
@@ -128,10 +170,11 @@ def _operability(hl):
         verdict = RISK
     rate = hl["model_error_rate"]
     if rate is not None:
-        if rate > 0.2:
-            reasons.append("模型步骤报错率 %.0f%%（>20%%）" % (rate * 100))
+        if rate > fail_at:
+            reasons.append("模型步骤报错率 %.0f%%（>%.0f%%，阈值 %s）"
+                           % (rate * 100, fail_at * 100, th["version"]))
             verdict = FAIL
-        elif rate > 0:
+        elif rate > any_at:
             reasons.append("模型步骤报错率 %.0f%%" % (rate * 100))
             if verdict != FAIL:
                 verdict = RISK
@@ -220,7 +263,8 @@ def build(traces, issues, cfg=None, coverage=None, static_defs=None,
 
     rel_v = _verdict(rel, rel_cov["coverage_ok"], empty)
     sec_v = _verdict(sec, sec_cov["coverage_ok"], empty)
-    op_v, op_reasons = _operability(hl)
+    th = load_thresholds()
+    op_v, op_reasons = _operability(hl, th)
 
     worst = [rel_v, sec_v, op_v]
     if FAIL in worst:
@@ -236,6 +280,15 @@ def build(traces, issues, cfg=None, coverage=None, static_defs=None,
 
     return {
         "verdict": overall,
+        "thresholds": {
+            "version": th.get("version"),
+            "fingerprint": thresholds_fingerprint(th),
+            "source": th.get("source"),
+            "model_error_fail": th["model_error_fail"],
+            "model_error_any": th["model_error_any"],
+            "note": "阈值是工程经验值，需登记版本与适用场景；"
+                    "不在最终测试集上反复调阈值追求通过。",
+        },
         "dimensions": {
             "reliability": {
                 "verdict": rel_v, "findings": len(rel),

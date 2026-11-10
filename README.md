@@ -32,7 +32,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（574 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器）
+# 2) 回归测试（591 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -449,7 +449,8 @@ cd ai-service && python -m evoguard_inspect.cli \
 [docs/ci-policy.md](docs/ci-policy.md)。
 
 **如实标注**：没有外部真实业务轨迹、没有独立标注者，这些数字仍不能叫准确率；
-CI 策略的阈值仍是工程经验值，尚未登记版本与开发集分布。
+CI / 可运行性阈值仍是工程经验值；现已登记版本、开发集分布与指纹
+（`config/thresholds_v1.json`），但**尚未用独立开发集标定**。
 
 ### 条件决策技能（阶段 D / E01 骨架）
 
@@ -684,7 +685,8 @@ EvoGuardLab/
 │   ├── test_deep_scan.py      36 个测试（分组无泄漏 / 最小对照 / 归一化 / 两段门禁 / 落点限制）
 │   ├── test_real_followup.py  11 个测试（真实模型结构化决策 / 失败记 N/A / 复核覆盖不夸大）
 │   ├── test_jailbreak_prompts.py 10 个测试（直接越狱入口 / 口径 / 二级模型不适用）
-│   └── test_agentdojo_adapter.py 12 个测试（AST 不执行源码 / 组合样本口径 / 召回并列误报）
+│   ├── test_agentdojo_adapter.py 12 个测试（AST 不执行源码 / 组合样本口径 / 召回并列误报）
+│   └── test_final_expansion.py  17 个测试（阈值版本 / 多 seed / 跨 Agent / 30+30 独立性 / 任务格）
 ├── scripts/check_model.py   本地模型就绪探针
 ├── scripts/freeze_mode_compare.py  四模式配置冻结 + 逐 case 对照
 ├── scripts/real_settlement_demo.py 5 个审批与结算验收情形
@@ -833,7 +835,8 @@ python ai-service/real_model_bench.py --suite hard --fresh
    向量检索 / rerank；相似度不能替代可信性，撤销 / 过期 / 版本 / 权限先于打分剔除。
 8. **负迁移只在两个维度上被挡住**：`guard` 覆盖「同 agent 不同故障」，
    `scope` 覆盖「同故障但单/复合」，没有单独的量化指标；批量投毒还没做。
-9. **单次运行无多 seed**，模型随机性未量化。
+9. **多 seed 只在确定性仿真上做过**（5 个 seed、成功率标准差 0，属设计结果）；
+   真实模型随机性仍未量化。
 10. FastAPI / PostgreSQL / Vue / Java / Docker / OpenTelemetry 一律未做。
 
 ---
@@ -856,6 +859,15 @@ python ai-service/real_model_bench.py --suite hard --fresh
 - [x] 经验适用范围 + 结构过滤 + BM25（E03，`experience_scope.py`）
 - [x] 六组公平消融 + 统一 manifest 登记（§10，`scripts/ablation_v1.py`）
 - [x] 结构化工具契约 + 12 条工程冒烟 case（§5）
+- [x] 严格 2×2 消融（审批 × 内容隔离，17 个配置，§10）
+- [x] 第二轮真实模型 1080 run 全量评测（11-10，配置指纹一致、结果逐项相同）
+- [x] 外部语料接入：InjecAgent 2108 条 + 直接越狱 1998 条 + AgentDojo 10 模板
+- [x] 30 个独立攻击向量 + 30 个相似合法对照（`expanded_vectors_v1.py`，
+      独立性用 (入口 × 手法) + 字符 3-gram Jaccard < 0.85 校验）
+- [x] 每格 ≥3 条独立任务：102 个 (agent × fault × difficulty) 格子全部达标
+- [x] 阈值版本登记 + 开发集分布 + 指纹（`config/thresholds_v1.json`）
+- [x] 跨 Agent 迁移实验：架构**不允许**直接迁移，模拟迁移判定 REJECT（见 stability_v1）
+- [x] 仿真多 seed（5 个 seed，标准差 0；不等于真实模型稳定）
 
 ### 未完成（按前置条件分类，不是「再写点代码」就能做完）
 
@@ -866,17 +878,17 @@ python ai-service/real_model_bench.py --suite hard --fresh
 - [ ] 负迁移压力测试：批量投毒，测晋升门槛在不同投毒比例下的召回 / 误报。
 
 需要**真实模型重跑**（耗时、需 Ollama）：
-- [ ] 第二轮 1080 run 完整评测（第二轮只重训了技能库，没重测）。
 - [ ] 真实模型上的 E02 四组家族验证与不确定性范围。
-- [ ] 多 seed 量化模型随机性。
+- [ ] 真实模型的多 seed 量化（仿真已做，真实模型未做）。
 
-需要**补实验设计**（可本地做，但本轮未做）：
-- [ ] 严格 2×2 消融（固定审批策略比内容隔离、固定隔离方式比审批策略）。
-- [ ] 30 攻击 + 30 正常扩样（当前 6 + 6）。
-- [ ] 每格 ≥3 条独立任务：kb 的部分故障在 guard 上基线成功率仍不足。
-- [ ] 阈值版本登记与开发集分布记录（模型报错率 10% / 20% 仍是经验值）。
-- [ ] 跨 Agent 迁移实验（H3：迁移距离越远收益越低，可能被证伪）。
+需要**补实验设计**：
+- [ ] 独立标注者 + 双人 Cohen's kappa（目前只有协议）。
+- [ ] 负迁移压力测试：批量投毒，测晋升门槛在不同投毒比例下的召回 / 误报。
+- [ ] 语义型攻击检测方案：30 个独立向量上内容召回 0.467，
+      外部直接越狱语料上 0.041，靠加正则补不上。
+- [ ] 阈值本身的开发集标定（版本与分布已登记，阈值仍是经验值）。
 - [ ] 提任务难度：多步计算 / 跨文档推理，让模型真的会答错。
+- [ ] 官方 AgentDojo 4 环境端到端 benchmark（目前只测了模板措辞）。
 
 ---
 
@@ -887,7 +899,7 @@ python ai-service/real_model_bench.py --suite hard --fresh
   `approval.py`（可恢复审批 + 幂等账本）、`real_tasks.py`（本地 HTTP/规则/SQLite）、
   `conditional_skill.py`（声明式技能）、`tool_contract.py`（结构化授权）、
   `experience_scope.py`（经验适用范围 + BM25）。
-- **回归**：`python -m unittest discover -s tests -q` —— 当前 **392 项全绿**。
+- **回归**：`python -m unittest discover -s tests -q` —— 当前 **591 项全绿**。
 - **冻结证据（只读，不要覆盖）**：`experiments/p0_09_20261109/`、
   `experiments/real_model_20261109/` 与 `...20261109b/`、`experiments/defense_demo/`、
   `experiments/labeled_eval/`。当前版本产物在 `*_v1` / `*_v2` 目录，

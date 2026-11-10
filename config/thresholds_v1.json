@@ -1,0 +1,43 @@
+{
+  "applies_to": "evoguard_inspect.assurance._operability / model_error_rate",
+  "development_set": {
+    "error_spans": 0,
+    "files": 6,
+    "note": "只记录开发集分布，不在测试集上反复调阈值追求通过；20% 仍是工程经验值，不是从这批数据拟合出来的。",
+    "observed_error_rate": 0.0,
+    "per_file": {
+      "trace_attack.json": {
+        "error_spans": 0,
+        "spans": 5
+      },
+      "trace_clean.json": {
+        "error_spans": 0,
+        "spans": 5
+      },
+      "trace_hallucination.json": {
+        "error_spans": 0,
+        "spans": 5
+      },
+      "trace_langsmith.json": {
+        "error_spans": 0,
+        "spans": 0
+      },
+      "trace_retry_ok.json": {
+        "error_spans": 0,
+        "spans": 7
+      },
+      "trace_synthetic_bad.json": {
+        "error_spans": 0,
+        "spans": 52
+      }
+    },
+    "source": "tests/fixtures/trace_*.json（开发用轨迹夹具，非最终测试集）",
+    "spans": 74,
+    "traces": 6
+  },
+  "model_error_any": 0.0,
+  "model_error_fail": 0.2,
+  "rationale": "20% 是工程经验值。改它必须先记录开发集分布与误报案例，不允许在最终测试集上反复调阈值追求通过。",
+  "status": "已登记版本与适用场景；阈值本身尚未用独立开发集标定",
+  "version": "thresholds-v1"
+}
