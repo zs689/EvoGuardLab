@@ -69,13 +69,13 @@
 | §10 会话7 | P2：API 受控并发与预算 | ❌ **未做** | 仍是单用户回环假设 |
 | §6 R06 | 每任务模型调用次数/token/超时预算 | ❌ **未做** | 只有单次调用超时，没有任务级预算 |
 | §4 | 任务/租户作用域纳入审批上下文 | ⚠️ **部分** | 有 run_id，没有 tenant/task 作用域 |
-| §7 | 真实人工双标注 + kappa | ❌ **未做**（已有代理 kappa 0.325） | scripts/human_labels.py 已把成本压到 60 次点击 |
+| §7 | 真实人工双标注 + 标注者间 kappa | ⚠️ **部分**：真人**单人**标注已完成（60 条 vs 语料），按入口分档注入档 kappa 0.752；仍缺第二位标注者 | `experiments/human_labels_v1/result.json`、`tests/test_human_labels.py` |
 | — | 官方 AgentDojo 排行榜 | ❌ **未做** | 需官方模型与 API |
 
 ## 六、怎么复核
 
 ```bash
-python -m unittest discover -s tests -q      # 748 项
+python -m unittest discover -s tests -q      # 754 项
 evoguard config                              # 本次生效配置
 python -c "import sys;sys.path.insert(0,'ai-service/evoguard');import tool_rails as t;[print(r) for r in t.describe(t.load())]"
 ```

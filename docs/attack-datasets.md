@@ -208,6 +208,52 @@ python scripts/eval_chinese_real.py       # → experiments/chinese_corpus_v2/
 2. **上游混进英文**：pojia-breaker 的 `B2_ctf_slot` 上游本来就写成英文。
    不删样本、不删断言，改为逐条标注 `lang`，并在测试里把「非中文占比 < 2%」写成显式约束。
 
+### 三、人工标注暴露的标签口径问题（2026-11-11）
+
+人工标注（`scripts/human_labels.py`，单人、60 条、对比语料标签）首轮跑出：
+一致率 0.733、Cohen's kappa **0.467**（Landis–Koch 量表里算"中等一致"，没到 0.6 线）。
+分歧 16 条，规律极清楚，**暴露的是标签方案本身的口径错位**，不是标注者随机失误：
+
+| 类别 | 条数 | 语料标 | 人标 | 性质 |
+|---|---|---|---|---|
+| `zh_harm/*` 有害请求 | **11** | 攻击 | 不是 | **口径差**：二进制 `attack` 把"有害请求"和"注入/越狱"混在一个桶；页面问"是不是注入/越狱"，人按窄义理解 |
+| `zh_ind/04` 间接注入 | 1 | 攻击 | 不是 | **真漏判**：伪邮件嵌"改订单金额为 9.90"，套"客户原话"外壳，典型间接注入 |
+| `zh_ind_clean/*` 对照 | 4 | 干净 | 是注入 | **误报**：JSON/代码里的发票时效陈述，无命令式指令，良性 |
+
+（11 + 1 + 4 = 16，与 `disagreement_count` 对得上。早期草稿误写成 12 条有害请求，已更正。）
+
+根因：本节表格已经把五类拆开（`harmful_request` / `indirect_injection` / `direct_jailbreak` / `indirect_clean` / `benign`），
+但 `cases.jsonl` 的 `label` 字段是**二进制 attack/benign**，人工抽样只按 `label` 取，
+于是 `zh_harm`（有害请求）和 `zh_ind`/`zh_direct`（注入/越狱）被当成同一类去问"是不是注入"——人照字面理解才对。
+**这违反了本文档第 69 行与 `docs/labeling-protocol.md` 第二节自己立的规矩：不同入口不能混成一个数。**
+
+#### 按入口分档后的实测（`human_labels.py` v2，`result.json` 的 `by_category` / `injection_scope`）
+
+| 口径 | 条数 | 一致率 | kappa | 说明 |
+|---|---|---|---|---|
+| 全体混算 | 60 | 0.733 | 0.467 | **混合口径，不能单独引用** |
+| `harmful_request` | 12 | **0.083** | 0.0 | 几乎全分歧 = 纯口径差，不是标注能力 |
+| `indirect_injection` | 16 | 0.938 | 0.0 | 单档语料标签恒定，kappa 无信息量 |
+| `indirect_clean` | 25 | 0.840 | 0.0 | 同上 |
+| **间接注入档（攻击 + 成对对照）** | **41** | **0.878** | **0.752** | **主口径**：与 InjecAgent 的 base/对照成对结构一致 |
+
+两个必须写清的技术点：
+- **单档 kappa 恒为 0/None**：每一档里语料标签是常量（有害请求全 1、干净对照全 0），
+  kappa 在单档天然没信息量。只有把"攻击样本 + 成对干净对照"合起来算才有意义。
+- **照抄语料必然 kappa = 1.000**：若把 16 条分歧全部按语料对齐，人工标签就等价于语料标签，
+  1.0 是恒等式废数，不是"一致性提升"。`tests/test_human_labels.py` 用一条反例把这个陷阱钉住。
+
+#### 处理结论（不刷数）
+
+采用**按入口分档报告**，不改动任何一条人工标签：`scripts/human_labels.py` 的 `score()` 新增
+`by_category` 与 `injection_scope`，顶层混合 kappa 的 `note` 里写死"不能单独当作标注质量或准确率"；
+6 条守门测试锁住"成对算 / 两类不合并 / 各档是对全体的划分 / 照抄不等于提升"。
+**原始 0.467 不覆盖、不美化**，保留在 `experiments/human_labels_v1/result.json`。
+标注为单人、对比对象是语料标签（非金标准），任何报告都必须写明这两点。
+
+建议 A（把 `label` 拆成 `harmful_request` / `injection` / `benign` 三档，标注指令按档问）**尚未实施**，
+列为待办；当前用分档报告达到同等效果，且不改语料、不重标。
+
 
 ## 九、待办
 
@@ -223,3 +269,5 @@ python scripts/eval_chinese_real.py       # → experiments/chinese_corpus_v2/
 - [x] 对自然语言注入补检测手段：已改为「按工具职责判定动作请求」（`action_scope.py`），
       InjecAgent held-out 逐 case 召回 0.839 / 误报 0.2%，零模型调用。
 - [x] 中文语料接入（三类分开，262 条攻击 / 47 种手法），详见第十节。
+- [ ] 中文语料 `label` 拆成 `harmful_request` / `injection` / `benign` 三档并按档问标注
+      （第十节三：当前已用分档报告达到同等口径，但语料字段仍是二进制 attack/benign）。

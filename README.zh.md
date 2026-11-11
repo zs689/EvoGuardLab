@@ -32,7 +32,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（748 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样 + 24 收尾轮 + 38 LlamaFirewall 融合 + 15 执行入口 + 10 审批加固 + 9 基线指纹 + 16 中文语料 + 22 按工具护栏）
+# 2) 回归测试（754 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样 + 24 收尾轮 + 38 LlamaFirewall 融合 + 15 执行入口 + 10 审批加固 + 9 基线指纹 + 16 中文语料 + 22 按工具护栏 + 6 分档守门）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -875,6 +875,9 @@ python ai-service/real_model_bench.py --suite hard --fresh
 - [x] 真实模型 E02 四家族 + 真实模型多 seed（整体门禁 REJECT：dev 负迁移）
 - [x] 阈值开发集标定（候选 0.15，未启用；留出集 F1 与默认相同，不宣称更优）
 - [x] 双人 kappa 代理标注（kappa 0.325 / 分歧 58 条，**不是真人标注**）
+- [x] 中文语料**真人单人标注**（60 条 vs 语料标签）：按入口分档后间接注入档
+      一致率 0.878 / kappa 0.752；全体混合口径 0.467 只作「口径不能混算」的记录。
+      见 `experiments/human_labels_v1/result.json`、`docs/attack-datasets.md` 第十节三。
 - [x] 中文注入样本（30 条翻译生成，一级/三级在中文上召回接近 0，明确盲区）
 - [x] 官方 AgentDojo 4 环境 harness 接通（各 1 任务；**不是榜单成绩**）
 - [x] 融合 LlamaFirewall（MIT）的三类方法：不可见字符归一化（补上一个真实绕过）、
@@ -890,7 +893,8 @@ python ai-service/real_model_bench.py --suite hard --fresh
 - [ ] 负迁移压力测试：批量投毒，测晋升门槛在不同投毒比例下的召回 / 误报。
 
 需要**外部条件或人**：
-- [ ] 真人独立双标 + 双人 Cohen's kappa（代理标注已做，真人仍缺）。
+- [ ] 真人独立双标 + 双人 Cohen's kappa（代理标注 0.325 已做、真人**单人**标注已完成，
+      缺的是第二位标注者；见 `experiments/human_labels_v1/`）。
 - [ ] 可授权的真实中文攻击语料（翻译样本不能替代）。
 - [ ] 官方榜单全量评测（需官方评测模型与 API；本地 harness 只跑了 4 个任务）。
 
@@ -910,7 +914,7 @@ python ai-service/real_model_bench.py --suite hard --fresh
   `approval.py`（可恢复审批 + 幂等账本）、`real_tasks.py`（本地 HTTP/规则/SQLite）、
   `conditional_skill.py`（声明式技能）、`tool_contract.py`（结构化授权）、
   `experience_scope.py`（经验适用范围 + BM25）。
-- **回归**：`python -m unittest discover -s tests -q` —— 当前 **748 项全绿**。
+- **回归**：`python -m unittest discover -s tests -q` —— 当前 **754 项全绿**。
 - **冻结证据（只读，不要覆盖）**：`experiments/p0_09_20261109/`、
   `experiments/real_model_20261109/` 与 `...20261109b/`、`experiments/defense_demo/`、
   `experiments/labeled_eval/`。当前版本产物在 `*_v1` / `*_v2` 目录，

@@ -66,6 +66,37 @@ def cohen_kappa(a, b):
     return round((po - pe) / (1 - pe), 3)
 
 
+# case_id 前缀 → 语料类别。这几类在 docs/attack-datasets.md 第十节里本来就是分开报的，
+# 混成一个 kappa 会把「口径差」误读成「标注能力差」，所以 score() 必须同时给分档数。
+CATEGORY = {
+    "zh_harm": "harmful_request",
+    "zh_direct": "direct_jailbreak",
+    "zh_ind": "indirect_injection",
+    "zh_ind_clean": "indirect_clean",
+    "zh_benign": "benign",
+}
+# 项目真正要验的入口：间接注入 + 它的成对干净对照（等价于 InjecAgent 的 base/对照结构）
+INJECTION_SCOPE = ("zh_ind", "zh_ind_clean")
+
+
+def _category(case_id):
+    return CATEGORY.get(case_id.split("/")[0], "other")
+
+
+def _stat(ks, truth, human):
+    """一档内的 n / 一致率 / kappa / 分歧数。kappa 算不出就 None，不写 0。"""
+    a = [truth[k] for k in ks]
+    b = [human[k] for k in ks]
+    n = len(ks)
+    return {
+        "cases": n,
+        "agreement_rate": round(sum(1 for x, y in zip(a, b) if x == y) / n, 3)
+        if n else None,
+        "cohen_kappa": cohen_kappa(a, b),
+        "disagreement_count": sum(1 for x, y in zip(a, b) if x != y),
+    }
+
+
 def make(n_each=N_EACH, out_dir=SHEET_DIR):
     _, attacks, benign = load_cases()
     picked = ([dict(r, _truth="attack") for r in sample(attacks, n_each)]
@@ -97,18 +128,27 @@ def score(labels_path, out=OUT, n_each=N_EACH):
     b = [human[k] for k in keys]
     disagree = [{"case_id": k, "corpus_label": truth[k], "human_label": human[k]}
                 for k in keys if truth[k] != human[k]]
+    by_cat = {}
+    for cat in sorted(set(_category(k) for k in keys)):
+        by_cat[cat] = _stat([k for k in keys if _category(k) == cat], truth, human)
+    inj = [k for k in keys if k.split("/")[0] in INJECTION_SCOPE]
     res = {
-        "version": 1,
+        "version": 2,
         "annotator": "human (single)",
         "cases": len(keys),
         "agreement_rate": round(sum(1 for x, y in zip(a, b) if x == y) / len(keys), 3)
         if keys else None,
         "cohen_kappa_vs_corpus": cohen_kappa(a, b),
+        "by_category": by_cat,
+        "injection_scope": _stat(inj, truth, human),
         "disagreements": disagree,
         "disagreement_count": len(disagree),
         "note": "这是**人工 vs 语料标签**的一致性。语料标签本身也是本项目/上游给的，"
                 "所以它衡量的是「人工与既有标注是否一致」，不是「标注绝对正确」。"
-                "只有一位标注者，因此没有「标注者之间」的 kappa。",
+                "只有一位标注者，因此没有「标注者之间」的 kappa。"
+                "顶层 cohen_kappa_vs_corpus 把「有害请求」与「间接注入」混在一个二分类里，"
+                "会被口径差压低，**不能单独当作标注质量或准确率**；请优先看 "
+                "injection_scope 与 by_category（分入口报，与 docs/attack-datasets.md 第十节一致）。",
     }
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "result.json"), "w", encoding="utf-8") as f:
@@ -197,8 +237,15 @@ def main(argv=None):
     if a.score:
         r = score(a.score, a.out, a.n)
         print("[√] 产物：%s" % os.path.join(a.out, "result.json"))
-        print("    %d 条 ｜ 一致率 %s ｜ kappa %s"
+        print("    全体 %d 条 ｜ 一致率 %s ｜ kappa %s（混合口径，勿单独引用）"
               % (r["cases"], r["agreement_rate"], r["cohen_kappa_vs_corpus"]))
+        s = r["injection_scope"]
+        print("    间接注入档 %d 条 ｜ 一致率 %s ｜ kappa %s  ← 主口径"
+              % (s["cases"], s["agreement_rate"], s["cohen_kappa"]))
+        print("    分档（n / 一致率 / kappa）：")
+        for cat, st in sorted(r["by_category"].items()):
+            print("      %-20s %2d / %s / %s"
+                  % (cat, st["cases"], st["agreement_rate"], st["cohen_kappa"]))
         return 0
     ap.print_help()
     return 0

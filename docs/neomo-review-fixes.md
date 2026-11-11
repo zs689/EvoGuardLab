@@ -25,11 +25,11 @@
 | R09 | 基线指纹漏掉主要安全模块 | **已修** | `tests/test_baseline_fingerprint.py`（9 项） |
 | — | 从 NeMo 融合「按工具声明双向护栏」 | **已补做** | `tool_rails.py`＋`tests/test_tool_rails.py`（22 项） |
 | — | 评审 §9「能力表」 | **已补做** | `docs/capability-matrix.md` |
-| — | 人工标注 | **成本已降到 60 次点击**，仍待他本人执行 | `scripts/human_labels.py` |
+| — | 人工标注 | **已完成真人单人 60 条**；按入口分档后间接注入档一致率 0.878 / kappa 0.752；双人标注仍缺，混合口径 0.467 不作能力结论 | `scripts/human_labels.py`、`experiments/human_labels_v1/result.json` |
 | — | 官方 AgentDojo 排行榜 | **未做** | 需要官方模型/API |
 | — | 真实业务开发集上的阈值标定 | **未做** | 需要真实业务数据 |
 
-全量回归：**748 项通过**（`python -m unittest discover -s tests -q`）。
+全量回归：**754 项通过**（`python -m unittest discover -s tests -q`）。
 
 ---
 
@@ -274,7 +274,10 @@ approved，于是都返回 `consumed`。
 
 ## 九、没做的部分（不粉饰）
 
-1. **真实人工双标注 + Cohen's kappa**：仍然是代理标注。模型间一致性不等于人工一致性。
+1. **真实人工双标注 + 标注者间 Cohen's kappa**：已有真人**单人**标注（60 条中文语料
+   vs 语料标签，见 `experiments/human_labels_v1/result.json`），但没有第二位标注者，
+   算不出标注者间 kappa。代理标注（kappa 0.325）与真人单人标注是两回事，
+   都不能冒充双人一致性；模型间一致性也不等于人工一致性。
 2. **官方 AgentDojo 排行榜**：需要官方模型与 API；本地只跑了适配器链路。
 3. **真实业务开发集上的阈值标定**：`config/thresholds_v2_calibrated.json` 是候选，
    没有在真实业务分布上标定过，**未启用**。
