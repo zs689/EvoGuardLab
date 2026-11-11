@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evoguardlab"
+version = "0.6.0"
+description = "Reproducible benchmark for AI-agent guardrails: does a deny actually stop the tool call?"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "EvoGuardLab contributors" }]
+keywords = ["ai-agents", "prompt-injection", "guardrails", "agent-security", "llm"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Security",
+]
+# 刻意**零运行时依赖**：整套评测只用标准库。
+# 这是可复现性的一部分 —— 装不上 torch 的机器也能跑出同一批数字。
+dependencies = []
+
+[project.optional-dependencies]
+# 只有想接本地模型做语义判定时才需要（Ollama 自带 HTTP 接口，仍然不用装包）
+dev = []
+
+[project.scripts]
+evoguard = "evoguard_cli:main"
+
+[project.urls]
+Homepage = "https://github.com/OWNER/EvoGuardLab"
+Issues = "https://github.com/OWNER/EvoGuardLab/issues"
+
+[tool.setuptools]
+# 根目录放 CLI（py-module），evoguard 包映射到 ai-service/evoguard。
+# 不用 packages.find：它会顺手把 package_dir 改成 ai-service，
+# 结果根目录的 evoguard_cli.py 找不到（实测 `pip install -e .` 后
+# 入口直接 ModuleNotFoundError）。
+py-modules = ["evoguard_cli"]
+packages = ["evoguard"]
+package-dir = { "" = ".", "evoguard" = "ai-service/evoguard" }
+include-package-data = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

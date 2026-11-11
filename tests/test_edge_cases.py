@@ -55,9 +55,16 @@ class TestToolContractEdge(unittest.TestCase):
         self.assertIn(r["decision"], ("allow", "deny", "report"))
 
     def test_empty_args_on_read_tool(self):
+        """必填字段缺失必须拒绝。
+
+        评审 R02 之后 `kb.search` 的参数模型声明了 `required: ["query"]`，
+        空参数会走「空查询」这条静默路径 —— 返回一堆不相关结果，调用方还
+        以为查到了。拒绝比放行安全，故这里改判 deny。
+        """
         r = TC.authorize("support-agent", "kb.search", {}, mode="enforce",
                          policy=POLICY)
-        self.assertEqual(r["decision"], "allow")
+        self.assertEqual(r["decision"], "deny")
+        self.assertIn("required", {c["rule"] for c in r["checks"] if not c["ok"]})
 
     def test_unknown_mode_falls_back_to_report(self):
         r = TC.authorize("nobody", "http.send", {}, mode="weird",

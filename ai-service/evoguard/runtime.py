@@ -14,6 +14,7 @@ import time
 import agents
 import approval
 import core
+import execution
 import gateway
 import invariants
 import security
@@ -62,6 +63,15 @@ REPAIR_COVERAGE = {
                       "retrieval_failure", "stale_data", "incorrect_planning"},
     "reformat": {"format_violation"},
 }
+
+
+def _has_module(name):
+    """检查器是否真的可导入。不能只看配置里写没写名字 —— 那只是字符串。"""
+    try:
+        __import__(name)
+        return True
+    except Exception:                     # noqa: BLE001
+        return False
 
 
 def _fault_specs(run_exp):
@@ -143,6 +153,21 @@ class Ctx:
         # 降级记录：模型不可用/报错后仍给出答案，必须留痕。
         # 「跑完了、有答案、看起来成功」但其实是规则兜底 —— 这是最危险的一类静默失效。
         self.degraded = []
+        # 统一执行入口的生效配置（评审 R01）。
+        # legacy 是历史实验默认档：行为与此前完全一致，只在轨迹里标注配置；
+        # controlled 会把「写操作无审批后端 / 身份未知 / 检查器缺失」变成启动期错误。
+        self.exec_config = execution.build_config(
+            os.environ,
+            agent_type=exp.get("agent_type"),
+            allowed_tools=security.allowed_tools(exp.get("agent_type")),
+            write_tools=WRITE_TOOLS,
+            has_approval_backend=approval_gate is not None,
+            has_contract=_has_module("tool_contract"),
+            has_intent_judge=_has_module("semantic_guard"))
+        self.exec_config_export = execution.export(self.exec_config)
+        # 本轮用户目标：意图门禁的判据。没有就别猜 —— 受控档会转复核。
+        self.user_goal = (exp.get("user_goal") or "").strip()
+        self.calls = []            # 每次调用的前置判断记录（含 call_id）
 
     # ---- 内部 ----
     def _next(self):
@@ -438,6 +463,52 @@ class Ctx:
                                 {"error": err}, status="error", error_type="bad_args",
                                 logical=logical)
             raise ToolError("bad_args", err)
+
+        # ---- 统一执行入口（评审 R01）----
+        # 此前 tool_contract.authorize 与 security.guard_tool_intent 都写好了却
+        # 一次都没被真实调用：把两者替成恒定 deny，工具照样执行 —— 模块通过不等于生效。
+        # 现在两者都在**真实执行点**之前跑，且 stop 时真的不调用 sim.call_tool。
+        cid = execution.call_id(self.run_id, seq, tool, args)
+        pre = execution.preflight(
+            self.exec_config, agent_type=self.exp.get("agent_type"),
+            tool=tool, args=args, user_goal=self.user_goal, cid=cid)
+        self.calls.append(pre)
+        security.record(
+            self.store, self.run_id, "exec_preflight:%s" % tool,
+            {"call_id": cid, "detected": pre["decision"] in execution.STOP,
+             "findings": [], "decision": pre["decision"],
+             "attempted": True, "executed": False,
+             "effect": security.EFFECT_UNCHANGED, "reason": pre["reason"],
+             "checks": pre["checks"]})
+        if pre["stop"]:
+            code = ("security_deny" if pre["decision"] == execution.DENY
+                    else "security_review")
+            self.store.add_step(
+                self.run_id, seq, "security", tool, args,
+                {"error": code, "call_id": cid, "decision": pre["decision"],
+                 "checks": pre["checks"]},
+                status="error", error_type=code, logical=logical)
+            # 关键：这里没有走到 sim.call_tool，工具调用次数为 0。
+            security.record_effect(
+                self.store, self.run_id, "exec_preflight:%s" % tool, {}, tool=tool,
+                override={"detected": True, "decision": security.DECISION_DENY,
+                          "action": "blocked", "attempted": True,
+                          "executed": True, "effect": security.EFFECT_CALL_STOPPED,
+                          "call_id": cid,
+                          "reason": "统一执行入口判定 %s：%s；未执行 sim.call_tool"
+                                    % (pre["decision"], pre["reason"])})
+            raise ToolError(code, "调用前门禁未通过：%s" % pre["reason"])
+
+        # 归一化只做一次：之后的审批摘要、缓存键、真实执行都用这个对象。
+        # 不这么做的话，「授权看 amount、执行读 total」的错位还会回来。
+        if isinstance(pre.get("verified_args"), dict):
+            if pre["verified_args"] != args:
+                self.store.add_step(
+                    self.run_id, seq, "security", tool, args,
+                    {"aliases_folded": True, "verified_args": pre["verified_args"],
+                     "call_id": cid},
+                    status="ok", logical=logical)
+                args = pre["verified_args"]
 
         key = tool + "|" + json.dumps(args, sort_keys=True, ensure_ascii=False)
 

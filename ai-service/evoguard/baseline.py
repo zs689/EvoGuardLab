@@ -26,7 +26,14 @@ PROTOCOL = "evoguard-baseline-v1"
 MANIFEST_NAME = "manifest.json"
 
 # 关键代码指纹：这些文件变了却沿用旧报告，就是隐式混跑。
+#
+# 评审 R09：原来只有 11 个文件，**防护逻辑本身一个都没在里面**——
+# security.py / approval.py / tool_contract.py / semantic_guard.py /
+# action_scope.py / scan_pipeline.py / code_guard.py / execution.py 全缺席，
+# 于是「把检测器改松一半」这种事不会让 manifest 变化。
+# 现在凡是**会改变判定结果**的模块都在清单里，缺一个就直接报错（不再静默跳过）。
 CODE_FILES = (
+    # 执行与状态
     "ai-service/evoguard/core.py",
     "ai-service/evoguard/skills.py",
     "ai-service/evoguard/experience.py",
@@ -35,9 +42,44 @@ CODE_FILES = (
     "ai-service/evoguard/gateway.py",
     "ai-service/evoguard/evaluate.py",
     "ai-service/evoguard/baseline.py",
+    # 防护（评审 R09 补全）
+    "ai-service/evoguard/security.py",
+    "ai-service/evoguard/execution.py",
+    "ai-service/evoguard/approval.py",
+    "ai-service/evoguard/tool_contract.py",
+    "ai-service/evoguard/semantic_guard.py",
+    "ai-service/evoguard/deep_scan.py",
+    "ai-service/evoguard/action_scope.py",
+    "ai-service/evoguard/scan_pipeline.py",
+    "ai-service/evoguard/code_guard.py",
+    # 评测入口
     "ai-service/evolution_bench.py",
     "ai-service/real_model_train.py",
     "ai-service/real_model_bench.py",
+    "ai-service/real_model_attribution.py",
+)
+
+# 会把「同一份代码跑出不同数字」的配置与数据。
+CONFIG_FILES = (
+    "config/thresholds_v1.json",
+    "config/thresholds_v2_calibrated.json",
+    "tests/fixtures/inspect_config.json",
+)
+
+# 生效开关：只记**已知**的安全开关（取值固定），不把整份环境变量塞进指纹 ——
+# 那会把机器名、临时目录也算进去，指纹天天变，等于没有指纹。
+SECURITY_SWITCHES = (
+    "AGENTLAB_SECURITY_MODE",
+    "AGENTLAB_SECURITY_INTENT",
+    "AGENTLAB_SECURITY_SEMANTIC",
+    "AGENTLAB_SECURITY_DEEP",
+    "AGENTLAB_SECURITY_WRAP",
+    "AGENTLAB_SECURITY_SCOPE",
+    "AGENTLAB_EXEC_MODE",
+    "AGENTLAB_AUTO_APPROVE",
+    "AGENTLAB_ALLOW_AUTO_APPROVE",
+    "AGENTLAB_DEEP_MODEL",
+    "AGENTLAB_SEMANTIC_MODEL",
 )
 
 # 技能库内容指纹覆盖的字段。status/version/active_version 也算：
@@ -138,6 +180,24 @@ def default_config(root):
         cfg["env_protocol"] = experience.ENV_PROTOCOL
     except Exception:
         pass
+    # 生效安全开关：脱敏后的取值进指纹。开着还是关着，是两种实验条件，
+    # 不能只在报告文字里写一句「本次开启了语义判定」就算交代过。
+    cfg["security_switches"] = effective_security_config()
+    try:
+        import security
+        cfg["security_defaults"] = {
+            "mode": security.DEFAULT_MODE,
+            "detectors": sorted(d["code"] for d in security.DETECTORS),
+        }
+    except Exception:
+        pass
+    try:
+        import semantic_guard
+        cfg["prompt_fingerprints"] = (semantic_guard.prompt_fingerprints()
+                                      if hasattr(semantic_guard, "prompt_fingerprints")
+                                      else None)
+    except Exception:
+        pass
     path = os.path.join(root, "tests", "fixtures", "inspect_config.json")
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
@@ -190,12 +250,44 @@ def _discover(run_dir, root):
             continue
         files.append({"path": _rel(root, path), "kind": kind,
                       "bytes": os.path.getsize(path), "sha256": sha256_file(path)})
+    missing = []
     for rel in CODE_FILES:
         path = os.path.join(root, rel)
-        if os.path.exists(path):
-            files.append({"path": rel, "kind": "code",
-                          "bytes": os.path.getsize(path), "sha256": sha256_file(path)})
+        if not os.path.exists(path):
+            missing.append(rel)
+            continue
+        files.append({"path": rel, "kind": "code",
+                      "bytes": os.path.getsize(path), "sha256": sha256_file(path)})
+    for rel in CONFIG_FILES:
+        path = os.path.join(root, rel)
+        if not os.path.exists(path):
+            continue                      # 配置可选：没有就不算进指纹
+        files.append({"path": rel, "kind": "config",
+                      "bytes": os.path.getsize(path), "sha256": sha256_file(path)})
+    # 缺文件不能静默省略（评审 R09）：少一个文件，指纹就少一块证据，
+    # 而报告仍然写着「已冻结」—— 那是把「没查」包装成「查过了」。
+    # 但合成根目录（例如测试里临时建的 root）本来就没有源码，不能因此报错；
+    # 判据用「这个根目录里到底有没有项目代码」：一个 evoguard 模块都没有 = 不是项目根。
+    project_like = os.path.isdir(os.path.join(root, "ai-service", "evoguard"))
+    if missing and project_like:
+        raise BaselineMismatch(
+            "基线指纹缺少必需文件，拒绝冻结：%s\n"
+            "（缺文件时生成的 manifest 会漏掉安全模块，等于给了假的「已冻结」）"
+            % "、".join(missing))
+    _discover.code_coverage = {
+        "project_root": project_like,
+        "listed": len(CODE_FILES),
+        "hashed": len(CODE_FILES) - len(missing),
+        "missing": missing,
+    }
     return sorted(files, key=lambda x: x["path"])
+
+
+def effective_security_config(env=None):
+    """本次运行的**生效**安全配置。启动时打印/导出，不靠人猜环境变量。"""
+    env = os.environ if env is None else env
+    return {k: (env.get(k) if env.get(k) is not None else "<unset>")
+            for k in SECURITY_SWITCHES}
 
 
 def _fingerprint(files, libraries, cfg_hash):
@@ -259,7 +351,11 @@ def freeze(root, run_dir, *, config=None, libraries=None, note="",
         "baseline_commit": _git_head(root),
         "config": cfg, "config_hash": cfg_hash,
         "libraries": libs, "library_hash": library_hash,
-        "files": files, "note": note,
+        "files": files,
+        # 明白写下「清单里列了几个、真的哈希了几个、缺了哪些」——
+        # 只写一句「已冻结」而不说覆盖面，就是最容易被误读的那种证据。
+        "code_coverage": getattr(_discover, "code_coverage", None),
+        "note": note,
     }
     manifest["fingerprint"] = _fingerprint(files, libs, cfg_hash)
     manifest["manifest_path"] = _rel(root, out)

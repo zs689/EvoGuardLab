@@ -128,10 +128,27 @@ class TestApprovalGate(_Base):
         self.assertIn("过期", cm.exception.reason)
         self.assertEqual(gate.get(rid)["status"], approval.EXPIRED)
 
-    def test_canonical_args_normalizes_float_and_whitespace(self):
-        a = approval.digest({"total": 504, "order_id": " A1001 "})
+    def test_canonical_normalizes_amount_but_keeps_precision(self):
+        """金额按分定标：504 与 504.0 同一摘要；但精度与空白不再被抹平。
+
+        评审 R03：原来所有数字统一转 float 再四舍五入、所有字符串 strip，
+        结果 9007199254740992 与 ...93、1.0000001 与 1.0000002、"file" 与
+        " file " 摘要相同 —— 改参数能复用旧批准。这三条现在必须不同。
+        """
+        a = approval.digest({"total": 504, "order_id": "A1001"})
         b = approval.digest({"order_id": "A1001", "total": 504.0})
-        self.assertEqual(a, b)
+        self.assertEqual(a, b, "同一条业务金额必须同摘要")
+
+    def test_canonical_no_false_equivalence(self):
+        self.assertNotEqual(approval.digest({"n": 9007199254740992}),
+                            approval.digest({"n": 9007199254740993}),
+                            "大整数被 float 抹平了")
+        self.assertNotEqual(approval.digest({"n": 1.0000001}),
+                            approval.digest({"n": 1.0000002}),
+                            "六位小数把不同精度抹平了")
+        self.assertNotEqual(approval.digest({"path": "file"}),
+                            approval.digest({"path": " file "}),
+                            "strip 让带空白的参数复用了旧批准")
 
     def test_first_and_replay_use_the_same_gate(self):
         """首次写入与重放写入都必须过 require()，且一次性消费不能自动复用。"""

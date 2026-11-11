@@ -98,7 +98,11 @@ class TestReproducibleArtifacts(unittest.TestCase):
                  ("eval_labeled.py", ["report.md", "result.json"]),
                  # 这条曾经把 p50/p95 耗时写进产物，两次重跑必然不同；
                  # 现在耗时只在终端显示，产物必须逐字节一致。
-                 ("eval_jailbreak_prompts.py", ["report.md", "result.json"])]
+                 ("eval_jailbreak_prompts.py", ["report.md", "result.json"]),
+                 # 动作-职责不符：纯正则，产物里不许有任何随机成分
+                 ("eval_action_scope.py", ["report.md", "result.json"]),
+                 # 真实中文语料：只统计 + 手法代号，不许把正文写进产物
+                 ("eval_chinese_real.py", ["report.md", "result.json"])]
         for script, expect in cases:
             outs = [tempfile.mkdtemp(prefix="repro_a_"),
                     tempfile.mkdtemp(prefix="repro_b_")]

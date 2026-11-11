@@ -17,6 +17,7 @@
 """
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -755,8 +756,17 @@ class TestBaseline(unittest.TestCase):
         os.makedirs(self.run)
         code = os.path.join(self.root, "ai-service", "evoguard")
         os.makedirs(code)
-        with open(os.path.join(code, "core.py"), "w", encoding="utf-8") as f:
-            f.write("x = 1\n")
+        # 评审 R09：基线指纹现在必须覆盖全部安全模块，缺一个就拒绝冻结。
+        # 所以这个临时「项目根」要真的把源码复制进来 —— 只放一个 core.py
+        # 已经不是一个合法的项目根了（那正是要防的「少哈希一块还叫已冻结」）。
+        real = os.path.dirname(HERE)
+        for rel in baseline.CODE_FILES:
+            src = os.path.join(real, rel)
+            if not os.path.exists(src):
+                continue
+            dst = os.path.join(self.root, rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(src, dst)
         self._write_metrics()
         self._write_libraries()
 

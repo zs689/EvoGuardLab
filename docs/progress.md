@@ -1336,5 +1336,5 @@ CustomCheckScanner 自定义 schema 框架、DoS 攻击模板、OpenAI/LangChain
 - `security.guard_tool_intent()`：执行前意图门禁，复用 judge_alignment；
   deny / review / allow / none 四态，`executed` 恒 False；模型不可用转人工，不静默放行。
 
-全量回归 **653 项全绿**。
+全量回归 **726 项全绿**（2026-11-11 对标 NeMo 整改后：+15 执行入口 +10 审批加固 +9 基线指纹 +16 中文语料）。
 
