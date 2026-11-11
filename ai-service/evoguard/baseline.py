@@ -50,6 +50,7 @@ CODE_FILES = (
     "ai-service/evoguard/semantic_guard.py",
     "ai-service/evoguard/deep_scan.py",
     "ai-service/evoguard/action_scope.py",
+    "ai-service/evoguard/tool_rails.py",
     "ai-service/evoguard/scan_pipeline.py",
     "ai-service/evoguard/code_guard.py",
     # 评测入口

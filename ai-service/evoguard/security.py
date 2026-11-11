@@ -249,6 +249,45 @@ def deep_model():
         return None
 
 
+def _rails_result_findings(tool, text):
+    """按工具声明的返回侧护栏检查（`tool_rails`）。
+
+    与 `_scope_findings` 的区别：那条是写死的规则，这条是**配置驱动**的 ——
+    换工具就换检查（例如 `http.send` 的返回不需要职责判断，`kb.search` 需要），
+    改配置不用改代码。检查器自己抛错时给 `rails_checker_error`，
+    绝不折算成「没命中」。
+    """
+    if (os.environ.get("AGENTLAB_SECURITY_RAILS") or "1").strip() in ("0", "false", "off"):
+        return []
+    try:
+        import tool_rails
+        rules = tool_rails.load_default()
+        v = tool_rails.check_result(rules, tool, text)
+    except Exception as e:                    # noqa: BLE001
+        return [{"code": "rails_checker_error", "severity": "warn",
+                 "where": "tool_output", "match": type(e).__name__,
+                 "detail": "工具护栏执行失败：%s: %s" % (type(e).__name__, e),
+                 "false_positive": ""}]
+    if v["status"] == tool_rails.SAFE:
+        return []
+    if v["status"] in (tool_rails.ERROR, tool_rails.NOT_DECLARED):
+        return [{"code": "rails_" + v["status"], "severity": "warn",
+                 "where": "tool_output", "match": tool,
+                 "detail": v["reason"], "false_positive": ""}]
+    out = []
+    for f in v["findings"]:
+        # action_scope 已经有专门的码，别重复报
+        if f["code"] == "action_on_read_only_tool":
+            continue
+        out.append({"code": "rails_" + f["code"],
+                    "severity": f["severity"], "where": "tool_output",
+                    "match": "%s/%s" % (f["scanner"], f["code"]),
+                    "detail": "工具 %s 的返回命中了声明式护栏规则" % tool,
+                    "false_positive": "配置里的检查是通用规则，"
+                                      "正常文档也可能命中，需人工看一眼"})
+    return out
+
+
 def _scope_findings(tool, text):
     """「动作-职责不符」：只读工具的返回里要求助手执行动作。
 
@@ -724,6 +763,12 @@ def guard_tool_output(tool, output, where="tool_output"):
         # 先跑最便宜的一条：动作-职责不符（纯正则，无需模型）。
         # 它和一级正则互补：一级认关键词，这条认「职责不该允许的祈使句」。
         for f in _scope_findings(tool, original):
+            if not any(x["code"] == f["code"] for x in findings):
+                findings.append(f)
+        # 再按工具**声明**的返回侧护栏跑一遍（NeMo 的 rails.tool_result.per_tool）。
+        # 与上面那条是不同东西：上面是固定规则，这里是配置驱动的，
+        # 换工具就换检查，不用改代码。
+        for f in _rails_result_findings(tool, original):
             if not any(x["code"] == f["code"] for x in findings):
                 findings.append(f)
     if not any(f["code"].startswith("injection_") for f in findings):

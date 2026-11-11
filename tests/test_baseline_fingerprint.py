@@ -24,7 +24,8 @@ import baseline  # noqa: E402
 
 SEC_MODULES = ("security.py", "approval.py", "tool_contract.py",
                "semantic_guard.py", "action_scope.py", "scan_pipeline.py",
-               "code_guard.py", "execution.py", "deep_scan.py")
+               "code_guard.py", "execution.py", "deep_scan.py",
+               "tool_rails.py")
 
 
 def _fake_root():

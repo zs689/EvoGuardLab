@@ -25,7 +25,7 @@ git clone <this-repo> && cd EvoGuardLab
 pip install -e .          # zero runtime dependencies, Python 3.10+
 
 evoguard demo             # full defence demo: same attacks, five configurations
-evoguard test             # 726 regression tests
+evoguard test             # 748 regression tests
 evoguard eval             # re-run every experiment and print the numbers
 evoguard config           # print the effective security configuration
 ```
@@ -44,6 +44,10 @@ if any of them is bypassed:
 | Structural contract | Is this identity allowed to touch this resource, domain, amount? | "change the wording" → different amount silently approved |
 | Intent alignment | Does this call serve the user's original goal? | tool call drifts off-goal after a poisoned tool response |
 | Versioned approval | Is this approval for *this* candidate version, consumed atomically? | a v1 approval silently authorising a v2 write |
+
+Per-tool rails sit on both sides of the call: `tool_rails.DEFAULT_RAILS[tool] = {call: [...], result: [...]}`,
+validated at load time (an unknown scanner name, flow, or tool fails immediately and names the tool).
+An undeclared tool is blocked **before any scanner runs** — asserted by call-count tests.
 
 If any gate stops the call, `sim.call_tool` is not reached and the tool-call counter is `0`.
 That is asserted directly, because a previous version of this repo had gates that were written,
@@ -106,6 +110,7 @@ ai-service/evoguard/     core library (stdlib only)
   approval.py            versioned, atomically-consumed approval state machine
   security.py            scan / guards / six-field contract
   action_scope.py        action-vs-responsibility detection
+  tool_rails.py          per-tool declarative rails (call + result), strict config loading
   scan_pipeline.py       LlamaFirewall-style role→scanner orchestration
   code_guard.py          CodeShield-style code scanning (AST + regex)
 scripts/                 every experiment is a script; artifacts land in experiments/

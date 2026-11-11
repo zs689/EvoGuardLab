@@ -23,11 +23,13 @@
 | R07 | 召回与误报使用不同统计单位 | **已修** | `experiments/action_scope_v2`（逐 case 为主口径） |
 | R08 | 中文语料形状断言失败 | **已修** | `tests/test_chinese_corpus.py`（16 项） |
 | R09 | 基线指纹漏掉主要安全模块 | **已修** | `tests/test_baseline_fingerprint.py`（9 项） |
-| — | 真实人工双标注 + kappa | **未做** | 见文末「没做的部分」 |
+| — | 从 NeMo 融合「按工具声明双向护栏」 | **已补做** | `tool_rails.py`＋`tests/test_tool_rails.py`（22 项） |
+| — | 评审 §9「能力表」 | **已补做** | `docs/capability-matrix.md` |
+| — | 人工标注 | **成本已降到 60 次点击**，仍待他本人执行 | `scripts/human_labels.py` |
 | — | 官方 AgentDojo 排行榜 | **未做** | 需要官方模型/API |
 | — | 真实业务开发集上的阈值标定 | **未做** | 需要真实业务数据 |
 
-全量回归：**726 项通过**（`python -m unittest discover -s tests -q`）。
+全量回归：**748 项通过**（`python -m unittest discover -s tests -q`）。
 
 ---
 
@@ -296,3 +298,52 @@ evoguard config                                   # 本次生效配置
 
 评审原始证据（反例脚本与 JSON）在 `E:\agent\_review_work_20261111\`，
 不在仓库里 —— 它含临时路径，不属于项目产物。
+
+---
+
+## 十一、从 NeMo 到底融合了什么（不只"读过"）
+
+评审说「最值得吸收的是每个工具在调用前和返回后都能绑定明确规则，配置缺项能够尽早报错，
+判定失败有独立状态」。这三条之前只做到了一部分（返回侧有 `action_scope`，
+配置校验散在 `execution`，判定失败只有 review 一种状态）。现在补了 `tool_rails.py`。
+
+### 融合的对照表
+
+| NeMo 的机制 | 本仓库的实现 | 一致性 |
+|---|---|---|
+| `rails.tool_call.per_tool` / `rails.tool_result.per_tool`：同一工具两个方向各挂检查 | `tool_rails.DEFAULT_RAILS = {tool: {call: [...], result: [...]}}` | 一致 |
+| 配置缺项加载期失败，报错点名 flow 与 tool | `load()` 抛 `RailsConfigError`，消息含工具名、方向、写错的名字 | 一致 |
+| `@tool_call_validation`：未声明工具在判官之前挡住 | `check_call` 返回 `not_declared`，**一个扫描器都不跑** | 一致（有调用次数断言） |
+| `$argument=`：只把指定字段送判 | `{"scanner": ..., "fields": [...]}`，仅在 call 方向可用 | 一致（result 方向配 fields 会报错） |
+| `parse_tool_safety_verdict`：只认 safe/unsafe，其它算坏输出 | `status ∈ {safe, unsafe, error, not_declared}` | 一致 |
+| 用 LLM 判官做调用前检查 | 用**结构契约 + 严格参数模型**替代 | **刻意不同**：结构检查更严、更便宜、可解释 |
+
+### 刻意不同的那一条，理由写清楚
+
+NeMo 用 LLM 判官看 tool call 参数，是因为它没有结构化契约 —— 它不知道「这个 Agent
+能不能碰这个订单号」。本仓库有 `tool_contract`：身份、资源 ID 格式、域名白名单、
+金额上限、别名冲突，全是确定性检查，`0` 次模型调用。再叠一层 LLM 看同样的东西，
+只会让延迟翻倍而召回不变。
+
+所以默认配置里，调用侧只给**结构契约管不到**的两个工具挂检查：
+`shell.exec`（任意命令）和 `http.send`（自由文本载荷）。返回侧则全量挂 —— 那一侧
+没有结构可依，只能看内容。
+
+这不是"少做"，是"不重复做"。真要开，改 `DEFAULT_RAILS` 就行，机制是通的。
+
+### 证据
+
+`tests/test_tool_rails.py`（22 项）里最关键的 5 条：
+
+1. `test_unknown_scanner_names_tool_flow_and_name` —— 配错名字，报错必须带三样东西；
+2. `test_undeclared_tool_blocks_before_any_scanner_runs` —— 断言扫描器调用列表为空；
+3. `test_broken_checker_is_error_not_safe` —— 检查器崩了，状态是 `error` 不是 `safe`；
+4. `test_only_named_field_reaches_the_scanner` —— `fields=` 真的少送了数据；
+5. `test_controlled_mode_turns_checker_error_into_review` —— 受控档下坏判定会停调用。
+
+### 没融合的部分
+
+- NeMo 的 `$variant=`（同一个 prompt 复用到多个工具）没做：本仓库的检查器是代码不是
+  prompt，天然可复用，不需要这层间接。
+- NeMo 的 `IORails` 运行时没接：那是一个完整框架，接进来就得背上它的依赖与模型配置，
+  与本仓库「零依赖可复现」的取向冲突。评审也说「有收益后再引入框架依赖」。

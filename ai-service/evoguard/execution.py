@@ -117,8 +117,7 @@ def preflight(cfg, *, agent_type, tool, args, user_goal=None, cid=None,
     从而证明「真 deny 时工具调用次数为 0」——这是本模块存在的意义。
     """
     checks = []
-    out = {"call_id": cid, "tool": tool, "stop": False, "decision": ALLOW,
-           "reason": "全部前置检查通过", "checks": checks,
+    out = {"call_id": cid, "tool": tool, "stop": False, "decision": ALLOW,           "reason": "全部前置检查通过", "checks": checks,
            "attempted": True, "executed": False,
            "config_mode": cfg["mode"], "contract": None, "intent": None}
 
@@ -131,8 +130,12 @@ def preflight(cfg, *, agent_type, tool, args, user_goal=None, cid=None,
             if cfg["mode"] == CONTROLLED:
                 return _stop(out, REVIEW, "结构契约检查器不可用，转人工复核", checks)
         else:
+            # 没传 policy 时用「本 Agent 被允许的工具」当白名单。
+            # 不能留空：空白名单会让每一次契约检查都判越权（fail-closed 到不可用）。
+            pol = policy or {"allowed_tools": cfg.get("allowed_tools") or [],
+                             "write_tools": cfg.get("write_tools_in_scope") or []}
             r = fn(agent_type, tool, args, mode=cfg["contract"]["mode"],
-                   contracts=contracts, policy=policy)
+                   contracts=contracts, policy=pol)
             out["contract"] = {"decision": r.get("decision"),
                                "reasons": r.get("reasons", []),
                                "version": r.get("version")}
@@ -146,6 +149,30 @@ def preflight(cfg, *, agent_type, tool, args, user_goal=None, cid=None,
                 return _stop(out, DENY,
                              "结构契约拒绝：%s" % "；".join(r.get("reasons") or [])[:200],
                              checks)
+
+    # ---- 1.5) 按工具声明的双向护栏（调用侧）----
+    # 融合 NeMo 的 `rails.tool_call.per_tool`：**未声明的工具在跑任何检查之前就挡**，
+    # 配置缺项在加载时炸（tool_rails.load 会抛），不是运行时才拦一半。
+    try:
+        import tool_rails
+        rules = tool_rails.load_default()
+    except Exception as e:                        # noqa: BLE001
+        checks.append({"checker": "tool_rails", "status": "config_error",
+                       "error": "%s: %s" % (type(e).__name__, e)})
+        if cfg["mode"] == CONTROLLED:
+            return _stop(out, DENY, "工具护栏配置不成立，拒绝执行：%s" % e, checks)
+        rules = None
+    if rules is not None:
+        v = tool_rails.check_call(rules, tool, args)
+        out["rails_call"] = {"status": v["status"], "ran": v["ran"],
+                             "blocked": v["blocked"]}
+        checks.append({"checker": "tool_rails.call", "status": v["status"],
+                       "ran": v["ran"]})
+        if v["status"] == tool_rails.ERROR and cfg["mode"] == CONTROLLED:
+            # 检查器坏了 ≠ 检查通过
+            return _stop(out, REVIEW, v["reason"], checks)
+        if v["blocked"]:
+            return _stop(out, DENY, v["reason"], checks)
 
     # ---- 2) 语义意图 ----
     if cfg["intent"]["enabled"]:
