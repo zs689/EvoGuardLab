@@ -67,6 +67,8 @@ The scope layer exists because of a specific finding: natural-language indirect 
 
 ## Results (honest version)
 
+![results](docs/results.svg)
+
 | Experiment | Metric | Value | Caveat |
 |---|---|---|---|
 | InjecAgent indirect injection | per-case recall / FP | **0.839 / 0.002** | 3 tuning rounds; see `experiments/action_scope_v2/report.md` |
