@@ -64,6 +64,7 @@ class ServiceConfig:
     rate_window_raw: str = str(DEFAULT_RATE_WINDOW)
     kill_switch: bool = False
     kill_switch_raw: str = ""
+    log_quiet: bool = False          # AGENTLAB_LOG_QUIET=1 时 log() 不写 stderr
     thresholds_path: str = ""
 
 
@@ -115,6 +116,7 @@ class ServiceControls:
         rate_limit_raw = environ.get("AGENTLAB_RATE_LIMIT", str(DEFAULT_RATE_LIMIT))
         rate_window_raw = environ.get("AGENTLAB_RATE_WINDOW", str(DEFAULT_RATE_WINDOW))
         kill_switch_raw = environ.get("AGENTLAB_KILL_SWITCH", "")
+        log_quiet = _is_truthy(environ.get("AGENTLAB_LOG_QUIET", ""))
         root = environ.get("AGENTLAB_ROOT", _DEFAULT_ROOT)
         thresholds_path = environ.get(
             "AGENTLAB_THRESHOLDS",
@@ -130,6 +132,7 @@ class ServiceControls:
             rate_window_raw=str(rate_window_raw),
             kill_switch=_is_truthy(kill_switch_raw),
             kill_switch_raw=str(kill_switch_raw),
+            log_quiet=log_quiet,
             thresholds_path=thresholds_path,
         )
         return cls(cfg)
@@ -219,6 +222,8 @@ class ServiceControls:
         只按白名单重建记录 —— 即便调用方误把 token / body 塞进 event，
         也不会写进日志。``sort_keys=True`` 保证字段顺序确定性。
         """
+        if self.config.log_quiet:
+            return
         if not isinstance(event, dict):
             event = {}
         record = {
@@ -271,5 +276,6 @@ class ServiceControls:
             "rate_limit": self.config.rate_limit,
             "rate_window": self.config.rate_window,
             "kill_switch": self.config.kill_switch,
+            "log_quiet": self.config.log_quiet,
             "thresholds_path": self.config.thresholds_path,
         }

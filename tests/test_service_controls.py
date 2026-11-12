@@ -136,6 +136,16 @@ class TestServiceControls(unittest.TestCase):
         self.assertNotIn("token", rec)
         self.assertNotIn("body", rec)
 
+    # 13. AGENTLAB_LOG_QUIET 抑制结构化日志输出（与 docs 描述一致）
+    def test_log_quiet_suppresses_output(self):
+        c = self._controls(AGENTLAB_LOG_QUIET="1")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            c.log({"request_id": "x", "method": "GET", "path": "/",
+                   "status": 200, "actor": "a", "decision": "allowed"})
+        self.assertEqual(buf.getvalue(), "")
+        self.assertTrue(c.describe()["log_quiet"])
+
     # 10. describe 脱敏：token 只显示是否已设置
     def test_describe_redacts_token(self):
         c = self._controls(AGENTLAB_API_TOKEN="SUPER_SECRET_TOKEN")

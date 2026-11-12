@@ -1,6 +1,7 @@
 # 开发 / 演示镜像，**不是生产部署基线**。
 # 缺 TLS、反向代理、多租户隔离、集中式日志、持久化审计表与 schema 迁移、
-# SLA / 容量 / 故障演练；见 docs/service-controls.md 与 docs/upgrade-report.md。
+# SLA / 容量 / 故障演练；数据只在单个 SQLite 文件里，无主从 / 备份。
+# 见 docs/service-controls.md 与 docs/upgrade-report.md。
 FROM python:3.11-slim
 
 WORKDIR /app
