@@ -1268,6 +1268,9 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
 - 仍未做：真人双标、真实中文攻击语料、自然语言间接注入检测、阈值用真实业务集标定、
   官方榜单全量（需官方模型 API）。
 
+> 以上是 **2026-11-10 当时的状态快照**，数字与「仍未做」清单都按当时记录，不回改。
+> 当前值见本文末尾（754 项）与 `docs/neomo-review-fixes.md`、`docs/capability-matrix.md`。
+
 ## 2026-11-10 融合 LlamaFirewall（读源码 → 改代码 → 验证）
 
 来源 `E:/agent/learn/LlamaFirewall`（meta-llama/PurpleLlama，MIT，固定提交 f64eebd…）。

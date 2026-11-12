@@ -25,7 +25,7 @@ git clone <this-repo> && cd EvoGuardLab
 pip install -e .          # zero runtime dependencies, Python 3.10+
 
 evoguard demo             # full defence demo: same attacks, five configurations
-evoguard test             # 748 regression tests
+evoguard test             # 754 regression tests
 evoguard eval             # re-run every experiment and print the numbers
 evoguard config           # print the effective security configuration
 ```
@@ -79,7 +79,7 @@ The scope layer exists because of a specific finding: natural-language indirect 
 | Chinese jailbreak techniques (34) | L1 recall | **0.029** | regex is a dead end on Chinese; documented, not fixed by adding rules |
 | Chinese harmful-request set (108) | L1 recall | **0.000** | wrong task — that is content moderation, not injection detection |
 | Chinese indirect injection (120, self-built) | recall / FP | **0.917 / 0.000** | in-sample: rules were finalised on this set, so it is coverage, not generalisation |
-| Regression suite | tests | **726 pass** | `python -m unittest discover -s tests` |
+| Regression suite | tests | **754 pass** | `python -m unittest discover -s tests` |
 
 The Chinese indirect-injection set is **built by this repo**, not a public corpus — no public
 Chinese indirect-injection corpus exists. It is 10 carriers × 12 techniques, all distinct.
@@ -95,8 +95,10 @@ three different tasks apart instead of reporting one flattering average.
   it is a different task and this repo does not pretend to solve it.
 - **Not a leaderboard entry.** No official AgentDojo leaderboard run (needs official models/API).
   Local results are labelled as local.
-- **Not a real-world accuracy claim.** Labels are self-generated; there is no independent
-  double-annotation with kappa.
+- **Not a real-world accuracy claim.** Agent-trace labels are self-generated. A single human
+  pass labelled 60 Chinese cases against corpus labels (reported per entry point: the paired
+  indirect-injection scope gives agreement 0.878 / kappa 0.752), but there is no second
+  annotator, so no inter-annotator kappa.
 - **Not finished.** `docs/neomo-review-fixes.md` lists what a third-party review found and what
   was fixed, with the remaining gaps named.
 
@@ -115,7 +117,7 @@ ai-service/evoguard/     core library (stdlib only)
   code_guard.py          CodeShield-style code scanning (AST + regex)
 scripts/                 every experiment is a script; artifacts land in experiments/
 docs/                    protocols and per-topic write-ups
-tests/                   726 tests, including reproducibility (byte-identical reruns)
+tests/                   754 tests, including reproducibility (byte-identical reruns)
 ```
 
 ## Design rules this repo enforces on itself
