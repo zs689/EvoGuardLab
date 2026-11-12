@@ -1269,7 +1269,7 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
   官方榜单全量（需官方模型 API）。
 
 > 以上是 **2026-11-10 当时的状态快照**，数字与「仍未做」清单都按当时记录，不回改。
-> 当前值见本文末尾（754 项）与 `docs/neomo-review-fixes.md`、`docs/capability-matrix.md`。
+> 当前值见本文末尾（767 项）与 `docs/neomo-review-fixes.md`、`docs/capability-matrix.md`。
 
 ## 2026-11-10 融合 LlamaFirewall（读源码 → 改代码 → 验证）
 
@@ -1339,5 +1339,60 @@ CustomCheckScanner 自定义 schema 框架、DoS 攻击模板、OpenAI/LangChain
 - `security.guard_tool_intent()`：执行前意图门禁，复用 judge_alignment；
   deny / review / allow / none 四态，`executed` 恒 False；模型不可用转人工，不静默放行。
 
-全量回归 **754 项全绿**（2026-11-11 对标 NeMo 整改后：+15 执行入口 +10 审批加固 +9 基线指纹 +16 中文语料 +22 按工具护栏 +6 分档守门）。
+全量回归 **767 项全绿**（2026-11-11 对标 NeMo 整改后：+15 执行入口 +10 审批加固
++9 基线指纹 +16 中文语料 +22 按工具护栏 +6 分档守门；2026-11-12：+13 双标注守门）。
+
+## 2026-11-12：第二位标注者盲标包（含 200 条加长批）+ 语义注入预注册实验设计
+
+**A（发给同学的那一份）**：`scripts/make_round2_sheet.py` 从首轮同一个确定性抽样
+（`text_sha256`）复算出完全同一批 60 条，换哈希种子打乱呈现顺序，再用
+`r2_001…` 匿名编号替换真实 `case_id` —— 因为 `zh_harm` / `zh_ind_clean`
+这类前缀会把类别泄露给第二位标注者。映射表只留仓库内部。盲标页只含语料正文和
+原页面一字未改的判定问法，不含第一位答案、不含语料标签、不含规则实现。
+
+用户后来要「生成多点题」，于是做了**加长批**：`--n 100` → 200 条
+（100 攻击 + 100 正常）。关键点：`sample()` 是「排序后取前 n」，所以
+**200 条必然包含首轮 60 条**，配对不会被破坏。加长批用独立 tag / 独立 seed /
+独立映射表，三份产物互不覆盖；重跑默认包后 HTML 与说明文字的 sha256 与最初
+完全一致，已发布的包没有被悄悄改掉。两份加长页（给同学的 `ext_annotator`、
+给自己补标的 `ext_self`）是同一批 200 条，但呈现顺序和匿名编号各自独立，
+`r2_XXX` 之间不对应，避免互相泄题。线上页已换成加长版并复核：
+HTTP 200、35998 字节、`共 200 条`、无类别/路径泄露、与本地文件逐字一致。
+**临时公开链接只发给同学本人，用完下线**（页面含语料正文，无密码）。
+
+`scripts/score_double_labels.py` 是回收端：map 的 values 必须恰好等于复算批次；
+匿名编号缺失/越界直接报错；缺条不静默。加长批新增两条能力：
+`--n 100` 换批次，以及 `--map-a`（第一位若也用匿名补标页，用独立映射表还原）。
+结果里新增 `unpaired.only_b / only_a`：**只有一方标过的题不进 kappa**，
+实测「只标首轮 → 60 条配对 + 140 条未配对 / 两人都补标 → 200 条全配对」。
+字段是 `cohen_kappa_inter_annotator`，不是 `cohen_kappa_vs_corpus`，也不是准确率。
+`tests/test_double_labels.py` 共 13 项守门。
+
+写测试时踩了一个值得记的坑：原本断言「两人完全一致 → kappa 1.0」，
+但 mock 里 A/B 都全标 benign，两列都是常量，`pe=1` 分母为 0，
+`cohen_kappa()` 按既有约定返回 **None**。这不是脚本 bug，是测试假设错了。
+已把 A 改成一半 attack / 一半 benign，并补一条测试专门守
+「整批全常量时 kappa 必须是 None，不能写成 1.0 或 0」；
+`score_double_labels.py` 的 note 也写明了这个边界。
+
+**B（语义注入检测方向）**：目标不是「再造一个更强的分类器」。
+联网核实的一手材料：CaMeL（arXiv:2503.18813v2，PDF 已存
+`_sandbox/semantic_refs/`，77% provable security vs 84% 无防御）、
+Dual LLM / Agents Rule of Two、StackOne Defender 在 940 条真实 connector payload 上
+用「分布一致的 hard negatives（7%→1.7%）+ 推理前结构字段过滤（→0.2%）」压误报。
+这些和 `docs/detector-evolution.md` 自己的结论对上了：本项目第二级模型
+test 误报 6.0%、跨域 33.3%、16/16 正常请求误判，根因是「学的是像不像指令」，
+文档里早就写了「下一步该加真实负例，而不是继续调阈值」。
+
+`docs/semantic-injection-plan.md` 因此写成**预注册实验设计**：先写死假设、
+冻结留出集、整组划分、两段门禁、判定线，再谈跑实验。四个实验是
+E1 落点适用性消融、E2 中文真实负例、E3 推理前结构字段过滤、
+E4 把评价坐标搬到 `attempted/executed/effect` 的 sink 侧。
+文档明确列出「本项目已有什么 / 差在哪」：六字段契约和 `execution.preflight`
+是 sink 侧测量与 tool 边界确定性检查的轻量对应物，但**没有** capability 标签、
+taint 追踪、受限解释器、P-LLM/Q-LLM 隔离，所以不能写「已实现 CaMeL」或
+「可证明安全」。**当前状态：只有设计，E1–E4 一个都没跑，没有结果，不是已实现能力。**
+
+当前状态类文档（README / 能力表 / 白话介绍 / 整改记录）已同步 754 → 767；
+历史快照里的 615 保持不动，只加括注。
 

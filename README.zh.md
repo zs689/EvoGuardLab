@@ -32,7 +32,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（754 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样 + 24 收尾轮 + 38 LlamaFirewall 融合 + 15 执行入口 + 10 审批加固 + 9 基线指纹 + 16 中文语料 + 22 按工具护栏 + 6 分档守门）
+# 2) 回归测试（767 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样 + 24 收尾轮 + 38 LlamaFirewall 融合 + 15 执行入口 + 10 审批加固 + 9 基线指纹 + 16 中文语料 + 22 按工具护栏 + 6 分档守门 + 13 双标注守门）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -893,8 +893,14 @@ python ai-service/real_model_bench.py --suite hard --fresh
 - [ ] 负迁移压力测试：批量投毒，测晋升门槛在不同投毒比例下的召回 / 误报。
 
 需要**外部条件或人**：
-- [ ] 真人独立双标 + 双人 Cohen's kappa（代理标注 0.325 已做、真人**单人**标注已完成，
-      缺的是第二位标注者；见 `experiments/human_labels_v1/`）。
+- [ ] 真人独立双标 + 双人 Cohen's kappa（代理标注 0.325 已做、真人**单人**标注已完成；
+      第二位标注者的**盲标页已生成并发布**：默认 60 条包，另有 **200 条加长批**
+      （`--n 100`，必然包含首轮 60 条），线上页现指向加长批；两份都匿名编号、
+      不含第一位答案。合并脚本 `scripts/score_double_labels.py` 与 13 项守门测试已就绪，
+      支持 `--n 100` 与 `--map-a`（自己补标版）。现在**只等对方导出
+      `labels_ext_annotator2.json`**；若第一位未补标，kappa 仍只在 60 条交集上算，
+      多出 140 条记入 `unpaired`、不混入分母。结果未出，仍不能写「双人 kappa」。
+      见 `experiments/human_labels_v1/`、`scripts/make_round2_sheet.py`）。
 - [ ] 可授权的真实中文攻击语料（翻译样本不能替代）。
 - [ ] 官方榜单全量评测（需官方评测模型与 API；本地 harness 只跑了 4 个任务）。
 
@@ -902,6 +908,9 @@ python ai-service/real_model_bench.py --suite hard --fresh
 - [ ] 负迁移压力测试：批量投毒，测晋升门槛在不同投毒比例下的召回 / 误报。
 - [ ] **自然语言间接注入**检测：三级语义在该类上召回仅 0.05，
       中文上更是接近 0；这是当前最大的盲区。
+      `docs/semantic-injection-plan.md` 已写好**预注册实验设计**（E1 落点消融、
+      E2 中文真实负例、E3 推理前字段过滤、E4 sink 侧评价坐标），
+      **实验尚未执行、没有结果、不是已实现能力**。
 - [ ] 阈值用真实业务开发集标定（当前合成集区分度不足，候选未启用）。
 - [ ] 提任务难度：多步计算 / 跨文档推理，让模型真的会答错。
 
@@ -914,7 +923,7 @@ python ai-service/real_model_bench.py --suite hard --fresh
   `approval.py`（可恢复审批 + 幂等账本）、`real_tasks.py`（本地 HTTP/规则/SQLite）、
   `conditional_skill.py`（声明式技能）、`tool_contract.py`（结构化授权）、
   `experience_scope.py`（经验适用范围 + BM25）。
-- **回归**：`python -m unittest discover -s tests -q` —— 当前 **754 项全绿**。
+- **回归**：`python -m unittest discover -s tests -q` —— 当前 **767 项全绿**。
 - **冻结证据（只读，不要覆盖）**：`experiments/p0_09_20261109/`、
   `experiments/real_model_20261109/` 与 `...20261109b/`、`experiments/defense_demo/`、
   `experiments/labeled_eval/`。当前版本产物在 `*_v1` / `*_v2` 目录，

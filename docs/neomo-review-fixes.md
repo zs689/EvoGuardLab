@@ -25,11 +25,11 @@
 | R09 | 基线指纹漏掉主要安全模块 | **已修** | `tests/test_baseline_fingerprint.py`（9 项） |
 | — | 从 NeMo 融合「按工具声明双向护栏」 | **已补做** | `tool_rails.py`＋`tests/test_tool_rails.py`（22 项） |
 | — | 评审 §9「能力表」 | **已补做** | `docs/capability-matrix.md` |
-| — | 人工标注 | **已完成真人单人 60 条**；按入口分档后间接注入档一致率 0.878 / kappa 0.752；双人标注仍缺，混合口径 0.467 不作能力结论 | `scripts/human_labels.py`、`experiments/human_labels_v1/result.json` |
+| — | 人工标注 | **已完成真人单人 60 条**；按入口分档后间接注入档一致率 0.878 / kappa 0.752；第二位标注者 60 条盲标包 + 200 条加长批已生成发布、合并脚本（`--n 100` / `--map-a`）已就绪、结果待回收，双人标注仍缺；混合口径 0.467 不作能力结论 | `scripts/human_labels.py`、`scripts/make_round2_sheet.py`、`scripts/score_double_labels.py`、`experiments/human_labels_v1/result.json` |
 | — | 官方 AgentDojo 排行榜 | **未做** | 需要官方模型/API |
 | — | 真实业务开发集上的阈值标定 | **未做** | 需要真实业务数据 |
 
-全量回归：**754 项通过**（`python -m unittest discover -s tests -q`）。
+全量回归：**767 项通过**（`python -m unittest discover -s tests -q`）。
 
 ---
 
@@ -292,7 +292,7 @@ approved，于是都返回 `consumed`。
 ## 十、怎么复核这份记录
 
 ```bash
-python -m unittest discover -s tests -q          # 754 项
+python -m unittest discover -s tests -q          # 767 项
 python scripts/eval_action_scope.py               # experiments/action_scope_v2
 python scripts/import_chinese_corpus.py           # 需要网络；产物不入库
 python scripts/eval_chinese_real.py               # experiments/chinese_corpus_v2
