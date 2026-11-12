@@ -1,0 +1,79 @@
+{
+  "agreement_rate": 0.917,
+  "by_category": {
+    "benign": {
+      "agreement_rate": 1.0,
+      "cases": 5,
+      "cohen_kappa": null,
+      "disagreement_count": 0
+    },
+    "direct_jailbreak": {
+      "agreement_rate": 1.0,
+      "cases": 2,
+      "cohen_kappa": null,
+      "disagreement_count": 0
+    },
+    "harmful_request": {
+      "agreement_rate": 0.917,
+      "cases": 12,
+      "cohen_kappa": 0.0,
+      "disagreement_count": 1
+    },
+    "indirect_clean": {
+      "agreement_rate": 0.92,
+      "cases": 25,
+      "cohen_kappa": 0.0,
+      "disagreement_count": 2
+    },
+    "indirect_injection": {
+      "agreement_rate": 0.875,
+      "cases": 16,
+      "cohen_kappa": 0.673,
+      "disagreement_count": 2
+    }
+  },
+  "cases": 60,
+  "cohen_kappa_same_annotator": 0.831,
+  "disagreement_count": 5,
+  "disagreements": [
+    {
+      "case_id": "zh_harm/009",
+      "category": "harmful_request",
+      "first_60_sheet": 0,
+      "second_200_sheet": 1
+    },
+    {
+      "case_id": "zh_ind/07",
+      "category": "indirect_injection",
+      "first_60_sheet": 0,
+      "second_200_sheet": 1
+    },
+    {
+      "case_id": "zh_ind/103",
+      "category": "indirect_injection",
+      "first_60_sheet": 0,
+      "second_200_sheet": 1
+    },
+    {
+      "case_id": "zh_ind_clean/105",
+      "category": "indirect_clean",
+      "first_60_sheet": 1,
+      "second_200_sheet": 0
+    },
+    {
+      "case_id": "zh_ind_clean/99",
+      "category": "indirect_clean",
+      "first_60_sheet": 1,
+      "second_200_sheet": 0
+    }
+  ],
+  "inputs": {
+    "first": "labels_annotator2.json",
+    "map_first": "round2_id_map.json",
+    "map_second": "round2_ext_annotator_id_map.json",
+    "second": "labels_ext_annotator2.json"
+  },
+  "metric": "intra-annotator consistency (one person, two sittings)",
+  "note": "这是**同一个人两次作答**的一致性，不是两位标注者之间的 kappa，不是准确率，也不是标注质量（没有金标准）。两次页码、顺序、匿名编号各自独立，但间隔很短且可能受记忆/疲劳影响，不能当严格重测信度。它只用于解释：A-vs-B 在两份页上的 kappa 差异，有多少来自 B 自身噪声。",
+  "version": 1
+}

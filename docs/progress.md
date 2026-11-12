@@ -1269,7 +1269,7 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
   官方榜单全量（需官方模型 API）。
 
 > 以上是 **2026-11-10 当时的状态快照**，数字与「仍未做」清单都按当时记录，不回改。
-> 当前值见本文末尾（784 项）与 `docs/neomo-review-fixes.md`、`docs/capability-matrix.md`。
+> 当前值见本文末尾（791 项）与 `docs/neomo-review-fixes.md`、`docs/capability-matrix.md`。
 
 ## 2026-11-10 融合 LlamaFirewall（读源码 → 改代码 → 验证）
 
@@ -1341,6 +1341,7 @@ CustomCheckScanner 自定义 schema 框架、DoS 攻击模板、OpenAI/LangChain
 
 全量回归 **784 项全绿**（2026-11-11 对标 NeMo 整改后：+15 执行入口 +10 审批加固
 +9 基线指纹 +16 中文语料 +22 按工具护栏 +6 分档守门；2026-11-12：+13 双标注守门）。
+> 括注：这是当时的值；晚间回收第二位标注者的导出、再补 7 条守门后为 **791 项**，见本文末尾。
 
 ## 2026-11-12：第二位标注者盲标包（含 200 条加长批）+ 语义注入预注册实验设计
 
@@ -1395,8 +1396,8 @@ taint 追踪、受限解释器、P-LLM/Q-LLM 隔离，所以不能写「已实�
 > 括注：同日下午已按这份设计执行 E1–E4，结果见下一节与
 > `experiments/semantic_injection_v1/report.md`；本节按历史快照保留，不回改。
 
-当前状态类文档（README / 能力表 / 白话介绍 / 整改记录）已同步 754 → 784；
-历史快照里的 615 保持不动，只加括注。
+当前状态类文档（README / 能力表 / 白话介绍 / 整改记录）当时同步到 784；
+晚间双标注结果落地后为 **791**。历史快照里的 615 保持不动，只加括注。
 
 ## 2026-11-12 下午：按预注册规则跑完 E1–E4（2 通过 / 2 未通过）
 
@@ -1468,5 +1469,44 @@ E2′/E3′ 的重新预注册要求）；`report.md` 增加「外部方法复�
 预注册文档顶部 / §九 / §十 与 README 中英各加指向。
 **四个结果文件、判定线、`frozen_split.json` 一律未动**，
 没有借外部材料把 E2/E3 改成「通过」——那正是预注册要防的事。
-全量回归 **784 项全绿**（+1 条守门：报告必须指向外部复核）。
+全量回归 **784 项全绿**（当时，+1 条守门：报告必须指向外部复核）。
+
+## 2026-11-12 晚：第二位标注者导出回收，标注者间 kappa 落地
+
+同学交回 `labels_ext_annotator2.json`（200 条）；Downloads 里另有
+`labels_annotator2.json`（60 条基础页，早 15 分钟导出），说明他先后标了两次。
+首轮 A 的 `labels.json` 不在 Downloads，在 `E:\agent\labels.json`
+（60 条，与首轮样本集合完全一致），差点以为丢了。
+
+**三个产物**：
+
+- `double_result.json`（主）：A vs 加长版 B，200 条批次里两人交集 60 条，
+  一致率 0.717 / **标注者间 kappa 0.414**；注入档 41 条 0.854 / **0.688**；
+  `unpaired.only_b = 140`，未混入分母。
+- `double_result_60.json`（对照）：A vs 60 条页 B，60/60 全配对，
+  0.733 / 0.442，注入档同样 0.688。
+- `intra_annotator_check.json`（新脚本 `scripts/check_annotator_consistency.py`）：
+  同一人两次 60 条一致率 0.917 / kappa 0.831，5 条不一致。
+
+**口径要点**：
+
+- `harmful_request` 12 条里 11 条分歧、一致率 0.083，与「人 vs 语料」时
+  完全相同 → 系统性**口径差**，不是标注误差；顶层 0.414 被它拉低。
+- 单档 kappa 出现 `−0.103`（indirect_injection），属常量列无意义值；
+  `score_double_labels.py` 的 note 改成「可为 0、None 甚至负数」，
+  并按实际批次动态描述（加长批不能再写「两人标的是完全同一批 60 条」）。
+- 同一人两次也有 5 条不同，所以两份 A-vs-B kappa 差 0.028 有 B 自身噪声。
+- 两份 B 的原始导出在用户 Downloads、含正文关联编号，**不入库**。
+
+**文档同步**：新建 `docs/double-annotation-results.md`；能力表 §7 从 ⚠️ 部分
+改 ✅ 已完成；README 中英、neomo-review-fixes（表格 + 第九节）、
+plain-intro md/html、attack-datasets 新增节、final-round 历史快照只加括注。
+`docs/resume-bullets.md`（被 .gitignore 排除的本地求职材料）也更新了：
+现在**可以写**「真人双标注 / 标注者间 kappa」，但必须写清 60 条交集与
+0.688 主口径，不能写「双标注 200 条」「准确率」「标注质量」。
+`external-labeling-protocol.md` 讲的是 Agent 轨迹那套独立标注，与中文语料无关，未动。
+
+新增 `tests/test_double_annotation_results.py` 7 条守门（人 vs 人口径、
+140 条不进分母、注入档为主口径、同人两次是另一个指标、单档 kappa 不作结论）。
+全量回归 **791 项全绿**。
 

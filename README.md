@@ -25,7 +25,7 @@ git clone <this-repo> && cd EvoGuardLab
 pip install -e .          # zero runtime dependencies, Python 3.10+
 
 evoguard demo             # full defence demo: same attacks, five configurations
-evoguard test             # 784 regression tests
+evoguard test             # 791 regression tests
 evoguard eval             # re-run every experiment and print the numbers
 evoguard config           # print the effective security configuration
 ```
@@ -79,7 +79,7 @@ The scope layer exists because of a specific finding: natural-language indirect 
 | Chinese jailbreak techniques (34) | L1 recall | **0.029** | regex is a dead end on Chinese; documented, not fixed by adding rules |
 | Chinese harmful-request set (108) | L1 recall | **0.000** | wrong task — that is content moderation, not injection detection |
 | Chinese indirect injection (120, self-built) | recall / FP | **0.917 / 0.000** | in-sample: rules were finalised on this set, so it is coverage, not generalisation |
-| Regression suite | tests | **784 pass** | `python -m unittest discover -s tests` |
+| Regression suite | tests | **791 pass** | `python -m unittest discover -s tests` |
 
 The Chinese indirect-injection set is **built by this repo**, not a public corpus — no public
 Chinese indirect-injection corpus exists. It is 10 carriers × 12 techniques, all distinct.
@@ -96,15 +96,16 @@ three different tasks apart instead of reporting one flattering average.
 - **Not a leaderboard entry.** No official AgentDojo leaderboard run (needs official models/API).
   Local results are labelled as local.
 - **Not a real-world accuracy claim.** Agent-trace labels are self-generated. A single human
-  pass labelled 60 Chinese cases against corpus labels (reported per entry point: the paired
-  indirect-injection scope gives agreement 0.878 / kappa 0.752). A blind sheet for a
-  second annotator (anonymised IDs, no first-pass answers) and the merge script are ready.
-  A 200-case extended sheet (same deterministic sample with n=100, a superset of the 60)
-  is published for the second annotator, but the labels have not come back yet, so there
-  is still no inter-annotator kappa.
+  pass labelled 60 Chinese cases against corpus labels (per entry point: paired
+  indirect-injection scope agreement 0.878 / kappa 0.752). A second human annotator then
+  completed blind sheets (60-case and 200-case, anonymised IDs, no first-pass answers),
+  so the **inter-annotator** kappa is now measured: **0.414** on the 60 paired cases
+  (0.442 on the 60-case sheet), with the paired injection scope at **0.688** / 41 cases.
+  See `docs/double-annotation-results.md`. These are agreement figures, not accuracy,
+  and 140 cases labelled only by annotator 2 are explicitly excluded from kappa.
 - **Not finished.** `docs/neomo-review-fixes.md` lists what a third-party review found and what
   was fixed, with the remaining gaps named. `docs/semantic-injection-plan.md` is a
-  `docs/semantic-injection-plan.md` is a **pre-registered design** whose E1–E4 have now
+  **pre-registered design** whose E1–E4 have now
   been run (2 passed, 2 failed their pre-registered gates); see
   `experiments/semantic_injection_v1/report.md`. These are controlled experiments,
   not a released detector improvement. A post-run external review
@@ -126,7 +127,7 @@ ai-service/evoguard/     core library (stdlib only)
   code_guard.py          CodeShield-style code scanning (AST + regex)
 scripts/                 every experiment is a script; artifacts land in experiments/
 docs/                    protocols and per-topic write-ups
-tests/                   784 tests, including reproducibility (byte-identical reruns)
+tests/                   791 tests, including reproducibility (byte-identical reruns)
 ```
 
 ## Design rules this repo enforces on itself

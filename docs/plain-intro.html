@@ -137,7 +137,7 @@
 <section>
   <h2>现在真的做到了什么</h2>
   <div class="grid2">
-    <div class="tile"><span class="num">784<small>项自动检查全部通过。每次改代码都会重跑，防止「修好一个、弄坏三个」。</small></span></div>
+    <div class="tile"><span class="num">791<small>项自动检查全部通过。每次改代码都会重跑，防止「修好一个、弄坏三个」。</small></span></div>
     <div class="tile"><span class="num">3 套<small>外部真实语料 + 中文集：2108 条间接注入、1998 条直接越狱、AgentDojo 10 类攻击模板；另有许可清楚的中文公开语料，中文间接注入 120 条为自建构造集（已标「仅样本内」）。</small></span></div>
     <div class="tile"><span class="num">3 级<small>安检：先看字面关键词 → 再看字符统计 → 最后请本地小模型读一遍语义。越往后越准也越慢，默认只开第一级。</small></span></div>
     <div class="tile"><span class="num">4 个<small>官方 AgentDojo 环境在本地跑通（各 1 个任务）。注意：这只是把链路接通，不是官方榜单成绩。</small></span></div>
@@ -163,7 +163,7 @@
   <h2>想在自己电脑上跑，需要什么</h2>
   <p>一台 Windows 电脑 + Python 就行；想跑真实 AI 的部分，还需要本机开着 Ollama（或 LM Studio 的本地服务）并加载一个模型，例如 <code>qwen3:4b</code>。</p>
   <pre><code>cd EvoGuardLab
-python -m unittest discover -s tests -q    # 跑 784 项检查，约 47 秒
+python -m unittest discover -s tests -q    # 跑 791 项检查，约 47 秒
 python ai-service/evolution_bench.py        # 跑一遍完整闭环
 python ai-service/api/app.py                # 打开网页看板 127.0.0.1:8770</code></pre>
   <p class="muted">网页看板是只读的，用来看实验结果；不会连外网、不会上传数据。所有语料都放在本机，不随代码分发。</p>
@@ -172,7 +172,7 @@ python ai-service/api/app.py                # 打开网页看板 127.0.0.1:8770<
 <section>
   <h2>还差什么（诚实清单）</h2>
   <ul>
-    <li>需要<strong>第二位真人</strong>独立标注同一批语料、核对两人意见是否一致：已有真人单人标注 60 条中文语料（按入口分开算，间接注入档一致率 0.878）。现在已把匿名盲标页发给第二位同学：默认 60 条包，另有 <strong>200 条加长批</strong>（含首轮那 60 条），线上页现指向加长批；合并脚本也准备好了，<strong>只等对方标完把文件发回来</strong>。若只有对方标了加长批，双人一致性仍按 60 条交集算，多出的题单独记着、不混进分母；结果没出来之前仍然算不出「人与人之间」的一致性。两套自动程序互相对账（kappa 0.325）不等于人工标注。</li>
+    <li>✅ <strong>第二位真人标注已经补上了</strong>：同学匿名标了 60 条基础页和 200 条加长批。两人共同标过的 60 条里，判断一致率 0.717、人与人之间的 kappa <strong>0.414</strong>；只看「注入 + 成对干净对照」那 41 条时是 0.854 / kappa <strong>0.688</strong>。多出来的 140 条只有一个人标，没有算进去。这个数衡量的是<strong>两人意见是否一致</strong>，不是「谁标得对」，更不是系统准确率；顶层偏低主要因为两人对「有害请求算不算注入」理解不同。详见 <code>docs/double-annotation-results.md</code>。两套自动程序互相对账（kappa 0.325）也不等于人工标注。</li>
     <li>需要<strong>更多真实中文攻击语料</strong>：直接越狱与有害请求已接入许可清楚的公开语料，但中文间接注入目前是自建构造集，不能冒充真实世界的分布。</li>
     <li>需要针对「自然语言形式的间接注入」和「中文」的<strong>新检测思路</strong>，不是继续加关键词。</li>
     <li>需要<strong>真实业务数据</strong>来标定告警阈值；现在的阈值还是工程经验值。</li>
@@ -183,15 +183,15 @@ python ai-service/api/app.py                # 打开网页看板 127.0.0.1:8770<
 <section>
   <h2>你接下来要干什么</h2>
 
-  <div class="step"><div class="dot">1</div><div><p><strong>现在（5 分钟）</strong>：把这份说明从头看一遍，能用自己的话讲出「它是给 AI 装记录仪 + 体检 + 上岗考试」就够了。再跑一次 <code>python -m unittest discover -s tests -q</code>，看到 <code>784 OK</code> 截图存好。</p></div></div>
+  <div class="step"><div class="dot">1</div><div><p><strong>现在（5 分钟）</strong>：把这份说明从头看一遍，能用自己的话讲出「它是给 AI 装记录仪 + 体检 + 上岗考试」就够了。再跑一次 <code>python -m unittest discover -s tests -q</code>，看到 <code>791 OK</code> 截图存好。</p></div></div>
 
   <div class="step"><div class="dot">2</div><div><p><strong>为简历（半小时）</strong>：把下面这段抄进项目经历，别加「生产级」「防住注入」这类词：</p>
-    <div class="note info">「独立实现 Agent 故障检测与经验晋升原型：31 条轨迹规则 + 20 条静态规则，前后配对验证与负迁移门禁，784 项自动化回归；接入公开安全语料与中文集并如实报告负结果。」<br>
+    <div class="note info">「独立实现 Agent 故障检测与经验晋升原型：31 条轨迹规则 + 20 条静态规则，前后配对验证与负迁移门禁，791 项自动化回归；接入公开安全语料与中文集并如实报告负结果。」<br>
     面试准备三个能讲的点：① 为什么「说拦住了」不等于「真拦住了」；② 为什么新经验要先考试再上岗；③ 为什么关键词规则在语义攻击和中文上失效、后来怎么换思路。</div></div></div>
 
   <div class="step"><div class="dot">3</div><div><p><strong>为内容（小红书 / B 站）</strong>：最适合的选题是「我让 AI 自己给自己做安全体检，结果它把 95% 的攻击都看漏了」——用「5% → 57.5%」这组前后对比讲「换思路比堆规则有用」，再讲「门禁因为误报太高而拒绝让模型上岗」，比讲技术细节更有故事。</p></div></div>
 
-  <div class="step"><div class="dot">4</div><div><p><strong>需要别人帮的（不急）</strong>：找 1–2 位同学标一批数据，就能补上「真人双标」（单人标注已完成，第二位的匿名盲标页已经做好发出去了：60 条基础版 + 200 条加长版，只等对方标完发回）；收集真实中文间接注入样本，就能换掉现在的自建构造集。这两件是项目目前最缺、又不需要写代码的。</p></div></div>
+  <div class="step"><div class="dot">4</div><div><p><strong>需要别人帮的（不急）</strong>：找 1–2 位同学标一批数据，就能补上「真人双标」（**已完成**：同学匿名标了 60 条基础版 + 200 条加长版，两人之间 kappa 0.414、注入档 0.688；下一步是自己补标 200 条把配对扩到全批）；收集真实中文间接注入样本，就能换掉现在的自建构造集。这两件是项目目前最缺、又不需要写代码的。</p></div></div>
 
   <div class="step"><div class="dot">5</div><div><p><strong>如果要推到 GitHub</strong>：代码目前只在本机（未推送）。推送时<strong>不要把账号密码发到对话里，也不要写进文件</strong>；git 从 2021 年起就不能用网页密码，要走浏览器授权或访问令牌（PAT）。如果 GitHub 连不上，Gitee 可以先用作镜像。</p></div></div>
 </section>

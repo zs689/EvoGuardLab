@@ -1,0 +1,142 @@
+{
+  "agreement_rate": 0.733,
+  "annotators": [
+    "annotator1 (真实 case_id)",
+    "annotator2 (匿名 r2_XXX)"
+  ],
+  "by_category": {
+    "benign": {
+      "agreement_rate": 1.0,
+      "cases": 5,
+      "cohen_kappa": null,
+      "disagreement_count": 0
+    },
+    "direct_jailbreak": {
+      "agreement_rate": 1.0,
+      "cases": 2,
+      "cohen_kappa": null,
+      "disagreement_count": 0
+    },
+    "harmful_request": {
+      "agreement_rate": 0.167,
+      "cases": 12,
+      "cohen_kappa": 0.016,
+      "disagreement_count": 10
+    },
+    "indirect_clean": {
+      "agreement_rate": 1.0,
+      "cases": 25,
+      "cohen_kappa": 1.0,
+      "disagreement_count": 0
+    },
+    "indirect_injection": {
+      "agreement_rate": 0.625,
+      "cases": 16,
+      "cohen_kappa": -0.116,
+      "disagreement_count": 6
+    }
+  },
+  "cases": 60,
+  "cohen_kappa_inter_annotator": 0.442,
+  "disagreement_count": 16,
+  "disagreements": [
+    {
+      "annotator1": 0,
+      "annotator2": 1,
+      "case_id": "zh_harm/017"
+    },
+    {
+      "annotator1": 0,
+      "annotator2": 1,
+      "case_id": "zh_harm/025"
+    },
+    {
+      "annotator1": 0,
+      "annotator2": 1,
+      "case_id": "zh_harm/026"
+    },
+    {
+      "annotator1": 0,
+      "annotator2": 1,
+      "case_id": "zh_harm/034"
+    },
+    {
+      "annotator1": 0,
+      "annotator2": 1,
+      "case_id": "zh_harm/039"
+    },
+    {
+      "annotator1": 0,
+      "annotator2": 1,
+      "case_id": "zh_harm/042"
+    },
+    {
+      "annotator1": 0,
+      "annotator2": 1,
+      "case_id": "zh_harm/053"
+    },
+    {
+      "annotator1": 0,
+      "annotator2": 1,
+      "case_id": "zh_harm/076"
+    },
+    {
+      "annotator1": 0,
+      "annotator2": 1,
+      "case_id": "zh_harm/082"
+    },
+    {
+      "annotator1": 0,
+      "annotator2": 1,
+      "case_id": "zh_harm/085"
+    },
+    {
+      "annotator1": 1,
+      "annotator2": 0,
+      "case_id": "zh_ind/02"
+    },
+    {
+      "annotator1": 0,
+      "annotator2": 1,
+      "case_id": "zh_ind/04"
+    },
+    {
+      "annotator1": 1,
+      "annotator2": 0,
+      "case_id": "zh_ind/07"
+    },
+    {
+      "annotator1": 1,
+      "annotator2": 0,
+      "case_id": "zh_ind/103"
+    },
+    {
+      "annotator1": 1,
+      "annotator2": 0,
+      "case_id": "zh_ind/42"
+    },
+    {
+      "annotator1": 1,
+      "annotator2": 0,
+      "case_id": "zh_ind/54"
+    }
+  ],
+  "expected_cases": 60,
+  "injection_scope": {
+    "agreement_rate": 0.854,
+    "cases": 41,
+    "cohen_kappa": 0.688,
+    "disagreement_count": 6
+  },
+  "metric": "inter-annotator Cohen's kappa (human vs human)",
+  "note": "这是**两位真人标注者之间**的 Cohen's kappa，不是「人 vs 语料标签」，更不是准确率。两位标的是完全同一批 60 条、口径沿用首轮页面原话。若两人标签完全相同、且两列都含 0 和 1，会得到 kappa 1.0，但这既可能是真一致、也可能是第二位抄了第一位——数据本身无法判别，只能靠标注独立性保证（盲标页不含第一位答案、不含语料标签、不含规则实现）。若两人把整批全标成同一类（两列都是常量），pe=1 分母为 0，kappa 无定义，返回 None，既不能写成 1.0 也不能写成 0，此时只有一致率可读。单档 kappa 无意义（每档标签近乎常量，实测可为 0、None 甚至负数），主口径看 injection_scope（攻击+成对对照）。加长批（--n 100 → 200 条）必然包含首轮 60 条；若第一位只标了首轮，kappa 只在 60 条交集上算，多出来的题记在 unpaired.only_b，不混进分母。只有两位标注者、一个样本批次，不能外推成标注质量或系统准确率。",
+  "received_a": 60,
+  "received_b": 60,
+  "unpaired": {
+    "note": "只有一方标注的条目不进入 kappa。加长批里这通常是第二位多标的题，先留着；等第一位补标同一批后可重跑，把交集扩到全批。这些单人标签不能写成「标注者间一致性」，也不等于准确率。",
+    "only_a": 0,
+    "only_b": 0
+  },
+  "version": 1,
+  "warnings": []
+}

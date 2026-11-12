@@ -69,14 +69,14 @@
 | §10 会话7 | P2：API 受控并发与预算 | ❌ **未做** | 仍是单用户回环假设 |
 | §6 R06 | 每任务模型调用次数/token/超时预算 | ❌ **未做** | 只有单次调用超时，没有任务级预算 |
 | §4 | 任务/租户作用域纳入审批上下文 | ⚠️ **部分** | 有 run_id，没有 tenant/task 作用域 |
-| §7 | 真实人工双标注 + 标注者间 kappa | ⚠️ **部分**：真人**单人**标注已完成（60 条 vs 语料），按入口分档注入档 kappa 0.752；第二位标注者的 60 条盲标包与 **200 条加长批**（含首轮 60 条）已生成并发布，匿名编号、不泄露答案；合并脚本支持 `--n 100` / `--map-a`，结果待回收，**仍不能写双人 kappa** | `experiments/human_labels_v1/result.json`、`scripts/make_round2_sheet.py`、`scripts/score_double_labels.py`、`tests/test_human_labels.py`、`tests/test_double_labels.py` |
+| §7 | 真实人工双标注 + 标注者间 kappa | ✅ **已完成**（2026-11-12）：第二位标注者匿名盲标 60 条 + 200 条加长批；两人交集 60 条一致率 0.717 / **标注者间 kappa 0.414**，注入档 41 条 0.854 / **kappa 0.688（主口径）**；140 条单人标签记入 `unpaired` 未混入分母。**不是准确率/标注质量**，顶层被 `harmful_request` 口径差拉低 | `experiments/human_labels_v1/double_result.json`、`double_result_60.json`、`intra_annotator_check.json`、`docs/double-annotation-results.md`、`scripts/score_double_labels.py`、`scripts/check_annotator_consistency.py`、`tests/test_double_labels.py` |
 | B 方向 | 语义注入预注册实验 E1–E4 | ⚠️ **已执行，2 通过 / 2 未通过**：E1 落点约束有实测证据（正常请求 100% 误报）、E4 证明「检测建议 ≠ 实际拦截」（audit 检测率 1.0 但 ASR 0.833）；E2 中文负例剂量不足、E3 结构过滤在 `z/√n` 归一化下反升误报，均未达发布线。**是对照实验结论，不是已发布能力** | `docs/semantic-injection-plan.md`、`experiments/semantic_injection_v1/report.md`、`tests/test_semantic_injection_plan.py` |
 | — | 官方 AgentDojo 排行榜 | ❌ **未做** | 需官方模型与 API |
 
 ## 六、怎么复核
 
 ```bash
-python -m unittest discover -s tests -q      # 784 项
+python -m unittest discover -s tests -q      # 791 项
 evoguard config                              # 本次生效配置
 python -c "import sys;sys.path.insert(0,'ai-service/evoguard');import tool_rails as t;[print(r) for r in t.describe(t.load())]"
 ```

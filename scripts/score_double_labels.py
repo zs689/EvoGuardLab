@@ -127,6 +127,16 @@ def score(a_path, b_path, map_path=DEFAULT_MAP, out=DEFAULT_OUT,
         by_cat[cat] = _stat([k for k in keys if H._category(k) == cat], a, b)
     inj = [k for k in keys if k.split("/")[0] in H.INJECTION_SCOPE]
 
+    # 口径描述要跟着实际批次走：加长批里 B 标了 200 条、A 只有 60 条，
+    # 不能写死「两位标的是完全同一批 60 条」。
+    if len(a) == len(b) == len(batch) and len(keys) == len(batch):
+        scope_line = ("两位标的是完全同一批 %d 条、口径沿用首轮页面原话。"
+                      % len(batch))
+    else:
+        scope_line = ("本批共 %d 条，A 标了 %d 条、B 标了 %d 条；"
+                      "kappa 只在两人交集 %d 条上算，口径沿用首轮页面原话。"
+                      % (len(batch), len(a), len(b), len(keys)))
+
     res = {
         "version": 1,
         "metric": "inter-annotator Cohen's kappa (human vs human)",
@@ -154,13 +164,14 @@ def score(a_path, b_path, map_path=DEFAULT_MAP, out=DEFAULT_OUT,
         },
         "warnings": warnings,
         "note": "这是**两位真人标注者之间**的 Cohen's kappa，不是「人 vs 语料标签」，"
-                "更不是准确率。两位标的是完全同一批 60 条、口径沿用首轮页面原话。"
+                "更不是准确率。" + scope_line +
                 "若两人标签完全相同、且两列都含 0 和 1，会得到 kappa 1.0，但这既可能是"
                 "真一致、也可能是第二位抄了第一位——数据本身无法判别，只能靠标注独立性"
                 "保证（盲标页不含第一位答案、不含语料标签、不含规则实现）。"
                 "若两人把整批全标成同一类（两列都是常量），pe=1 分母为 0，kappa 无定义，"
                 "返回 None，既不能写成 1.0 也不能写成 0，此时只有一致率可读。"
-                "单档 kappa 恒为 0/None，主口径看 injection_scope（攻击+成对对照）。"
+                "单档 kappa 无意义（每档标签近乎常量，实测可为 0、None 甚至负数），"
+                "主口径看 injection_scope（攻击+成对对照）。"
                 "加长批（--n 100 → 200 条）必然包含首轮 60 条；若第一位只标了首轮，"
                 "kappa 只在 60 条交集上算，多出来的题记在 unpaired.only_b，不混进分母。"
                 "只有两位标注者、一个样本批次，不能外推成标注质量或系统准确率。",

@@ -25,11 +25,11 @@
 | R09 | 基线指纹漏掉主要安全模块 | **已修** | `tests/test_baseline_fingerprint.py`（9 项） |
 | — | 从 NeMo 融合「按工具声明双向护栏」 | **已补做** | `tool_rails.py`＋`tests/test_tool_rails.py`（22 项） |
 | — | 评审 §9「能力表」 | **已补做** | `docs/capability-matrix.md` |
-| — | 人工标注 | **已完成真人单人 60 条**；按入口分档后间接注入档一致率 0.878 / kappa 0.752；第二位标注者 60 条盲标包 + 200 条加长批已生成发布、合并脚本（`--n 100` / `--map-a`）已就绪、结果待回收，双人标注仍缺；混合口径 0.467 不作能力结论 | `scripts/human_labels.py`、`scripts/make_round2_sheet.py`、`scripts/score_double_labels.py`、`experiments/human_labels_v1/result.json` |
+| — | 人工标注 | **真人双标注已完成**（2026-11-12）：单人 60 条 vs 语料（注入档 0.878 / kappa 0.752）；第二位匿名标 60 条 + 200 条加长批，两人交集 60 条一致率 0.717 / **标注者间 kappa 0.414**，注入档 41 条 0.854 / **0.688（主口径）**，140 条单人标签未计入分母。混合口径 0.467 是「人 vs 语料」，不作能力结论 | `experiments/human_labels_v1/double_result.json`、`double_result_60.json`、`intra_annotator_check.json`、`docs/double-annotation-results.md`、`scripts/score_double_labels.py` |
 | — | 官方 AgentDojo 排行榜 | **未做** | 需要官方模型/API |
 | — | 真实业务开发集上的阈值标定 | **未做** | 需要真实业务数据 |
 
-全量回归：**784 项通过**（`python -m unittest discover -s tests -q`）。
+全量回归：**791 项通过**（`python -m unittest discover -s tests -q`）。
 
 ---
 
@@ -274,10 +274,13 @@ approved，于是都返回 `consumed`。
 
 ## 九、没做的部分（不粉饰）
 
-1. **真实人工双标注 + 标注者间 Cohen's kappa**：已有真人**单人**标注（60 条中文语料
-   vs 语料标签，见 `experiments/human_labels_v1/result.json`），但没有第二位标注者，
-   算不出标注者间 kappa。代理标注（kappa 0.325）与真人单人标注是两回事，
-   都不能冒充双人一致性；模型间一致性也不等于人工一致性。
+1. ~~真实人工双标注 + 标注者间 Cohen's kappa~~ → **已补上（2026-11-12）**：
+   第二位标注者匿名标 60 条 + 200 条加长批，两人交集 60 条一致率 0.717 /
+   **标注者间 kappa 0.414**，注入档 41 条 0.854 / **0.688（主口径）**，
+   140 条只有 B 标、未混入分母；详见 `docs/double-annotation-results.md`。
+   **仍然没有准确率**（没有金标准）；顶层混合 0.467 是「人 vs 语料标签」，
+   不是双人一致性；代理标注 0.325 与模型间一致性也都不等于人工一致性。
+   顶层偏低源于 `harmful_request` 12 条里 11 条的口径差，不是标注误差。
 2. **官方 AgentDojo 排行榜**：需要官方模型与 API；本地只跑了适配器链路。
 3. **真实业务开发集上的阈值标定**：`config/thresholds_v2_calibrated.json` 是候选，
    没有在真实业务分布上标定过，**未启用**。
@@ -292,7 +295,7 @@ approved，于是都返回 `consumed`。
 ## 十、怎么复核这份记录
 
 ```bash
-python -m unittest discover -s tests -q          # 784 项
+python -m unittest discover -s tests -q          # 791 项
 python scripts/eval_action_scope.py               # experiments/action_scope_v2
 python scripts/import_chinese_corpus.py           # 需要网络；产物不入库
 python scripts/eval_chinese_real.py               # experiments/chinese_corpus_v2
