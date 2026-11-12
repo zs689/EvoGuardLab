@@ -1434,7 +1434,8 @@ E2 的 verdict 初版误述「对照组同样下降」，实测三组都没下�
 `scripts/run_semantic_injection_experiments.py`、
 `tests/test_semantic_injection_plan.py`（16 项守门），
 以及 `experiments/semantic_injection_v1/` 全部产物。
-全量回归 **784 项全绿**（+16 预注册实验守门），当前状态类文档同步 767 → 784。
+全量回归 **783 项全绿**（+16 预注册实验守门），当时状态类文档同步 767 → 783；
+傍晚补「报告必须指向外部复核」这条守门后为 **784 项全绿**。
 
 ## 2026-11-12 傍晚：联网外部复核，修正 E2 / E3 归因（不改结果）
 
