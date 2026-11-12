@@ -1,0 +1,53 @@
+{
+  "boundary_is_just_an_excuse": false,
+  "boundary_supported": true,
+  "experiment": "E1",
+  "gate": {
+    "max_normal_fp_rate": 0.05
+  },
+  "hypothesis": "放开 user_input 落点后，正常请求误判显著上升",
+  "method": "绕过 deep_scan.applicable()，直接 DS.classify 模拟放开 user_input",
+  "name": "落点适用性消融",
+  "note": "这是反事实消融，没有修改 deep_scan.py；攻击侧收益用冻结 payload test 的召回近似，但 user_input 本就不该承载工具返回型指令，收益不能抵消误报。",
+  "passed": true,
+  "variants": {
+    "payload": {
+      "chinese_clean_in_sample": {
+        "flagged": 151,
+        "fp_rate": 1.0,
+        "n": 151,
+        "note": "in-sample 诊断，不作留出集结论"
+      },
+      "holdout_attack_n": 384,
+      "holdout_attack_recall": 0.961,
+      "normal_fp_rate": 1.0,
+      "normal_user_instructions": {
+        "flagged": 16,
+        "fp_rate": 1.0,
+        "n": 16
+      },
+      "threshold": -2.899,
+      "threshold_source": "detector_evolution_v1"
+    },
+    "tool": {
+      "chinese_clean_in_sample": {
+        "flagged": 118,
+        "fp_rate": 0.781,
+        "n": 151,
+        "note": "in-sample 诊断，不作留出集结论"
+      },
+      "holdout_attack_n": 384,
+      "holdout_attack_recall": 0.997,
+      "normal_fp_rate": 0.796,
+      "normal_user_instructions": {
+        "flagged": 15,
+        "fp_rate": 0.938,
+        "n": 16
+      },
+      "threshold": 1.278,
+      "threshold_source": "detector_evolution_v1_by_tool"
+    }
+  },
+  "verdict": "正常请求误判远高于 5% 发布线：落点约束有实测证据，维持 applicable() 的硬限制",
+  "worst_normal_fp_rate": 1.0
+}

@@ -29,7 +29,7 @@
 | — | 官方 AgentDojo 排行榜 | **未做** | 需要官方模型/API |
 | — | 真实业务开发集上的阈值标定 | **未做** | 需要真实业务数据 |
 
-全量回归：**767 项通过**（`python -m unittest discover -s tests -q`）。
+全量回归：**783 项通过**（`python -m unittest discover -s tests -q`）。
 
 ---
 
@@ -292,7 +292,7 @@ approved，于是都返回 `consumed`。
 ## 十、怎么复核这份记录
 
 ```bash
-python -m unittest discover -s tests -q          # 767 项
+python -m unittest discover -s tests -q          # 783 项
 python scripts/eval_action_scope.py               # experiments/action_scope_v2
 python scripts/import_chinese_corpus.py           # 需要网络；产物不入库
 python scripts/eval_chinese_real.py               # experiments/chinese_corpus_v2

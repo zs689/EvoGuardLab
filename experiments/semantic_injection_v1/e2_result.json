@@ -1,0 +1,217 @@
+{
+  "balanced_extra_negatives": 12,
+  "baseline_cross_domain_fp": 0.333,
+  "checks": {
+    "effect_specific_to_distribution": false,
+    "fp_ok": false,
+    "recall_ok": true
+  },
+  "diagnosis": {
+    "cross_domain_fp_identical_across_variants": true,
+    "extra_negative_dose_ratio": 0.01,
+    "note": "三组跨域误报完全相同（0.333）：额外 12 条负例相对 1240 条训练负例剂量过小，未推动决策边界。本实验**无法判断**分布匹配是否有效，不能写成「hard negatives 方法无效」。",
+    "train_negatives": 1240
+  },
+  "experiment": "E2",
+  "gate": {
+    "max_recall_drop": 0.05,
+    "max_test_fp_rate": 0.05
+  },
+  "generic_control_cross_domain_fp": 0.333,
+  "hard_negatives_cross_domain_fp": 0.333,
+  "method": "按业务域整组划分训练；三组仅负例不同，阈值固定；tool test 为主口径",
+  "name": "中文真实负例 hard negatives",
+  "note": "中文硬负例只进训练与误报探针，不是留出集；留出集仍是 InjecAgent 按组切出的 test。等量假处理组用于排除「单纯增加负例数量」的解释。",
+  "passed": false,
+  "recall_baseline": 1.0,
+  "recall_hard_negatives": 1.0,
+  "variants": {
+    "baseline": {
+      "extra_negatives": 0,
+      "model_sha256": "101a5dd77f002876bb0749e0727d9da00ca303512fd08daed794b024e4145147",
+      "test_payload_holdout": {
+        "cases": 384,
+        "combined": {
+          "fn": 1,
+          "fp": 49,
+          "fp_rate": 0.128,
+          "precision": 0.887,
+          "recall": 0.997,
+          "tp": 383
+        },
+        "deep_only": {
+          "fn": 1,
+          "fp": 49,
+          "fp_rate": 0.128,
+          "precision": 0.887,
+          "recall": 0.997,
+          "tp": 383
+        },
+        "regex_only": {
+          "fn": 192,
+          "fp": 0,
+          "fp_rate": 0.0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "tp": 192
+        }
+      },
+      "test_tool_holdout": {
+        "cases": 372,
+        "combined": {
+          "fn": 0,
+          "fp": 124,
+          "fp_rate": 0.333,
+          "precision": 0.75,
+          "recall": 1.0,
+          "tp": 372
+        },
+        "deep_only": {
+          "fn": 0,
+          "fp": 124,
+          "fp_rate": 0.333,
+          "precision": 0.75,
+          "recall": 1.0,
+          "tp": 372
+        },
+        "regex_only": {
+          "fn": 186,
+          "fp": 0,
+          "fp_rate": 0.0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "tp": 186
+        }
+      },
+      "threshold": 1.278,
+      "threshold_source": "detector_evolution_v1_by_tool/model.json（未重调）",
+      "train_neg": 1240,
+      "train_pos": 1240
+    },
+    "generic_control": {
+      "extra_negatives": 12,
+      "model_sha256": "98616ce09adc83c1f40710bcf09afa031943bfba7f6f0262ae49c48f002719a2",
+      "test_payload_holdout": {
+        "cases": 384,
+        "combined": {
+          "fn": 2,
+          "fp": 49,
+          "fp_rate": 0.128,
+          "precision": 0.886,
+          "recall": 0.995,
+          "tp": 382
+        },
+        "deep_only": {
+          "fn": 2,
+          "fp": 49,
+          "fp_rate": 0.128,
+          "precision": 0.886,
+          "recall": 0.995,
+          "tp": 382
+        },
+        "regex_only": {
+          "fn": 192,
+          "fp": 0,
+          "fp_rate": 0.0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "tp": 192
+        }
+      },
+      "test_tool_holdout": {
+        "cases": 372,
+        "combined": {
+          "fn": 0,
+          "fp": 124,
+          "fp_rate": 0.333,
+          "precision": 0.75,
+          "recall": 1.0,
+          "tp": 372
+        },
+        "deep_only": {
+          "fn": 0,
+          "fp": 124,
+          "fp_rate": 0.333,
+          "precision": 0.75,
+          "recall": 1.0,
+          "tp": 372
+        },
+        "regex_only": {
+          "fn": 186,
+          "fp": 0,
+          "fp_rate": 0.0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "tp": 186
+        }
+      },
+      "threshold": 1.278,
+      "threshold_source": "detector_evolution_v1_by_tool/model.json（未重调）",
+      "train_neg": 1252,
+      "train_pos": 1240
+    },
+    "hard_negatives": {
+      "extra_negatives": 12,
+      "model_sha256": "9b79b4b8901f7c95436fef5ca60bb074fd77b8424798e6070bae45cd3d7510cf",
+      "test_payload_holdout": {
+        "cases": 384,
+        "combined": {
+          "fn": 1,
+          "fp": 49,
+          "fp_rate": 0.128,
+          "precision": 0.887,
+          "recall": 0.997,
+          "tp": 383
+        },
+        "deep_only": {
+          "fn": 1,
+          "fp": 49,
+          "fp_rate": 0.128,
+          "precision": 0.887,
+          "recall": 0.997,
+          "tp": 383
+        },
+        "regex_only": {
+          "fn": 192,
+          "fp": 0,
+          "fp_rate": 0.0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "tp": 192
+        }
+      },
+      "test_tool_holdout": {
+        "cases": 372,
+        "combined": {
+          "fn": 0,
+          "fp": 124,
+          "fp_rate": 0.333,
+          "precision": 0.75,
+          "recall": 1.0,
+          "tp": 372
+        },
+        "deep_only": {
+          "fn": 0,
+          "fp": 124,
+          "fp_rate": 0.333,
+          "precision": 0.75,
+          "recall": 1.0,
+          "tp": 372
+        },
+        "regex_only": {
+          "fn": 186,
+          "fp": 0,
+          "fp_rate": 0.0,
+          "precision": 1.0,
+          "recall": 0.5,
+          "tp": 186
+        }
+      },
+      "threshold": 1.278,
+      "threshold_source": "detector_evolution_v1_by_tool/model.json（未重调）",
+      "train_neg": 1252,
+      "train_pos": 1240
+    }
+  },
+  "verdict": "未通过：跨域误报 0.333 仍高于 0.05；三组跨域误报完全相同（0.333）：额外 12 条负例相对 1240 条训练负例剂量过小，未推动决策边界。本实验**无法判断**分布匹配是否有效，不能写成「hard negatives 方法无效」。"
+}

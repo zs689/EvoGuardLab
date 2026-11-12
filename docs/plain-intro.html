@@ -137,7 +137,7 @@
 <section>
   <h2>现在真的做到了什么</h2>
   <div class="grid2">
-    <div class="tile"><span class="num">767<small>项自动检查全部通过。每次改代码都会重跑，防止「修好一个、弄坏三个」。</small></span></div>
+    <div class="tile"><span class="num">783<small>项自动检查全部通过。每次改代码都会重跑，防止「修好一个、弄坏三个」。</small></span></div>
     <div class="tile"><span class="num">3 套<small>外部真实语料 + 中文集：2108 条间接注入、1998 条直接越狱、AgentDojo 10 类攻击模板；另有许可清楚的中文公开语料，中文间接注入 120 条为自建构造集（已标「仅样本内」）。</small></span></div>
     <div class="tile"><span class="num">3 级<small>安检：先看字面关键词 → 再看字符统计 → 最后请本地小模型读一遍语义。越往后越准也越慢，默认只开第一级。</small></span></div>
     <div class="tile"><span class="num">4 个<small>官方 AgentDojo 环境在本地跑通（各 1 个任务）。注意：这只是把链路接通，不是官方榜单成绩。</small></span></div>
@@ -163,7 +163,7 @@
   <h2>想在自己电脑上跑，需要什么</h2>
   <p>一台 Windows 电脑 + Python 就行；想跑真实 AI 的部分，还需要本机开着 Ollama（或 LM Studio 的本地服务）并加载一个模型，例如 <code>qwen3:4b</code>。</p>
   <pre><code>cd EvoGuardLab
-python -m unittest discover -s tests -q    # 跑 767 项检查，约 47 秒
+python -m unittest discover -s tests -q    # 跑 783 项检查，约 47 秒
 python ai-service/evolution_bench.py        # 跑一遍完整闭环
 python ai-service/api/app.py                # 打开网页看板 127.0.0.1:8770</code></pre>
   <p class="muted">网页看板是只读的，用来看实验结果；不会连外网、不会上传数据。所有语料都放在本机，不随代码分发。</p>
@@ -183,10 +183,10 @@ python ai-service/api/app.py                # 打开网页看板 127.0.0.1:8770<
 <section>
   <h2>你接下来要干什么</h2>
 
-  <div class="step"><div class="dot">1</div><div><p><strong>现在（5 分钟）</strong>：把这份说明从头看一遍，能用自己的话讲出「它是给 AI 装记录仪 + 体检 + 上岗考试」就够了。再跑一次 <code>python -m unittest discover -s tests -q</code>，看到 <code>767 OK</code> 截图存好。</p></div></div>
+  <div class="step"><div class="dot">1</div><div><p><strong>现在（5 分钟）</strong>：把这份说明从头看一遍，能用自己的话讲出「它是给 AI 装记录仪 + 体检 + 上岗考试」就够了。再跑一次 <code>python -m unittest discover -s tests -q</code>，看到 <code>783 OK</code> 截图存好。</p></div></div>
 
   <div class="step"><div class="dot">2</div><div><p><strong>为简历（半小时）</strong>：把下面这段抄进项目经历，别加「生产级」「防住注入」这类词：</p>
-    <div class="note info">「独立实现 Agent 故障检测与经验晋升原型：31 条轨迹规则 + 20 条静态规则，前后配对验证与负迁移门禁，767 项自动化回归；接入公开安全语料与中文集并如实报告负结果。」<br>
+    <div class="note info">「独立实现 Agent 故障检测与经验晋升原型：31 条轨迹规则 + 20 条静态规则，前后配对验证与负迁移门禁，783 项自动化回归；接入公开安全语料与中文集并如实报告负结果。」<br>
     面试准备三个能讲的点：① 为什么「说拦住了」不等于「真拦住了」；② 为什么新经验要先考试再上岗；③ 为什么关键词规则在语义攻击和中文上失效、后来怎么换思路。</div></div></div>
 
   <div class="step"><div class="dot">3</div><div><p><strong>为内容（小红书 / B 站）</strong>：最适合的选题是「我让 AI 自己给自己做安全体检，结果它把 95% 的攻击都看漏了」——用「5% → 57.5%」这组前后对比讲「换思路比堆规则有用」，再讲「门禁因为误报太高而拒绝让模型上岗」，比讲技术细节更有故事。</p></div></div>

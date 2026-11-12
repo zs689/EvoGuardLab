@@ -1,0 +1,61 @@
+{
+  "checks": {
+    "drop_ratio_acceptable": true,
+    "fp_better": false,
+    "recall_ok": true
+  },
+  "diagnosis": {
+    "dropped_only_fp_rate": 1.0,
+    "note": "被丢掉的结构字段单独送分类器时误报 1.0，印证它们确实是噪声源；但 full 视图整段 JSON 经 score() 的 z/sqrt(n) 归一化被长度稀释，误报反而低于 filtered。在这套打分下过滤抬高了剩余自由文本的相对分数，属于机制性反例，不是实现 bug。"
+  },
+  "experiment": "E3",
+  "gate": {
+    "max_recall_drop": 0.05,
+    "max_structural_drop_ratio": 0.8
+  },
+  "method": "对 tool result JSON 逐字段判形态，结构字段不送内容分类器；三组消融",
+  "name": "推理前结构字段过滤",
+  "note": "纯标准库近似，不是 StackOne 的 FastText SFE；不改模型权重。dropped_only 组用于证明被丢掉的字段本身噪声大；若过滤把攻击所在字段也丢了，召回会如实下降。",
+  "passed": false,
+  "structural_keys": [
+    "applied",
+    "created_at",
+    "env",
+    "id",
+    "is_template",
+    "owner_id",
+    "request_token",
+    "scope",
+    "status",
+    "ts",
+    "updated_at",
+    "version"
+  ],
+  "verdict": "未通过：过滤后误报未下降",
+  "views": {
+    "dropped_only": {
+      "cases": 80,
+      "drop_ratio": 0.667,
+      "fp": 80,
+      "fp_rate": 1.0,
+      "recall": 1.0,
+      "tp": 80
+    },
+    "filtered": {
+      "cases": 80,
+      "drop_ratio": 0.667,
+      "fp": 4,
+      "fp_rate": 0.05,
+      "recall": 0.825,
+      "tp": 66
+    },
+    "full": {
+      "cases": 80,
+      "drop_ratio": 0.667,
+      "fp": 2,
+      "fp_rate": 0.025,
+      "recall": 0.825,
+      "tp": 66
+    }
+  }
+}

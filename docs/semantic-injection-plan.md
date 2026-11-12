@@ -1,10 +1,16 @@
 # 语义注入检测：预注册实验设计（B 方向）
 
-> 状态：**只有设计，没有实验、没有结果、没有代码改动**（2026-11-12）。
-> 这份文档写于跑实验**之前**。它先写死假设、数据划分、指标和判定线，
-> 防止事后看着结果挑口径。后续任何修改都要在本文末尾留一行 changelog。
+> 状态：**设计已冻结，E1–E4 已执行**（2026-11-12）。
+> 结果见 `experiments/semantic_injection_v1/report.md` 与 `e1..e4_result.json`：
+> 4 个实验中 **2 个达到预注册判定线、2 个未达到**，负结果照写。
 >
-> **不要把本文当成「已实现的能力」**。能力表里该写的是「已有实验设计，未执行」。
+> 本文写于跑实验**之前**，先写死假设、划分、指标和判定线，防止事后看着结果挑口径。
+> **§一–§八 保持实验前的原始设计不改**；§九 只追加执行结果摘要。
+> 判定线另存 `frozen_split.json`（带 `integrity_sha256`），
+> 由 `tests/test_semantic_injection_plan.py` 守门，源文件 hash / 判定线任一被改即拒跑。
+>
+> **不要把本文当成「已实现的能力」**。已执行的是对照实验，不是检测器改进，
+> 也不代表任何防护能力已发布；能力表里应写「预注册实验已执行，2 通过 / 2 未通过」。
 
 ## 零、一句话结论
 
@@ -212,7 +218,9 @@ SFE 的做法是：对 tool result JSON **逐字段**判断，UUID、ISO 时间�
 | 汇总报告 | `experiments/semantic_injection_v1/report.md` | 是 |
 | 守门测试 | `tests/test_semantic_injection_plan.py` | 是 |
 
-**当前状态：以上产物除 CaMeL PDF 外，一个都还没有。** 本文件只是把规则先立好。
+**当前状态（2026-11-12 下午）**：上表产物已全部生成，另多了
+`e4_demo/`（E4 的逐 case 六字段证据）与 `tests/test_semantic_injection_plan.py`
+（16 项守门）。`frozen_split.json` 在跑任何实验前一次性生成，之后只校验、不重写。
 
 A 方向（真人标注）的产物不属本实验，单列在此避免混淆：
 `experiments/human_labels_v1/round2_id_map.json`（60 条基础批）、
@@ -232,6 +240,33 @@ A 方向（真人标注）的产物不属本实验，单列在此避免混淆：
 | AgentDojo detector 代价、When Benchmarks Lie | https://www.fourfoldai.com/post/prompt-injection-is-unfixable-the-structural-flaw-in-ai-agents 、 https://aifreeup.com/prompt-injection-detection/ | 二手报道，**未独立复现**，引用须标注 |
 | 本项目失败记录 | `docs/detector-evolution.md`、`docs/attack-datasets.md`、`docs/capability-matrix.md` §7 | 一手实测 |
 
-## 九、Changelog
+## 九、执行结果摘要（2026-11-12 下午，实验后追加）
 
-- 2026-11-12：初版。只立设计，未跑任何实验；E1–E4 全部待执行。
+执行脚本 `scripts/run_semantic_injection_experiments.py`（`--freeze` 先于 `--all`），
+全程纯标准库、零 Ollama、零联网推理。冻结留出集：payload test 384 条 / 12 组，
+跨域 tool test 372 条 / 3 组；中文 151 条干净样本只作 in-sample 误报探针。
+
+| 实验 | 预注册判定线 | 实测 | 结论 |
+|---|---|---|---|
+| E1 落点消融 | 放开 `user_input` 后正常请求误报是否显著上升 | payload 模型 **16/16 + 151/151** 全部误判（100%）；跨域阈值版 15/16、118/151 | **通过**（假设被支持）：`applicable()` 的硬限制有实测证据 |
+| E2 中文真实负例 | 跨域 test FP ≤ 5% 且召回不塌 | 三组跨域 FP **都是 0.333**（baseline / 12 条 hard / 12 条等量通用对照） | **未通过**：剂量 12 条 vs 1240 条训练负例，边界没被推动；本实验**无法判断**分布匹配是否有效 |
+| E3 推理前字段过滤 | 过滤后 FP 下降、召回不塌、drop 占比 < 0.8 | full FP 0.025 → filtered **0.050**（反而升高），召回均 0.825，drop 0.667 | **未通过**：`z/√n` 归一化下整段 JSON 被长度稀释；被丢字段单独送分类器 FP 100%，是机制性反例 |
+| E4 sink 侧评价坐标 | sink ASR 下降且 utility 不掉 | off ASR 0.833 → enforce **0.0**；utility 1.0 → 1.0；`call_stopped` 4 次 | **通过**：**audit 检测率 1.0 却仍有 ASR 0.833**，坐实「检测建议 ≠ 实际拦截」 |
+
+**最有价值的一条**：E4 里 audit 模式把 6 条攻击**全检测到了**，攻击目标照样达成 5 条；
+只有 enforce 真的把调用停在 `sim.call_tool` 之前。这正是六字段契约把 `detected`
+与 `executed/effect` 分开记录的原因，也说明「检测率」不该当验收指标。
+
+**两个负结果不能误读**：E2 是剂量不足，不是「hard negatives 方法无效」；
+E3 是归一化打分的机制性反例，不是实现 bug。要继续推进，E2 需要**成数量级**增加
+分布匹配的负例（或改采样权重），E3 需要换掉 `z/√n` 的长度归一化再测 —— 都属于
+**新实验**，不能在本次结果上改判定线。
+
+## 十、Changelog
+
+- 2026-11-12（上午）：初版。只立设计，未跑任何实验；E1–E4 全部待执行。
+- 2026-11-12（下午）：E1–E4 按本文规则执行完毕。§一–§八 的设计与判定线**未改**，
+  新增 §九 只记录结果；`frozen_split.json` 在跑实验前生成并逐次校验完整性。
+  跑完后只更正了两处**解读文案**：E1 的 `passed` 语义写反（应表示假设被支持）、
+  E2 的 verdict 误述为「对照组同样下降」（实测三组均未下降）。
+  **指标数字、判定线、冻结集均未改动**，已在 `report.md`「过程记录（如实）」登记。

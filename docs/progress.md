@@ -1269,7 +1269,7 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
   官方榜单全量（需官方模型 API）。
 
 > 以上是 **2026-11-10 当时的状态快照**，数字与「仍未做」清单都按当时记录，不回改。
-> 当前值见本文末尾（767 项）与 `docs/neomo-review-fixes.md`、`docs/capability-matrix.md`。
+> 当前值见本文末尾（783 项）与 `docs/neomo-review-fixes.md`、`docs/capability-matrix.md`。
 
 ## 2026-11-10 融合 LlamaFirewall（读源码 → 改代码 → 验证）
 
@@ -1339,7 +1339,7 @@ CustomCheckScanner 自定义 schema 框架、DoS 攻击模板、OpenAI/LangChain
 - `security.guard_tool_intent()`：执行前意图门禁，复用 judge_alignment；
   deny / review / allow / none 四态，`executed` 恒 False；模型不可用转人工，不静默放行。
 
-全量回归 **767 项全绿**（2026-11-11 对标 NeMo 整改后：+15 执行入口 +10 审批加固
+全量回归 **783 项全绿**（2026-11-11 对标 NeMo 整改后：+15 执行入口 +10 审批加固
 +9 基线指纹 +16 中文语料 +22 按工具护栏 +6 分档守门；2026-11-12：+13 双标注守门）。
 
 ## 2026-11-12：第二位标注者盲标包（含 200 条加长批）+ 语义注入预注册实验设计
@@ -1391,8 +1391,48 @@ E4 把评价坐标搬到 `attempted/executed/effect` 的 sink 侧。
 文档明确列出「本项目已有什么 / 差在哪」：六字段契约和 `execution.preflight`
 是 sink 侧测量与 tool 边界确定性检查的轻量对应物，但**没有** capability 标签、
 taint 追踪、受限解释器、P-LLM/Q-LLM 隔离，所以不能写「已实现 CaMeL」或
-「可证明安全」。**当前状态：只有设计，E1–E4 一个都没跑，没有结果，不是已实现能力。**
+「可证明安全」。**当时状态（上午）：只有设计，E1–E4 一个都没跑，没有结果，不是已实现能力。**
+> 括注：同日下午已按这份设计执行 E1–E4，结果见下一节与
+> `experiments/semantic_injection_v1/report.md`；本节按历史快照保留，不回改。
 
-当前状态类文档（README / 能力表 / 白话介绍 / 整改记录）已同步 754 → 767；
+当前状态类文档（README / 能力表 / 白话介绍 / 整改记录）已同步 754 → 783；
 历史快照里的 615 保持不动，只加括注。
+
+## 2026-11-12 下午：按预注册规则跑完 E1–E4（2 通过 / 2 未通过）
+
+用户「那就跑实验啊」，并明确「缺失环节自己想办法解决，别回头问」。
+探查先确认：仓库**没有**评第二级模型的 eval 入口 —— 四个既有 eval 要么测
+`action_scope` 规则、要么测轨迹规则、要么被本地 Ollama 绑住；
+`deep_scan.applicable()` 写死排除 `user_input`；16 条正常请求没有独立样本文件；
+中文侧二级评测完全缺席。于是写 `scripts/run_semantic_injection_experiments.py`
+把这些补齐，**不改任何既有代码**，全程纯标准库 / 零 Ollama / 零联网推理。
+
+**先冻结**：`--freeze` 生成 `frozen_split.json` —— payload test 384 条 / 12 组、
+跨域 tool test 372 条 / 3 组、16 条正常请求探针、151 条中文干净探针；
+带 `integrity_sha256` + 4 个源文件 sha256 + 写死的 `GATE`。每次实验前重算校验，
+不一致直接拒跑；`--freeze` 二次调用也拒绝，防止事后重切样本。
+
+**结果**：
+
+| 实验 | 实测 | 结论 |
+|---|---|---|
+| E1 落点消融 | payload 模型把 16/16 正常请求 + 151/151 中文干净样本全判注入（100% 误报），跨域阈值版 15/16、118/151 | **通过**：`applicable()` 硬限制有实测证据 |
+| E2 中文真实负例 | 三组跨域 FP 全是 0.333（baseline / 12 条 hard / 12 条等量通用对照） | **未通过**：12 条 vs 1240 条训练负例剂量太小，边界没动；**不能写成「hard negatives 无效」**，是本次无法判断 |
+| E3 推理前字段过滤 | full FP 0.025 → filtered 0.050（反而升高），召回均 0.825，drop 0.667 | **未通过**：被丢字段单独送分类器 FP 100% 确是噪声源，但 `score()` 的 `z/√n` 让整段 JSON 被长度稀释，过滤抬高了剩余文本相对分数 |
+| E4 sink 侧评价坐标 | off ASR 0.833 → enforce 0.0，utility 1.0 → 1.0，`call_stopped` 4 次 | **通过**：**audit 检测率 1.0 却仍有 ASR 0.833**，坐实「检测建议 ≠ 实际拦截」 |
+
+最有价值的是 E4：audit 把 6 条攻击**全检测到**，攻击目标照样达成 5 条；
+只有 enforce 真把调用停在 `sim.call_tool` 之前。这正是六字段契约把
+`detected` 与 `executed/effect` 分开记录的原因，检测率不该当验收指标。
+
+**过程中修了两处解读文案，数字没动**：E1 的 `passed` 初版写成「误报未超线」，
+方向反了（预注册假设是误报暴涨，数据支持假设却被标成未通过）；
+E2 的 verdict 初版误述「对照组同样下降」，实测三组都没下降。
+已在 `report.md`「过程记录（如实）」登记；判定线与冻结集始终未变。
+
+新增 `scripts/semantic_hard_negatives.py`（确定性分布匹配负例 43 条 / 6 组）、
+`scripts/run_semantic_injection_experiments.py`、
+`tests/test_semantic_injection_plan.py`（16 项守门），
+以及 `experiments/semantic_injection_v1/` 全部产物。
+全量回归 **783 项全绿**（+16 预注册实验守门），当前状态类文档同步 767 → 783。
 
