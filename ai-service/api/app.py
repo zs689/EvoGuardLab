@@ -26,8 +26,44 @@ import sim        # noqa: E402
 import runtime    # noqa: E402
 import skills     # noqa: E402
 import experience # noqa: E402
+import service_controls  # noqa: E402  —— 服务层工程基线（纯标准库）
 
-VERSION = "0.3.0"
+
+def _read_version():
+    """从 pyproject.toml 单一来源读取版本，避免与打包元数据漂移。
+
+    优先用 3.11+ 的 tomllib；3.10 没有 tomllib 时退回解析 ``version = "..."``
+    行；两者都失败才兜底到与 pyproject 对齐的常量。要升版本请改 pyproject，
+    不要改这里。
+    """
+    pyproject = os.path.join(ROOT, "pyproject.toml")
+    try:
+        import tomllib  # Python 3.11+
+        with open(pyproject, "rb") as f:
+            return tomllib.load(f)["project"]["version"]
+    except Exception:
+        pass
+    try:
+        with open(pyproject, encoding="utf-8") as f:
+            m = re.search(r'(?m)^\s*version\s*=\s*"([^"]+)"', f.read())
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    return "0.6.0"  # 与 pyproject.toml 对齐的兜底
+
+
+VERSION = _read_version()
+# 单一全局实例：限流窗口需要在多线程间共享（check_rate 内用 Lock 保护）。
+CONTROLS = service_controls.ServiceControls.from_env()
+
+
+def _audit(rid, method, path, status, actor, decision):
+    """成功/失败请求都记一条结构化日志（token / 请求正文由 log 白名单挡掉）。"""
+    CONTROLS.log({"request_id": rid, "method": method, "path": path,
+                  "status": status, "actor": actor, "decision": decision})
+
+
 METRICS = os.path.join(ROOT, "experiments", "metrics.json")
 REAL_METRICS = os.path.join(ROOT, "experiments", "real_model", "metrics.json")
 REAL_REPORT = os.path.join(ROOT, "experiments", "real_model", "report.md")
@@ -77,6 +113,7 @@ class Handler(BaseHTTPRequestHandler):
         sys.stderr.write("[api] " + (fmt % args) + "\n")
 
     def _send(self, code, payload, ctype="application/json; charset=utf-8"):
+        self._response_status = code  # 供 _guarded 记结构化日志
         if isinstance(payload, (dict, list)):
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         elif isinstance(payload, bytes):
@@ -142,16 +179,52 @@ class Handler(BaseHTTPRequestHandler):
                     return self._err("E_INTERNAL", traceback.format_exc()[-500:], 500)
         return self._err("E_NOT_FOUND", "接口不存在：%s" % path, 404)
 
+    def _reject(self, status, rid, method, path, actor, decision, retry_after=None):
+        """守卫失败：返回带 request_id 的 JSON 体，并记一条结构化日志。"""
+        payload = {"error": {"code": decision, "message": decision},
+                   "request_id": rid}
+        if retry_after is not None:
+            payload["retry_after"] = round(retry_after, 3)
+        self._send(status, payload)
+        _audit(rid, method, path, status, actor, decision)
+
+    def _guarded(self, method):
+        """每个请求的统一入口：request-id、鉴权、限流、stop switch、审计日志。
+
+        默认（未设 AGENTLAB_API_TOKEN、未触发限流、kill switch 关闭）时全部放行，
+        响应体结构与改造前完全一致 —— 保持 test_api_smoke 向后兼容。
+        """
+        rid = CONTROLS.new_request_id()
+        path = self.path.split("?")[0]
+        self._response_status = 0
+        ok, reason, actor = CONTROLS.authorize(self.headers)
+        if not ok:
+            return self._reject(401, rid, method, path, actor, reason)
+        allowed, retry_after = CONTROLS.check_rate(actor)
+        if not allowed:
+            return self._reject(429, rid, method, path, actor,
+                                "rate_limited", retry_after)
+        if CONTROLS.kill_switch(method):
+            return self._reject(503, rid, method, path, actor, "kill_switch")
+        try:
+            self._dispatch(method)
+        finally:
+            _audit(rid, method, path, self._response_status or 500,
+                   actor, "allowed")
+
     def do_GET(self):
-        self._dispatch("GET")
+        self._guarded("GET")
 
     def do_POST(self):
-        self._dispatch("POST")
+        self._guarded("POST")
 
     # ---------------- 接口 ----------------
     def h_health(self):
         store = core.Store(DB)
+        d = CONTROLS.describe()
         self._send(200, {"ok": True, "version": VERSION,
+                         "auth_enabled": d["auth_enabled"],
+                         "rate_limit": d["rate_limit"],
                          "db": store.health(),
                          "metrics_exists": os.path.exists(METRICS)})
 
@@ -300,6 +373,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    # 启动期 fail-closed：配置不合法（坏数值 / 阈值文件缺失或损坏）就不起来，
+    # 避免带着半吊子控制对外提供服务。冒烟测试直接构造 Server，不走这里。
+    errors = CONTROLS.validate_config()
+    if errors:
+        for e in errors:
+            print("配置错误：" + e, file=sys.stderr, flush=True)
+        raise SystemExit("启动中止（fail-closed）：服务控制配置不合法")
+    warning = CONTROLS.describe().get("warning")
+    if warning:
+        print("[warn] " + warning, file=sys.stderr, flush=True)
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8770
     if not os.path.isdir(FRONTEND):
         raise SystemExit("找不到前端目录：%s" % FRONTEND)

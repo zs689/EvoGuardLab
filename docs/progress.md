@@ -1269,7 +1269,7 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
   官方榜单全量（需官方模型 API）。
 
 > 以上是 **2026-11-10 当时的状态快照**，数字与「仍未做」清单都按当时记录，不回改。
-> 当前值见本文末尾（791 项）与 `docs/neomo-review-fixes.md`、`docs/capability-matrix.md`。
+> 当前值见本文末尾（814 项）与 `docs/neomo-review-fixes.md`、`docs/capability-matrix.md`。
 
 ## 2026-11-10 融合 LlamaFirewall（读源码 → 改代码 → 验证）
 
@@ -1509,4 +1509,63 @@ plain-intro md/html、attack-datasets 新增节、final-round 历史快照只加
 新增 `tests/test_double_annotation_results.py` 7 条守门（人 vs 人口径、
 140 条不进分母、注入档为主口径、同人两次是另一个指标、单档 kappa 不作结论）。
 全量回归 **791 项全绿**。
+
+## 2026-11-12 傍晚：低分项升级（用户「去网上找、融合、达到企业级」）
+
+上一轮评估给出「方法论深、核心检测 ~3/10、企业级不成立、clean clone 回归是红的」。
+本轮按两条线推进，**结论是「工程基线达成、企业级未达成」**，详见
+`docs/upgrade-report.md`。
+
+**联网核实（只融方法、不破零依赖）**：StackOne SFE 逐字段过滤、DeFuse
+arXiv:2609.22510（max-pooling 误报复合 + 长度感知阈值 + 报 AUC，PDF 已下载）、
+Meta Prompt Guard 2 重叠分窗取 max（**权重 gated Llama 4 许可且需 transformers，
+明确不引入**）、The Guardrail Cries Wolf 位置测试、OWASP AI Agent Security
+Cheat Sheet / Agentic Top 10 2026。NotInject（MIT）等公开数据集因 HF 官方端点 502、
+镜像 503 **本次不可达**，如实标注、不伪造接入。
+
+**检测能力 v2（新预注册，不改 v1 冻结集/判定线）**：
+`ai-service/evoguard/injection_scorer.py` 实现逐字段过滤 + 重叠分窗取 max +
+按窗口数分桶的 FP 预算阈值 + AUC；`scripts/run_semantic_injection_v2.py` 新冻结集、
+三组对照、1860 条确定性合成负例按模板组划分。
+
+| 组 | 留出 AUC | 末尾 payload 检出 | 过度防御 FP |
+|---|---|---|---|
+| baseline | 0.9917 | 0.000 | 0.1477 |
+| v2_window_only | **0.9947** | **1.000** | 0.1477 |
+| v2_full（申报组） | 0.9593 | **1.000** | **0.009** |
+
+**总判定「未通过」**：v2_full 的 AUC 比 baseline 低 0.032，超过允许的 −0.01。
+分窗确实修好了 `MAX_SCAN_CHARS` 截断盲区、字段过滤确实压住了过度防御，
+但两者叠加互相拖累。**没有放宽判定线、没有拿 test 调策略、没有把未通过改成通过**；
+逐组判定留在 `per_view_checks`，由 `tests/test_injection_scorer.py` 11 项守门。
+
+**clean clone 回归（上一轮最硬的阻塞，已修）**：`.gitattributes` 锁 LF 修掉
+`core.autocrlf=true` 导致的 fixture sha 失配；4 个 AgentDojo 产物测试、中文样本测试、
+源文件 sha 校验改显式 `skipUnless`；`test_reproducibility` 只跳过 3 个缺语料脚本、
+其余 4 个字节一致性照验；`evoguard eval` 缺语料时跳过并打印前置条件；
+修 `chinese_injections_v1.py` 的真实 bug（离线缓存抛的是 `SystemExit` 不是 `Exception`）。
+CI 补 `pip install -e .`、config/demo/eval 冒烟、3.10/3.11/3.13 + 一个 Windows 组合。
+**提交后实测 clean clone：`Ran 802 tests ... OK (skipped=41)`**，
+从上一轮的 `FAILED (failures=3, errors=5)` 变成全绿；fixture sha 完全匹配。
+
+**元数据**：清 `C:/Users/zs`、`E:/agent/learn`、`F:\Qwen3` 等开发机路径；
+删 `OWNER` / `<this-repo>` 占位；新建 `tests/fixtures/external/README.md`
+说明 12 条 InjecAgent 夹具的 MIT 许可；精确化 README「语料正文不入库」的例外。
+另修一次误提交：冒烟跑 `evoguard eval` 重写了两个冻结评测产物，
+已 `revert` 恢复，未把来路不明的数字带进仓库。
+
+**服务层基线**：按 OWASP 补鉴权 / 限流 / 结构化日志与 request-id / 配置校验 /
+stop switch / Dockerfile，见 `docs/service-controls.md`（默认关闭鉴权的风险写在文档里）。
+
+**服务层基线落地**：`ai-service/evoguard/service_controls.py`（鉴权 / 限流 /
+stop switch / 结构化日志 / 配置校验，12 条守门测试）、`app.py` 统一入口接线
+（版本改为从 `pyproject.toml` 单一来源读取，`test_api_smoke` 14 条仍全绿）、
+`docs/service-controls.md`、`Dockerfile`。
+
+**企业级结论（如实）**：补上的是工程基线；仍缺真实业务流量与多租户隔离、TLS/反向代理、
+集中式日志与指标、持久化审计与迁移、SLA 与故障演练，且**核心检测 v2 没过预注册判定线**。
+准确说法是「可复现、可发布、工程基线齐备的研究原型」，不是企业级安全产品。
+
+整合后本地全量回归 **814 项全绿**（+11 检测器 v2 守门 +12 服务层守门），
+关键冒烟 37 项 OK；最终 clean clone 复验结果见 `docs/upgrade-report.md`。
 

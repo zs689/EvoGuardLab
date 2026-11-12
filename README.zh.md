@@ -32,7 +32,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（791 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样 + 24 收尾轮 + 38 LlamaFirewall 融合 + 15 执行入口 + 10 审批加固 + 9 基线指纹 + 16 中文语料 + 22 按工具护栏 + 6 分档守门 + 13 双标注守门 + 17 预注册实验守门 + 7 双标注结果守门）
+# 2) 回归测试（814 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样 + 24 收尾轮 + 38 LlamaFirewall 融合 + 15 执行入口 + 10 审批加固 + 9 基线指纹 + 16 中文语料 + 22 按工具护栏 + 6 分档守门 + 13 双标注守门 + 17 预注册实验守门 + 7 双标注结果守门 + 11 检测器 v2 守门 + 12 服务层守门）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -47,7 +47,7 @@ python scripts/check_model.py --base http://127.0.0.1:11434/v1
 > `evoguard eval` 只跑不依赖语料的两项，不再抛 traceback。导入语料后重跑，
 > 产物与仓库内已提交的报告逐字节一致。`.gitattributes` 把 fixtures 与产物锁成 LF，
 > 避免 Windows 的 `core.autocrlf=true` 改掉字节、触发 sha256 守门失败。
-> 文档里的「791 项」指**语料齐全时**的全量套件；clean clone 上会如实显示 skipped。
+> 文档里的「814 项」指**语料齐全时**的全量套件；clean clone 上会如实显示 skipped。
 
 **检测能力 v2（重新预注册，结果是负结果）**：`docs/semantic-injection-v2-plan.md`
 用联网核实的一手方法（StackOne SFE 逐字段过滤、Prompt Guard 2 重叠分窗取 max、
@@ -944,7 +944,7 @@ python ai-service/real_model_bench.py --suite hard --fresh
   `approval.py`（可恢复审批 + 幂等账本）、`real_tasks.py`（本地 HTTP/规则/SQLite）、
   `conditional_skill.py`（声明式技能）、`tool_contract.py`（结构化授权）、
   `experience_scope.py`（经验适用范围 + BM25）。
-- **回归**：`python -m unittest discover -s tests -q` —— 当前 **791 项全绿**。
+- **回归**：`python -m unittest discover -s tests -q` —— 当前 **814 项全绿**。
 - **冻结证据（只读，不要覆盖）**：`experiments/p0_09_20261109/`、
   `experiments/real_model_20261109/` 与 `...20261109b/`、`experiments/defense_demo/`、
   `experiments/labeled_eval/`。当前版本产物在 `*_v1` / `*_v2` 目录，

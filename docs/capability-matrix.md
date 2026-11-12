@@ -76,7 +76,7 @@
 ## 六、怎么复核
 
 ```bash
-python -m unittest discover -s tests -q      # 791 项
+python -m unittest discover -s tests -q      # 814 项
 evoguard config                              # 本次生效配置
 python -c "import sys;sys.path.insert(0,'ai-service/evoguard');import tool_rails as t;[print(r) for r in t.describe(t.load())]"
 ```

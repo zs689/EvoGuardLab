@@ -74,8 +74,10 @@ CI 只跑这一条。本轮：
   （不是 `Exception`），原 `except Exception` 接不住。
 - CI 补 `pip install -e .`、`evoguard config`、隔离输出的 demo 冒烟、
   Python 3.10/3.11/3.13 矩阵与一个 Windows 组合、`evoguard eval` 子集。
-- README 中英写明「复现分层」：791 是语料齐全时的全量套件，clean clone 上
+- README 中英写明「复现分层」：814 是语料齐全时的全量套件，clean clone 上
   依赖语料的用例如实显示 skipped，不静默计为通过。
+- **提交后实测 clean clone：`Ran 802 tests ... OK (skipped=41)`**（服务层落地前）；
+  服务层接入后本地 **814 项全绿**，最终 clone 复验结果见 §七。
 
 ## 五、元数据与合规
 
@@ -90,7 +92,11 @@ CI 只跑这一条。本轮：
 
 补上的是**工程基线**（鉴权、限流、结构化日志/request-id、配置校验、
 stop switch、Dockerfile、CI 可复现），对应 OWASP 若干控制项。
-`docs/service-controls.md` 明确列出默认关闭鉴权的理由与风险。
+`ai-service/evoguard/service_controls.py` 独立可测（12 条守门全绿），
+接入 `app.py` 的统一请求入口后 `test_api_smoke` 14 条仍全绿、
+默认行为向后兼容；版本改为从 `pyproject.toml` 单一来源读取。
+`docs/service-controls.md` 明确列出默认关闭鉴权的理由与风险：
+**默认态下路由仍全开放，只靠 127.0.0.1 回环兜底**。
 
 仍然缺、且**不是加代码就能自证**的：
 

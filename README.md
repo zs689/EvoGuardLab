@@ -25,7 +25,7 @@ that distinction kept exposing real bugs in this very codebase.
 pip install -e .          # zero runtime dependencies, Python 3.10+
 
 evoguard demo             # full defence demo: same attacks, five configurations
-evoguard test             # 791 regression tests
+evoguard test             # 814 regression tests
 evoguard eval             # re-run every experiment and print the numbers
 evoguard config           # print the effective security configuration
 ```
@@ -46,7 +46,7 @@ No install? `python evoguard_cli.py demo` works from a checkout — that is the 
 - `.gitattributes` pins fixtures and artifacts to LF so Windows `core.autocrlf=true`
   cannot change a byte and break the sha256 gates.
 
-The "791 tests" figure is the full suite **with corpora present**; on a clean clone the
+The "814 tests" figure is the full suite **with corpora present**; on a clean clone the
 corpus-dependent cases are reported as skipped, not silently counted as passes.
 
 ### Detector v2 (preregistered — outcome is a negative result)
@@ -107,7 +107,7 @@ The scope layer exists because of a specific finding: natural-language indirect 
 | Chinese jailbreak techniques (34) | L1 recall | **0.029** | regex is a dead end on Chinese; documented, not fixed by adding rules |
 | Chinese harmful-request set (108) | L1 recall | **0.000** | wrong task — that is content moderation, not injection detection |
 | Chinese indirect injection (120, self-built) | recall / FP | **0.917 / 0.000** | in-sample: rules were finalised on this set, so it is coverage, not generalisation |
-| Regression suite | tests | **791 tests, green** (corpus-dependent cases skip on a clean clone) | `python -m unittest discover -s tests` |
+| Regression suite | tests | **814 tests, green** (corpus-dependent cases skip on a clean clone) | `python -m unittest discover -s tests` |
 
 The Chinese indirect-injection set is **built by this repo**, not a public corpus — no public
 Chinese indirect-injection corpus exists. It is 10 carriers × 12 techniques, all distinct.
@@ -155,7 +155,7 @@ ai-service/evoguard/     core library (stdlib only)
   code_guard.py          CodeShield-style code scanning (AST + regex)
 scripts/                 every experiment is a script; artifacts land in experiments/
 docs/                    protocols and per-topic write-ups
-tests/                   791 tests, including reproducibility (byte-identical reruns)
+tests/                   814 tests, including reproducibility (byte-identical reruns)
 ```
 
 ## Design rules this repo enforces on itself
