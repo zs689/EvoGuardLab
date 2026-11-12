@@ -197,3 +197,18 @@ python -m unittest discover -s tests -q  # 861 tests, OK
 
 修复记录：本轮把测试从 814 提到 **861**（企业模块 34 + 防篡改 5 + 真握手 3 +
 进程级探针 2 等），全绿。
+
+### 8.5 最终复验（提交后）
+
+```
+本地         : Ran 861 tests ... OK
+干净 clone    : Ran 861 tests ... OK (skipped=41)
+干净 clone 打分: 84.8 / 100（与主仓库逐字节一致）
+守门线        : evoguard scorecard --min 80 → 通过
+CLI          : evoguard config / scorecard / serve --port 均可用
+工作树        : git status 干净
+```
+
+`skipped=41` 全部是依赖 `data/external/` 语料的用例（该目录按许可与体积
+不入库），不是失败。干净 clone 上分数与主仓库**完全一致**，说明打分依赖的
+是仓库里的产物，而不是这台机器上的任何东西。
