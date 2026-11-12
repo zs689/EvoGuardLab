@@ -25,7 +25,7 @@ git clone <this-repo> && cd EvoGuardLab
 pip install -e .          # zero runtime dependencies, Python 3.10+
 
 evoguard demo             # full defence demo: same attacks, five configurations
-evoguard test             # 783 regression tests
+evoguard test             # 784 regression tests
 evoguard eval             # re-run every experiment and print the numbers
 evoguard config           # print the effective security configuration
 ```
@@ -79,7 +79,7 @@ The scope layer exists because of a specific finding: natural-language indirect 
 | Chinese jailbreak techniques (34) | L1 recall | **0.029** | regex is a dead end on Chinese; documented, not fixed by adding rules |
 | Chinese harmful-request set (108) | L1 recall | **0.000** | wrong task — that is content moderation, not injection detection |
 | Chinese indirect injection (120, self-built) | recall / FP | **0.917 / 0.000** | in-sample: rules were finalised on this set, so it is coverage, not generalisation |
-| Regression suite | tests | **783 pass** | `python -m unittest discover -s tests` |
+| Regression suite | tests | **784 pass** | `python -m unittest discover -s tests` |
 
 The Chinese indirect-injection set is **built by this repo**, not a public corpus — no public
 Chinese indirect-injection corpus exists. It is 10 carriers × 12 techniques, all distinct.
@@ -107,7 +107,9 @@ three different tasks apart instead of reporting one flattering average.
   `docs/semantic-injection-plan.md` is a **pre-registered design** whose E1–E4 have now
   been run (2 passed, 2 failed their pre-registered gates); see
   `experiments/semantic_injection_v1/report.md`. These are controlled experiments,
-  not a released detector improvement.
+  not a released detector improvement. A post-run external review
+  (`docs/semantic-injection-external-review.md`) revised the attribution of the
+  two failures **without changing any result or gate**.
 
 ## Repository layout
 
@@ -124,7 +126,7 @@ ai-service/evoguard/     core library (stdlib only)
   code_guard.py          CodeShield-style code scanning (AST + regex)
 scripts/                 every experiment is a script; artifacts land in experiments/
 docs/                    protocols and per-topic write-ups
-tests/                   783 tests, including reproducibility (byte-identical reruns)
+tests/                   784 tests, including reproducibility (byte-identical reruns)
 ```
 
 ## Design rules this repo enforces on itself

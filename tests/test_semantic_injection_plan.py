@@ -186,6 +186,16 @@ class TestSemanticInjectionPlan(unittest.TestCase):
         self.assertIn("过程记录", md)
         self.assertIn("判定线", md)
 
+    def test_report_points_to_post_run_external_review(self):
+        """外部复核必须被指到，且不许借它改判定线/冻结集。"""
+        with open(os.path.join(OUT, "report.md"), encoding="utf-8") as f:
+            md = f.read()
+        self.assertIn("外部方法复核", md)
+        self.assertIn("semantic-injection-external-review.md", md)
+        self.assertIn("需重新预注册", md)
+        self.assertTrue(os.path.exists(
+            os.path.join(ROOT, "docs", "semantic-injection-external-review.md")))
+
 
 if __name__ == "__main__":
     unittest.main()

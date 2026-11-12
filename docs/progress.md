@@ -1269,7 +1269,7 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
   官方榜单全量（需官方模型 API）。
 
 > 以上是 **2026-11-10 当时的状态快照**，数字与「仍未做」清单都按当时记录，不回改。
-> 当前值见本文末尾（783 项）与 `docs/neomo-review-fixes.md`、`docs/capability-matrix.md`。
+> 当前值见本文末尾（784 项）与 `docs/neomo-review-fixes.md`、`docs/capability-matrix.md`。
 
 ## 2026-11-10 融合 LlamaFirewall（读源码 → 改代码 → 验证）
 
@@ -1339,7 +1339,7 @@ CustomCheckScanner 自定义 schema 框架、DoS 攻击模板、OpenAI/LangChain
 - `security.guard_tool_intent()`：执行前意图门禁，复用 judge_alignment；
   deny / review / allow / none 四态，`executed` 恒 False；模型不可用转人工，不静默放行。
 
-全量回归 **783 项全绿**（2026-11-11 对标 NeMo 整改后：+15 执行入口 +10 审批加固
+全量回归 **784 项全绿**（2026-11-11 对标 NeMo 整改后：+15 执行入口 +10 审批加固
 +9 基线指纹 +16 中文语料 +22 按工具护栏 +6 分档守门；2026-11-12：+13 双标注守门）。
 
 ## 2026-11-12：第二位标注者盲标包（含 200 条加长批）+ 语义注入预注册实验设计
@@ -1395,7 +1395,7 @@ taint 追踪、受限解释器、P-LLM/Q-LLM 隔离，所以不能写「已实�
 > 括注：同日下午已按这份设计执行 E1–E4，结果见下一节与
 > `experiments/semantic_injection_v1/report.md`；本节按历史快照保留，不回改。
 
-当前状态类文档（README / 能力表 / 白话介绍 / 整改记录）已同步 754 → 783；
+当前状态类文档（README / 能力表 / 白话介绍 / 整改记录）已同步 754 → 784；
 历史快照里的 615 保持不动，只加括注。
 
 ## 2026-11-12 下午：按预注册规则跑完 E1–E4（2 通过 / 2 未通过）
@@ -1434,5 +1434,38 @@ E2 的 verdict 初版误述「对照组同样下降」，实测三组都没下�
 `scripts/run_semantic_injection_experiments.py`、
 `tests/test_semantic_injection_plan.py`（16 项守门），
 以及 `experiments/semantic_injection_v1/` 全部产物。
-全量回归 **783 项全绿**（+16 预注册实验守门），当前状态类文档同步 767 → 783。
+全量回归 **784 项全绿**（+16 预注册实验守门），当前状态类文档同步 767 → 784。
+
+## 2026-11-12 傍晚：联网外部复核，修正 E2 / E3 归因（不改结果）
+
+用户「可以联网找材料什么的，不要闭门造车」。补核到的材料：
+
+- **一手全文**：StackOne《Detection Isn't the Hard Part》——SFE 逐字段判形状、
+  drop ~45% 字段、FP 1.7% → 0.2%、延迟 83 → 45ms、OOD ToolACE ~0.9%。
+- **一手 PDF**：DeFuse arXiv:2609.22510v1（2026-09-18，Szczepaniak 等），
+  下载到 `_sandbox/semantic_refs/defuse_2609.22510.pdf`（4,913,087 bytes，
+  `%PDF-1.7` + `%%EOF` 校验）。max-pooling 误报按 `1−(1−p)^N` 复合；
+  固定阈值下的 F1 只量阈值位置，需要 length-aware thresholds + 报 AUC。
+- Zenodo《The Guardrail Cries Wolf》**页面摘要已核、PDF 直链 403 未取到**，
+  已删无效文件并按「页面摘要」标注，不当全文引用。
+- 二手模型卡 / 数据集条目：公开训练量级 ~280k；许可清楚的候选语料
+  （`rgeada/tool-response-injections` 14.8k Apache-2.0、
+  `usezn/zn-prompt-injection-bench` 23,699 CC-BY-4.0 等）。
+
+**关键收获：外部材料推翻了我给两个负结果写的单因果归因。**
+
+- E2 不只是「剂量不足」：StackOne 原文明确 hard negatives **不泛化到没见过的
+  schema**（"They can't help on a payload shape the model has never seen"），
+  而 E2 主口径恰是按业务域留出的跨域 test —— **评估口径与方法泛化边界错配**。
+- E3 不只是 `z/√n` 稀释：SFE 是「**逐字段独立**判 pass/drop」，
+  我实现的是「拼接后整体一次打分」，**复现前提未满足**；且 StackOne 明说
+  单一自由文本时 SFE 无事可做。
+- E1 的 100% 误报属公开的「渠道现象」；E4「检测率 ≠ 拦截」属公开共识。
+
+新增 `docs/semantic-injection-external-review.md`（含可接入语料清单与
+E2′/E3′ 的重新预注册要求）；`report.md` 增加「外部方法复核」节；
+预注册文档顶部 / §九 / §十 与 README 中英各加指向。
+**四个结果文件、判定线、`frozen_split.json` 一律未动**，
+没有借外部材料把 E2/E3 改成「通过」——那正是预注册要防的事。
+全量回归 **784 项全绿**（+1 条守门：报告必须指向外部复核）。
 

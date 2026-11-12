@@ -171,7 +171,7 @@ child_process 判定，避免 `re.exec()` 误报）。
   正常代码/中文段落/纯数字不误报、围栏行号、CWE 与严重度。
 - **意图门禁**：`TestIntentGate` 覆盖默认关、无目标不猜、偏离 deny、一致 allow、
   模型不可用时 review，且 `executed` 恒为 False。
-- 全量回归 **783 项全绿**（`python -m unittest discover -s tests -q`）。
+- 全量回归 **784 项全绿**（`python -m unittest discover -s tests -q`）。
 
 ## 边界
 

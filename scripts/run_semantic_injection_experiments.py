@@ -712,6 +712,21 @@ def report(all_res):
           "「剂量不足、本实验无法判断」，并补 `diagnosis`；**数字未改**。",
           "- 以上是解读文案的更正，不是调口径刷数；判定线在 `--freeze` 时写死，"
           "四个 `*_result.json` 的指标值始终未变。",
+          "", "## 外部方法复核（实验后，不改结果）", "",
+          "跑完后联网补核一手材料，**修正了 E2 / E3 的归因，没有改任何数字**：",
+          "- **E2**：StackOne 原文明确 hard negatives **不泛化到没见过的 schema**"
+          "（\"They can't help on a payload shape the model has never seen\"），"
+          "而本实验主口径恰是按业务域留出的跨域 test —— 除剂量不足外还有"
+          "**评估口径与方法泛化边界错配**。",
+          "- **E3**：本次实现是「拼接后整体一次打分」，而 SFE 是"
+          "「逐字段独立判 pass/drop」，**复现前提未满足**；DeFuse"
+          "（arXiv:2609.22510）给出 max-pooling 误报随窗口数复合的机理与"
+          "长度感知阈值 / 报 AUC 的公开修法。",
+          "- **E1 / E4**：100% 误报属公开的「渠道现象」，「检测率 ≠ 拦截」"
+          "属公开共识，两者口径得到外部印证。",
+          "详见 `docs/semantic-injection-external-review.md`。"
+          "**据此提出的 E2′ / E3′ 属新实验，需重新预注册，"
+          "不许在本次冻结集上改口径。**",
           "", "## 复现", "",
           "```bash",
           "python scripts/run_semantic_injection_experiments.py --freeze  # 仅一次",
