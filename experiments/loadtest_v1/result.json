@@ -1,0 +1,92 @@
+{
+  "boundaries": [
+    "全程回环：不含 TLS、反向代理、真实网络抖动，是应用层处理时间的下限。",
+    "指标为进程内内存，单进程语义；多 worker 需按 instance 分别抓取。",
+    "被测路由为 /api/health 与 /api/metrics，不代表重型业务路径。",
+    "本文件由 --requests/--workers 决定，换机器或换参数需重跑。"
+  ],
+  "generated_at": "2026-11-12T18:54:34",
+  "rounds": [
+    {
+      "availability": 1.0,
+      "connect_failures": 0,
+      "latency_ms": {
+        "max": 539.94,
+        "p50": 30.88,
+        "p95": 50.31,
+        "p99": 59.08
+      },
+      "ok": 1000,
+      "path": "/api/health",
+      "requested": 1000,
+      "requests": 1000,
+      "rps": 487.4,
+      "status_counts": {
+        "200": 1000
+      },
+      "wall_s": 2.052
+    },
+    {
+      "availability": 1.0,
+      "connect_failures": 0,
+      "latency_ms": {
+        "max": 516.94,
+        "p50": 4.77,
+        "p95": 15.78,
+        "p99": 509.21
+      },
+      "ok": 1000,
+      "path": "/api/metrics",
+      "requested": 1000,
+      "requests": 1000,
+      "rps": 708.0,
+      "status_counts": {
+        "200": 1000
+      },
+      "wall_s": 1.412
+    }
+  ],
+  "slo": {
+    "availability_target": 0.99,
+    "evaluations": [
+      {
+        "allowed_bad": 10.0,
+        "bad": 0,
+        "budget_remaining": 10.0,
+        "exhausted": false,
+        "good": 1000,
+        "met": true,
+        "name": "availability",
+        "path": "/api/health",
+        "sli": 1.0,
+        "target": 0.99,
+        "total": 1000,
+        "window_s": 3600.0
+      },
+      {
+        "allowed_bad": 10.0,
+        "bad": 0,
+        "budget_remaining": 10.0,
+        "exhausted": false,
+        "good": 1000,
+        "met": true,
+        "name": "availability",
+        "path": "/api/metrics",
+        "sli": 1.0,
+        "target": 0.99,
+        "total": 1000,
+        "window_s": 3600.0
+      }
+    ],
+    "worst_p95_ms": 50.31
+  },
+  "target": {
+    "host": "127.0.0.1",
+    "proxy": false,
+    "requests_per_round": 1000,
+    "tls": false,
+    "workers": 20
+  },
+  "verdict": "availability 达到 99% 目标",
+  "version": 1
+}

@@ -55,6 +55,24 @@ LIB_C = os.path.join(ROOT, "data", "library_c.db")
 MODES = ("A", "B", "C", "D")
 
 
+def _rel_to_root(p):
+    """库路径写成仓库相对路径。
+
+    metrics.json 是提交进 git 的；里面写绝对路径等于把开发机目录结构
+    一起发布，换台机器也没法比对。仓外路径只留文件名。
+    """
+    if not p:
+        return p
+    s = str(p)
+    if not os.path.isabs(s):
+        return s.replace("\\", "/")
+    try:
+        rel = os.path.relpath(s, ROOT)
+    except ValueError:                     # 跨盘符
+        return os.path.basename(s)
+    return s if rel.startswith("..") else rel.replace("\\", "/")
+
+
 def pct(a, b):
     return round(100.0 * a / b, 1) if b else 0.0
 
@@ -905,7 +923,8 @@ def main():
     m["config_hash"] = bl["config_hash"]
     m["library_hash"] = bl["library_hash"]
     m["libraries"] = {k: {"content_sha256": v["content_sha256"],
-                          "skills": v["skills"], "path": v["path"]}
+                          "skills": v["skills"],
+                          "path": _rel_to_root(v["path"])}
                       for k, v in bl["libraries"].items()}
     m["mixed_baseline"] = bool(any(not r.get("config_hash") for r in done.values()))
     with open(METRICS, "w", encoding="utf-8") as f:

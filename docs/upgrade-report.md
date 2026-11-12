@@ -92,6 +92,10 @@ CI 只跑这一条。本轮：
 
 ## 六、企业级：结论是「没有达成」
 
+> 本节是**上一轮**的结论。本轮（见 §八）把工程形态补齐了，但
+> 「检测没过自己定的线」和「隔离只在应用层」两条仍然成立 —— 所以
+> 整体结论没有变成「已达到企业级」，只是从「缺形态」变成「形态有、两处硬缺口」。
+
 补上的是**工程基线**（鉴权、限流、结构化日志/request-id、配置校验、
 stop switch、Dockerfile、CI 可复现），对应 OWASP 若干控制项。
 `ai-service/evoguard/service_controls.py` 独立可测（12 条守门全绿），
@@ -132,3 +136,64 @@ evoguard eval                                              # 跑 2 项、跳过 
 `tests/test_api_smoke`(14) / `test_service_controls`(12) / `test_injection_scorer`(11)
 单独复跑合计 37 项 OK；v2 冻结集 `integrity_sha256` 校验通过；
 主仓库 `git status` 干净。
+
+## 八、本轮：从「缺形态」到「形态齐、两处硬缺口」
+
+上一轮补的是工程基线（鉴权/限流/日志），这一轮补的是**整体形态**。
+判据还是那条：能自己验一遍的才叫真实现，验不了的留清晰接口。
+
+### 8.1 新增（都能自己验）
+
+| 能力 | 落地物 | 怎么验的 |
+|---|---|---|
+| 多租户 | `enterprise/tenancy.py` | 租户解析/配额/未知租户收紧/SQL 守门，单测 + 真进程 |
+| 可观测性 | `enterprise/observability.py` | Prometheus 文本、日志管道、span、采样白名单 |
+| 审计与迁移 | `enterprise/audit.py` | v1→v3 幂等迁移；**逐行哈希链**，改一行/删一行都能发现 |
+| 韧性 | `enterprise/resilience.py` | 熔断三态、超时预算、SLO（分母 0 返回 `None`） |
+| 传输安全 | `enterprise/tls_proxy.py` + `tests/test_tls_handshake.py` | 真 TLS1.3 握手、明文客户端被拒、min_version 挡住旧协议 |
+| 进程级验收 | `scorecard.probe_live` | 起真进程发真 HTTP：401/200、request-id 回显、租户进上下文、审计落库 |
+| 压测底数 | `scripts/loadtest.py` | 1000 请求 / 20 并发：487 / 708 rps，可用性 100% |
+| 故障演练 | `scripts/drill.py` | 5 条：注入→断言→**撤销→断言恢复**，5/5 |
+| 抓取与告警 | `deploy/prometheus.yml` + `deploy/alerts.yml` | 7 条告警规则，指标名与代码逐个对齐 |
+| 自评与守门 | `evoguard scorecard --min` | CI 每次推送跑，低于线就红 |
+
+### 8.2 过程中修掉的真 bug（都是自己写的）
+
+1. `scorecard.ROOT` 少退一级（指到 `ai-service` 而不是仓库根），检测维度会全 0。
+2. 8 个探针里 **7 个把 `(ok, label, evidence)` 写反了** —— 分数照算、
+   检查项名字全变成 `True`。现在 `_pack` 会显式拒绝反序元组。
+3. 新的 Prometheus `h_metrics` **盖掉了**旧 JSON `h_metrics`，前端
+   `/api/metrics`（`frontend/index.html:760`）会 500。改为 JSON 留在原路径，
+   Prometheus 走 `/metrics` 与 `/api/metrics/prometheus`。
+4. `evoguard serve --port 8770` 必崩：`main()` 只认裸位置参数，
+   `int("--port")` 抛 `ValueError`。补 `_parse_port()`。
+5. 压测脚本卡死：给子进程 `stderr=PIPE` 又没人读，访问日志写满缓冲后
+   子进程堵在 `write` 上 —— 表现为「请求超时」，看着像性能问题。改写文件。
+6. 审计库配置错误时**静默降级**成不落库。改为 `/api/health` 返回
+   `audit_error` + stderr 告警 —— 审计没了必须让人知道。
+
+### 8.3 自评分数（可复现）
+
+`evoguard scorecard` → **84.8 / 100**，明细见 `docs/enterprise-scorecard.md`。
+
+八个维度里七个接近满分，**唯一低分是检测能力 2.0/5**，因为它诚实地反映了
+「预注册 v2 没过线」。这正是分数该起作用的地方：如果这里也是 5/5，
+那这个 scorecard 就没在测东西。
+
+剩余缺口（就两条，且都不打算靠加代码糊过去）：
+
+1. **检测器 v2 未过预注册判定线** —— 要另立 v3 预注册，不是改口径。
+2. **数据库层行级隔离** —— sqlite 没有 RLS；`require_tenant_filter()` 是
+   应用层字符串守门，能挡常见错误，但不是隔离。要真隔离得换 PostgreSQL。
+
+### 8.4 复现
+
+```bash
+evoguard scorecard                       # 84.8/100 + 缺口清单
+python scripts/loadtest.py --requests 1000 --workers 20
+python scripts/drill.py                  # 5/5
+python -m unittest discover -s tests -q  # 860 tests, OK
+```
+
+修复记录：本轮把测试从 814 提到 **860**（企业模块 34 + 防篡改 5 + 真握手 3 +
+进程级探针 2 等），全绿。

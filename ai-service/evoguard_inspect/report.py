@@ -160,6 +160,27 @@ STATIC_GROUP_DESC = {
 }
 STATIC_ORDER = ["prompt", "tool", "config"]
 
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))))
+
+
+def _rel_source(p):
+    """来源路径写成仓库相对路径。
+
+    报告会进 git；写绝对路径等于把开发机目录结构带发布出去，换台机器
+    也没法比对。仓外的路径只留文件名（同样不泄露目录）。
+    """
+    if not p:
+        return p
+    s = str(p)
+    if not os.path.isabs(s):
+        return s.replace("\\", "/")
+    try:
+        rel = os.path.relpath(s, _REPO_ROOT)
+    except ValueError:                     # 跨盘符
+        return os.path.basename(s)
+    return s if rel.startswith("..") else rel.replace("\\", "/")
+
 
 def write_static(out_dir, defs, issues, parse_failures=None, coverage=None):
     """静态检查只读定义，所以报告必须把「置信度」写出来 —— 仓库扫描是猜的。"""
@@ -167,7 +188,8 @@ def write_static(out_dir, defs, issues, parse_failures=None, coverage=None):
     by_sev, by_rule, by_group = summarize(issues)
     data = {
         "version": 2,
-        "agents": [{"name": d.name, "source": d.source, "kind": d.source_kind,
+        "agents": [{"name": d.name, "source": _rel_source(d.source),
+                    "kind": d.source_kind,
                     "confidence": d.confidence, "tools": len(d.tools),
                     "prompt_chars": len(d.system_prompt), "notes": d.notes}
                    for d in defs],

@@ -32,3 +32,38 @@ jobs:
         run: python -m unittest discover -s tests -q
       - name: Eval subset without external corpus
         run: evoguard eval
+      - name: Enterprise scorecard (regression guard, 80/100)
+        run: evoguard scorecard --out scorecard.md --min 80
+
+  clean-clone:
+    # 「我这台能跑」不算可复现。这里把仓库 checkout 到一个全新子目录，
+    # **不 pip install**、不碰任何本地缓存，只跑标准库路径 —— 验的是
+    # 「拿到仓库的人第一步能不能跑起来」。
+    # 和上面的 test job 故意分开：那个装了 editable 包，会掩盖
+    # sys.path / 打包遗漏的问题。
+    # 用 actions/checkout 而不是 `git clone`: 后者在 pull_request 事件下
+    # 拉的是 base 分支，测的根本不是这个 PR。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: fresh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Show version
+        run: python -V
+      - name: No build artefacts leaked into the tree
+        working-directory: fresh
+        run: |
+          test ! -d data/external || { echo "data/external 被提交了"; exit 1; }
+          test ! -d .venv || { echo ".venv 被提交了"; exit 1; }
+      - name: Run suite without installing the package
+        working-directory: fresh
+        run: python -m unittest discover -s tests -q
+      - name: CLI works from a bare checkout
+        working-directory: fresh
+        run: python evoguard_cli.py config
+      - name: Scorecard on a bare checkout
+        working-directory: fresh
+        run: python evoguard_cli.py scorecard --min 70

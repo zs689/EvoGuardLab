@@ -1249,12 +1249,12 @@
     "C": {
       "content_sha256": "79c50e6f7b1a13ebd1dacb225b07e91594e339104a64caff05731883c266cd30",
       "skills": 41,
-      "path": "E:\\agent\\EvoGuardLab\\data\\library_c.db"
+      "path": "<repo>\\data\\library_c.db"
     },
     "D": {
       "content_sha256": "8c96b1e94893f05f5e9ba95a36f2a818111d0603123439e952ba4d695bee75dd",
       "skills": 6,
-      "path": "E:\\agent\\EvoGuardLab\\data\\library_d.db"
+      "path": "<repo>\\data\\library_d.db"
     }
   },
   "mixed_baseline": false

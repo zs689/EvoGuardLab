@@ -1338,12 +1338,12 @@
     "C": {
       "content_sha256": "4a5bf66fdf58449e46c776dd83dce23a9175fbdf1a540d2e12e73d95025c20bf",
       "skills": 127,
-      "path": "E:\\agent\\EvoGuardLab\\experiments\\real_model_20261109b\\train\\library_c.db"
+      "path": "<repo>\\experiments\\real_model_20261109b\\train\\library_c.db"
     },
     "D": {
       "content_sha256": "0c2d02433494785eab7be1aaf391cb31437a6c09d3e13e94adfa786ebdfbcaeb",
       "skills": 11,
-      "path": "E:\\agent\\EvoGuardLab\\experiments\\real_model_20261109b\\train\\library_d.db"
+      "path": "<repo>\\experiments\\real_model_20261109b\\train\\library_d.db"
     }
   },
   "mixed_baseline": false

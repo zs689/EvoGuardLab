@@ -1,0 +1,38 @@
+# EvoGuardLab — Prometheus scrape 配置（参考，按环境改）
+#
+# 服务暴露的指标端点：
+#   GET /metrics                 （根路径，给 scrape 用）
+#   GET /api/metrics/prometheus  （同一份文本，走 /api 前缀时用）
+# 注意 **不要** 拿 /api/metrics —— 那是前端要的 JSON，不是 Prometheus 格式。
+#
+# 指标全部来自进程内内存（ai-service/evoguard/enterprise/observability.py），
+# 因此 **单进程语义**：起 N 个 worker 时每个 worker 各自从 0 计数，
+# 需要用 sum by (instance) 聚合，或者让每个 instance 用不同端口分别抓。
+# 这是刻意的取舍：不引入 prometheus_client 依赖，换来零第三方依赖的边界。
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    service: evoguard
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: evoguard
+    metrics_path: /metrics
+    scheme: http
+    # 服务默认只绑 127.0.0.1；跨机抓取需在前面放反向代理并终止 TLS，
+    # 或改成绑内网地址（见 docs/enterprise-readiness.md「传输安全」）。
+    static_configs:
+      - targets:
+          - 127.0.0.1:8770
+        labels:
+          env: local
+
+    # 若开了鉴权（AGENTLAB_API_TOKEN），这里要带同一个 token，
+    # 否则 scrape 会被 401 掉 —— 指标为空但 up=1，是最难查的一类。
+    # authorization:
+    #   type: Bearer
+    #   credentials_file: /etc/evoguard/scrape_token

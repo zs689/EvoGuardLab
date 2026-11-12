@@ -135,6 +135,33 @@ def cmd_config(_):
     return 0
 
 
+def cmd_scorecard(a):
+    """企业就绪度自评：按可核对证据打分，列出缺口。
+
+    分数是「下一轮先补哪」的排序依据，不是认证。--min 用于回归守门：
+    这一轮比上一轮低了就非零退出，避免在没有任何人注意的情况下退步。
+    """
+    from enterprise import scorecard
+    report = scorecard.evaluate(ROOT)
+    text = (json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)
+            if a.json else scorecard.render_markdown(report))
+    if a.out:
+        out = a.out if os.path.isabs(a.out) else os.path.join(ROOT, a.out)
+        d = os.path.dirname(out)
+        if d and not os.path.isdir(d):
+            os.makedirs(d)
+        with open(out, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text if text.endswith("\n") else text + "\n")
+        print("[√] %s（总分 %s/100）" % (out, report["total"]))
+    else:
+        print(text)
+    if a.min is not None and report["total"] < a.min:
+        print("\n[×] 总分 %s 低于守门线 %s：本轮相对基线退步了。"
+              % (report["total"], a.min))
+        return 1
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         prog="evoguard",
@@ -170,6 +197,13 @@ def main(argv=None):
 
     p = sub.add_parser("config", help="打印生效的安全配置")
     p.set_defaults(func=cmd_config)
+
+    p = sub.add_parser("scorecard", help="企业就绪度自评（打分 + 缺口清单）")
+    p.add_argument("--json", action="store_true", help="输出 JSON")
+    p.add_argument("--out", default="", help="写入文件（相对路径按仓库根解析）")
+    p.add_argument("--min", type=float, default=None,
+                   help="守门线：总分低于它则非零退出")
+    p.set_defaults(func=cmd_scorecard)
 
     a = ap.parse_args(argv)
     if not getattr(a, "func", None):

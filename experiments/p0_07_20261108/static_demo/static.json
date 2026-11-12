@@ -3,7 +3,7 @@
   "agents": [
     {
       "name": "billing-agent-bad",
-      "source": "E:\\agent\\EvoGuardLab\\tests\\fixtures\\agent_bad.json",
+      "source": "<repo>\\tests\\fixtures\\agent_bad.json",
       "kind": "json",
       "confidence": "high",
       "tools": 5,
@@ -12,7 +12,7 @@
     },
     {
       "name": "billing-agent-good",
-      "source": "E:\\agent\\EvoGuardLab\\tests\\fixtures\\agent_good.json",
+      "source": "<repo>\\tests\\fixtures\\agent_good.json",
       "kind": "json",
       "confidence": "high",
       "tools": 2,

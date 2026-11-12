@@ -137,6 +137,31 @@ class TestReproducibleArtifacts(unittest.TestCase):
             self.assertNotIn(out.replace("\\", "/"), text,
                              "%s 里写进了输出目录绝对路径" % f)
 
+    def test_committed_artifacts_have_no_dev_machine_paths(self):
+        """已提交的产物里不能出现开发机绝对路径。
+
+        压测/演练把异常原文写进产物，异常信息带完整路径，一不留神就
+        把 `E:\\agent\\...` 或 `C:/Users/...` 带进仓库。这条守门扫一遍
+        `experiments/` 下所有 json/md。
+        """
+        import glob
+        import re
+        bad = re.compile(r"([A-Za-z]:\\\\?[^\"\s]{0,40}(?:EvoGuardLab|Users|agent)"
+                         r"|/home/[^\"\s]+)")
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        exp = os.path.join(root, "experiments")
+        offenders = []
+        for path in glob.glob(os.path.join(exp, "**", "*.json"), recursive=True):
+            name = os.path.relpath(path, root).replace("\\", "/")
+            try:
+                text = _read(path).decode("utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            m = bad.search(text)
+            if m:
+                offenders.append("%s -> %s" % (name, m.group(0)[:60]))
+        self.assertEqual(offenders, [], "产物里出现本机路径：%s" % offenders)
+
 
 class TestArtifactSelfConsistency(unittest.TestCase):
     """汇总数字必须等于逐 case 之和，不能在报告层面自己骗自己。"""

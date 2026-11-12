@@ -1569,3 +1569,43 @@ stop switch / 结构化日志 / 配置校验，12 条守门测试）、`app.py` 
 整合后本地全量回归 **814 项全绿**（+11 检测器 v2 守门 +12 服务层守门），
 关键冒烟 37 项 OK；最终 clean clone 复验结果见 `docs/upgrade-report.md`。
 
+
+## 2026-11-12：企业形态落地 + 自评打分闭环
+
+上一轮结论是「工程基线有了、形态没有」。这一轮补形态，并建了「打分 → 找缺口 → 补缺口」的闭环。
+
+### 新增模块（`ai-service/evoguard/enterprise/`，纯标准库）
+
+`tenancy`（租户解析/配额/SQL 守门）、`observability`（Prometheus 指标/日志管道/span/采样）、
+`audit`（v1→v3 迁移 + **逐行哈希链**）、`resilience`（熔断/超时预算/SLO）、
+`tls_proxy`（TLS 上下文 + 代理头信任）、`scorecard`（按证据打分）。
+
+### 新增脚本与产物
+
+- `scripts/loadtest.py` → `experiments/loadtest_v1/result.json`：1000 请求 / 20 并发，
+  487 / 708 rps，可用性 100%；**SLO 有了实测底数**，不再是手工数字。
+- `scripts/drill.py` → `experiments/drill_v1/result.json`：5 条演练（鉴权/停止开关/
+  限流/重启/审计降级），每条都是「注入→断言→撤销→断言恢复」，5/5。
+- `tests/test_tls_handshake.py`：真起 TLS 服务端，握手成功 + 明文被拒 +
+  min_version 挡住旧协议；成功才写 `experiments/tls_handshake_v1/result.json`。
+- `deploy/prometheus.yml` / `deploy/alerts.yml`：抓取配置 + 7 条告警，指标名与代码对齐。
+- `evoguard scorecard [--json] [--out] [--min]`：接进 CLI，CI 用 `--min 80` 做回归守门。
+- `scripts/live_client.py`：压测与演练共用的「起真进程 + 发真 HTTP」小工具。
+
+### 修掉的真 bug（6 个，全部自己引入）
+
+`scorecard.ROOT` 少退一级；8 个探针里 7 个 `(ok,label,evidence)` 写反（分数照算、
+名字全变 True，现在 `_pack` 拒绝反序）；Prometheus `h_metrics` 盖掉 JSON `h_metrics`
+导致前端 `/api/metrics` 会 500；`evoguard serve --port` 必崩（`int("--port")`）；
+压测脚本因子进程 `stderr=PIPE` 无人读而堵死（表现为「超时」）；
+审计库配置错误时静默降级成不落库（现在 `/api/health` 报 `audit_error`）。
+
+### 自评结果（`evoguard scorecard`）
+
+**84.8 / 100**，明细 `docs/enterprise-scorecard.md`，边界说明 `docs/enterprise-readiness.md`。
+
+九个维度里八个接近满分，**检测能力 2.0/5** —— 因为它如实反映「预注册 v2 没过线」。
+剩余缺口只有两条：检测器 v3 预注册、数据库层行级隔离（sqlite 无 RLS，
+当前是应用层守门，不是隔离）。
+
+测试从 814 提到 **860 全绿**。仍然不说「企业级」：形态齐了，两处硬缺口还在。

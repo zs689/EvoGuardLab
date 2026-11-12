@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -27,6 +28,15 @@ import runtime    # noqa: E402
 import skills     # noqa: E402
 import experience # noqa: E402
 import service_controls  # noqa: E402  —— 服务层工程基线（纯标准库）
+
+try:                                    # 企业形态模块：缺失也不能拖垮服务
+    from enterprise import audit as ent_audit          # noqa: E402
+    from enterprise import observability as ent_obs    # noqa: E402
+    from enterprise import tenancy as ent_tenancy      # noqa: E402
+    _ENT_OK = True
+except Exception:                       # noqa: BLE001
+    ent_audit = ent_obs = ent_tenancy = None
+    _ENT_OK = False
 
 
 def _read_version():
@@ -57,6 +67,38 @@ VERSION = _read_version()
 # 单一全局实例：限流窗口需要在多线程间共享（check_rate 内用 Lock 保护）。
 CONTROLS = service_controls.ServiceControls.from_env()
 
+# 企业形态：租户、配额、指标、追踪、审计。默认全部「可用但不落盘」。
+TENANT_RESOLVER = ent_tenancy.HeaderResolver() if _ENT_OK else None
+TENANT_REGISTRY = ent_tenancy.TenantRegistry() if _ENT_OK else None
+TENANT_QUOTA = (ent_tenancy.TenantQuota(TENANT_REGISTRY)
+                if _ENT_OK else None)
+# 注意：不要叫 METRICS —— 下面已有同名常量指向 experiments/metrics.json。
+METRICS_REG = ent_obs.Metrics() if _ENT_OK else None
+TRACER = ent_obs.Tracer() if _ENT_OK else None
+# 审计默认关闭：只有显式设置路径才落库，避免测试与只读看板产生副作用。
+AUDIT = None
+AUDIT_ERROR = ""
+if _ENT_OK and os.environ.get("AGENTLAB_AUDIT_DB"):
+    try:
+        AUDIT = ent_audit.AuditStore(os.environ["AGENTLAB_AUDIT_DB"])
+    except Exception as exc:            # noqa: BLE001
+        # 不能静默降级：审计掉了还照样「看起来正常」，等于把最该知道的
+        # 事故藏起来。这里留话给 stderr 与 /api/health，让监控能告警。
+        AUDIT = None
+        AUDIT_ERROR = "%s: %s" % (type(exc).__name__, exc)
+        print("[warn] 审计库不可用，已降级为不落库：%s" % AUDIT_ERROR,
+              file=sys.stderr, flush=True)
+
+
+def _route_label(path):
+    """把路径归一成路由标签，避免指标基数被 id 撑爆。"""
+    for _m, pat, fn in ROUTES:
+        if re.match(pat, path):
+            return "/api/" + fn
+    if path.startswith("/static/") or path in ("/", "/index.html"):
+        return "/static"
+    return "/other"
+
 
 def _audit(rid, method, path, status, actor, decision):
     """成功/失败请求都记一条结构化日志（token / 请求正文由 log 白名单挡掉）。"""
@@ -77,8 +119,10 @@ DB = os.path.join(ROOT, "data", "evoguard.db")
 
 ROUTES = [
     ("GET", r"^/api/health$", "h_health"),
-    ("GET", r"^/api/meta$", "h_meta"),
     ("GET", r"^/api/metrics$", "h_metrics"),
+    ("GET", r"^/api/metrics/prometheus$", "h_metrics_prometheus"),
+    ("GET", r"^/metrics$", "h_metrics_prometheus"),
+    ("GET", r"^/api/meta$", "h_meta"),
     ("GET", r"^/api/real-model$", "h_real_model"),
     ("GET", r"^/api/taxonomy$", "h_taxonomy"),
     ("GET", r"^/api/report$", "h_report"),
@@ -131,6 +175,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
+        rid = getattr(self, "_rid", "")
+        if rid:
+            self.send_header("X-Request-Id", rid)
         self.send_header("Content-Security-Policy",
                          "default-src 'self'; img-src 'self' data:; "
                          "style-src 'self' 'unsafe-inline'; "
@@ -180,23 +227,40 @@ class Handler(BaseHTTPRequestHandler):
         return self._err("E_NOT_FOUND", "接口不存在：%s" % path, 404)
 
     def _reject(self, status, rid, method, path, actor, decision, retry_after=None):
-        """守卫失败：返回带 request_id 的 JSON 体，并记一条结构化日志。"""
+        """守卫失败：返回带 request_id 的 JSON 体，并记日志 / 指标 / 审计。"""
         payload = {"error": {"code": decision, "message": decision},
                    "request_id": rid}
         if retry_after is not None:
             payload["retry_after"] = round(retry_after, 3)
         self._send(status, payload)
         _audit(rid, method, path, status, actor, decision)
+        if METRICS_REG is not None:
+            METRICS_REG.inc("evoguard_rejected_total", {"decision": decision})
+            METRICS_REG.inc("evoguard_requests_total",
+                            {"route": _route_label(path), "status": str(status)})
+        if AUDIT is not None:
+            try:
+                AUDIT.emit({"tenant_id": getattr(self, "_tenant_id", "default"),
+                            "request_id": rid, "actor": actor,
+                            "method": method, "path": path, "status": status,
+                            "decision": decision})
+            except Exception:           # noqa: BLE001 - 审计失败不改响应
+                pass
 
     def _guarded(self, method):
-        """每个请求的统一入口：request-id、鉴权、限流、stop switch、审计日志。
+        """统一入口：request-id、鉴权、限流、stop switch、租户、配额、审计、指标。
 
-        默认（未设 AGENTLAB_API_TOKEN、未触发限流、kill switch 关闭）时全部放行，
-        响应体结构与改造前完全一致 —— 保持 test_api_smoke 向后兼容。
+        默认（无 token、无租户头、未触发限流、kill switch 关闭、未设审计库）时
+        全部放行，响应体与改造前一致 —— 保持 test_api_smoke 向后兼容。
         """
         rid = CONTROLS.new_request_id()
         path = self.path.split("?")[0]
         self._response_status = 0
+        self._tenant_id = "default"
+        # 回显到响应头：客户端报「某次请求出错」时能直接对上服务端日志与审计行。
+        self._rid = rid
+        t0 = time.perf_counter()
+
         ok, reason, actor = CONTROLS.authorize(self.headers)
         if not ok:
             return self._reject(401, rid, method, path, actor, reason)
@@ -206,11 +270,43 @@ class Handler(BaseHTTPRequestHandler):
                                 "rate_limited", retry_after)
         if CONTROLS.kill_switch(method):
             return self._reject(503, rid, method, path, actor, "kill_switch")
+
+        if TENANT_RESOLVER is not None:
+            tenant = TENANT_RESOLVER.resolve(self.headers)
+            if tenant is None:
+                return self._reject(400, rid, method, path, actor,
+                                    "invalid_tenant")
+            self._tenant_id = tenant.tenant_id
+            self._actor_scopes = tenant.scopes
+            q_ok, q_retry = TENANT_QUOTA.check(tenant.tenant_id)
+            if not q_ok:
+                return self._reject(429, rid, method, path, actor,
+                                    "tenant_quota", q_retry)
+
         try:
             self._dispatch(method)
         finally:
-            _audit(rid, method, path, self._response_status or 500,
-                   actor, "allowed")
+            status = self._response_status or 500
+            latency_ms = round((time.perf_counter() - t0) * 1000.0, 3)
+            if METRICS_REG is not None:
+                label = _route_label(path)
+                METRICS_REG.inc("evoguard_requests_total",
+                                {"route": label, "status": str(status)})
+                METRICS_REG.observe("evoguard_request_duration_seconds",
+                                    latency_ms / 1000.0, {"route": label})
+            _audit(rid, method, path, status, actor, "allowed")
+            if AUDIT is not None:
+                try:
+                    AUDIT.emit({"tenant_id": self._tenant_id,
+                                "request_id": rid, "actor": actor,
+                                "method": method, "path": path,
+                                "status": status, "decision": "allowed",
+                                "latency_ms": latency_ms})
+                except Exception:       # noqa: BLE001
+                    pass
+            if TRACER is not None:
+                TRACER.record("http.request", latency_ms,
+                              route=_route_label(path), status=status)
 
     def do_GET(self):
         self._guarded("GET")
@@ -225,8 +321,23 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, {"ok": True, "version": VERSION,
                          "auth_enabled": d["auth_enabled"],
                          "rate_limit": d["rate_limit"],
+                         "tenant": getattr(self, "_tenant_id", "default"),
+                         "audit_enabled": AUDIT is not None,
+                         "audit_error": AUDIT_ERROR,
                          "db": store.health(),
                          "metrics_exists": os.path.exists(METRICS)})
+
+    def h_metrics_prometheus(self):
+        """Prometheus 文本格式；企业接 scrape 即可。
+
+        注意：`/api/metrics` 仍然是 JSON —— 前端与冒烟测试都以它为
+        「唯一数字来源」。Prometheus 单独走 `/api/metrics/prometheus`
+        与根路径 `/metrics`，不动既有契约。
+        """
+        if METRICS_REG is None:
+            return self._err("E_UNAVAILABLE", "metrics 未启用", 503)
+        self._send(200, METRICS_REG.render_prometheus(),
+                   "text/plain; version=0.0.4; charset=utf-8")
 
     def h_meta(self):
         self._send(200, {
@@ -372,6 +483,25 @@ class Handler(BaseHTTPRequestHandler):
         })
 
 
+def _parse_port(argv):
+    """接受 `--port 8770` 与裸 `8770` 两种写法。
+
+    以前只认裸位置参数，而 `evoguard serve` 传的是 `--port` ——
+    `int("--port")` 直接抛 ValueError，CLI 一用就崩。
+    """
+    for i, a in enumerate(argv):
+        if a == "--port":
+            if i + 1 >= len(argv):
+                raise SystemExit("--port 后面要跟端口号")
+            return int(argv[i + 1])
+        if a.startswith("--port="):
+            return int(a.split("=", 1)[1])
+    for a in argv:
+        if not a.startswith("-"):
+            return int(a)
+    return 8770
+
+
 def main():
     # 启动期 fail-closed：配置不合法（坏数值 / 阈值文件缺失或损坏）就不起来，
     # 避免带着半吊子控制对外提供服务。冒烟测试直接构造 Server，不走这里。
@@ -383,7 +513,7 @@ def main():
     warning = CONTROLS.describe().get("warning")
     if warning:
         print("[warn] " + warning, file=sys.stderr, flush=True)
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8770
+    port = _parse_port(sys.argv[1:])
     if not os.path.isdir(FRONTEND):
         raise SystemExit("找不到前端目录：%s" % FRONTEND)
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)

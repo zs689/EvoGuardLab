@@ -1,0 +1,86 @@
+# EvoGuardLab — 告警规则（参考）
+#
+# 用到的指标（都来自 ai-service/api/app.py 的接线）：
+#   evoguard_requests_total{route}          总请求数
+#   evoguard_rejected_total{decision}       被守卫拒绝的请求
+#        decision ∈ missing_or_malformed_token | invalid_token | rate_limited
+#                   kill_switch | invalid_tenant | tenant_quota
+#   evoguard_request_duration_seconds{route} 延迟直方图
+#
+# 判定线是**默认值，不是实测值**：本仓库没有生产流量，这些阈值标定的是
+# 「会让人半夜起来看一眼」的量级，接真流量后必须重新标定（见 docs/enterprise-readiness.md）。
+
+groups:
+  - name: evoguard-availability
+    rules:
+      - alert: EvoGuardDown
+        expr: up{job="evoguard"} == 0
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "EvoGuard 实例抓不到"
+          description: "{{ $labels.instance }} 连续 2 分钟 up=0。先看进程是否退出（启动期 fail-closed 会直接不起）。"
+
+      - alert: EvoGuardNoTraffic
+        expr: |
+          sum(rate(evoguard_requests_total[10m])) == 0
+          and on() (up{job="evoguard"} == 1)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "实例活着但 10 分钟没有流量"
+          description: "要么上游断了，要么 scrape 到了错的端口。指标为 0 不等于系统健康。"
+
+  - name: evoguard-security
+    rules:
+      - alert: EvoGuardAuthFailureSpike
+        expr: sum(rate(evoguard_rejected_total{decision=~"invalid_token|missing_or_malformed_token"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "鉴权失败速率 > 1/s"
+          description: "持续 5 分钟。可能是客户端配错 token，也可能是被扫。先按 request_id 查审计表定位主体。"
+
+      - alert: EvoGuardKillSwitchActive
+        expr: increase(evoguard_rejected_total{decision="kill_switch"}[5m]) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "停止开关在拦请求"
+          description: "AGENTLAB_KILL_SWITCH 生效意味着写入类请求已被拒。确认是不是演练；不是就是有人在闸门后面。"
+
+      - alert: EvoGuardTenantQuotaExhausted
+        expr: sum by (decision) (rate(evoguard_rejected_total{decision="tenant_quota"}[10m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "有租户长期打满配额"
+          description: "先确认是业务增长还是单租户在刷；后者要考虑按租户限流而不是全局限流。"
+
+  - name: evoguard-latency
+    rules:
+      - alert: EvoGuardRejectionRateHigh
+        expr: |
+          sum(rate(evoguard_rejected_total[5m]))
+            / clamp_min(sum(rate(evoguard_requests_total[5m])), 0.001) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "拒绝率 > 20% 持续 10 分钟"
+          description: "守卫在拒掉五分之一以上的请求。可能是攻击，也可能是规则太紧把正常流量误伤 —— 两种都要人看。"
+
+      - alert: EvoGuardLatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(evoguard_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 延迟 > 1s"
+          description: "本服务的处理是常数级；超过 1s 基本说明下游（sqlite / 意图模型）在拖。"
