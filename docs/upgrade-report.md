@@ -76,8 +76,10 @@ CI 只跑这一条。本轮：
   Python 3.10/3.11/3.13 矩阵与一个 Windows 组合、`evoguard eval` 子集。
 - README 中英写明「复现分层」：814 是语料齐全时的全量套件，clean clone 上
   依赖语料的用例如实显示 skipped，不静默计为通过。
-- **提交后实测 clean clone：`Ran 802 tests ... OK (skipped=41)`**（服务层落地前）；
-  服务层接入后本地 **814 项全绿**，最终 clone 复验结果见 §七。
+- **两轮实测 clean clone**：服务层落地前 `Ran 802 tests ... OK (skipped=41)`；
+  全部改动提交后 **`Ran 814 tests ... OK (skipped=41)`**。
+  同一份干净 clone 上 `evoguard config` / `eval` / `defense_demo` 全部冒烟通过，
+  `pyproject.toml` 元数据（0.6.0 / `dependencies=[]` / CLI 入口）复核一致。
 
 ## 五、元数据与合规
 
@@ -110,12 +112,23 @@ stop switch、Dockerfile、CI 可复现），对应 OWASP 若干控制项。
 所以准确说法是：**「可复现、可发布、工程基线齐备的研究原型」**，
 不是「企业级安全产品」。把这层说清楚，比写一个假的「已达到企业级」更值钱。
 
-## 七、复现
+## 七、复现与最终验收
 
 ```bash
-python -m unittest discover -s tests -q
+# 本地（语料齐全）
+python -m unittest discover -s tests -q                    # 814 tests, OK
 python scripts/run_semantic_injection_v2.py --verify
-python scripts/run_semantic_injection_v2.py --all     # 需要先有 data/external/
+python scripts/run_semantic_injection_v2.py --all          # 需要 data/external/
 evoguard demo
 evoguard config
+
+# 干净 clone（无 data/external、无 _sandbox）
+python -m unittest discover -s tests -q                    # 814 tests, OK (skipped=41)
+evoguard config
+evoguard eval                                              # 跑 2 项、跳过 4 项并说明前置
 ```
+
+最终验收记录：本地 814 全绿；干净 clone 814 全绿（41 项语料相关显式 skip）；
+`tests/test_api_smoke`(14) / `test_service_controls`(12) / `test_injection_scorer`(11)
+单独复跑合计 37 项 OK；v2 冻结集 `integrity_sha256` 校验通过；
+主仓库 `git status` 干净。
