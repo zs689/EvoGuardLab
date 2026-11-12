@@ -355,6 +355,28 @@ class TestLiveService(unittest.TestCase):
 
 
 class TestScorecard(unittest.TestCase):
+    def test_stdout_matches_out_file(self):
+        """`--out` 写出来的文件必须和 stdout 一模一样。
+
+        之前 `render_markdown` 自带结尾换行，又用 `print()` 输出，
+        stdout 会多一个空行 —— 于是「文档」和「屏幕上看到的」不是同一份。
+        """
+        import subprocess
+        import tempfile
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        out = os.path.join(tempfile.mkdtemp(prefix="evo-sc-"), "sc.md")
+        p = subprocess.run([sys.executable, os.path.join(root, "evoguard_cli.py"),
+                            "scorecard", "--out", out],
+                           capture_output=True, cwd=root)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        stdout = subprocess.run([sys.executable,
+                                 os.path.join(root, "evoguard_cli.py"),
+                                 "scorecard"], capture_output=True,
+                                cwd=root).stdout.replace(b"\r\n", b"\n")
+        with open(out, "rb") as f:
+            written = f.read()
+        self.assertEqual(stdout, written)
+
     def test_report_shape_and_evidence(self):
         r = SC.evaluate(ROOT)
         self.assertIn("total", r)

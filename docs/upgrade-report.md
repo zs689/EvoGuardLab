@@ -192,8 +192,8 @@ evoguard eval                                              # 跑 2 项、跳过 
 evoguard scorecard                       # 84.8/100 + 缺口清单
 python scripts/loadtest.py --requests 1000 --workers 20
 python scripts/drill.py                  # 5/5
-python -m unittest discover -s tests -q  # 860 tests, OK
+python -m unittest discover -s tests -q  # 861 tests, OK
 ```
 
-修复记录：本轮把测试从 814 提到 **860**（企业模块 34 + 防篡改 5 + 真握手 3 +
+修复记录：本轮把测试从 814 提到 **861**（企业模块 34 + 防篡改 5 + 真握手 3 +
 进程级探针 2 等），全绿。

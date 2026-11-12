@@ -605,7 +605,8 @@ def main(argv=None):
             f.write(text + ("\n" if not text.endswith("\n") else ""))
         print("[√] %s（总分 %s）" % (a.out, report["total"]))
     else:
-        print(text)
+        # render_markdown 自带结尾换行，print 会再多补一个空行
+        sys.stdout.write(text if text.endswith("\n") else text + "\n")
     return 0
 
 

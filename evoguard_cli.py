@@ -154,7 +154,9 @@ def cmd_scorecard(a):
             f.write(text if text.endswith("\n") else text + "\n")
         print("[√] %s（总分 %s/100）" % (out, report["total"]))
     else:
-        print(text)
+        # 不用 print：render_markdown 已经以换行结尾，print 再补一个就成了
+        # 多一个空行 —— stdout 和 --out 写出同一份报告会差一个字节。
+        sys.stdout.write(text if text.endswith("\n") else text + "\n")
     if a.min is not None and report["total"] < a.min:
         print("\n[×] 总分 %s 低于守门线 %s：本轮相对基线退步了。"
               % (report["total"], a.min))
