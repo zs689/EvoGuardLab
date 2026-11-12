@@ -1,0 +1,115 @@
+# 低分项升级报告（2026-11-12）
+
+> 目标来自用户指令：「低分的地方赶紧升级，去网上找、融合，要达到企业级」。
+> 本文件如实记录**做到了什么、没做到什么**。结论先说：
+> **工程基线从「原型」升到「可复现、可发布的研究原型」；「企业级」没有达成，
+> 也不该靠一次代码提交宣称达成。**
+
+## 一、上一轮评估的低分点
+
+| 维度 | 上轮判断 | 本轮动作 |
+|---|---|---|
+| 核心语义检测 | ~3/10 | 联网核实一手方法后**重新预注册并实现 v2**，实测（结果见 §三） |
+| 真实世界验证 | ~2/10 | 尝试接公开基准；HF 端点不可达，改用许可清楚的本地样本并如实标注局限 |
+| 发布就绪度 | clean clone 回归断裂 | 修到干净 clone 可复现，CI 补安装/冒烟/版本矩阵 |
+| 服务层 / 企业级 | 无鉴权、无限流、无结构化日志 | 按 OWASP 一手清单补最小基线（见 `docs/service-controls.md`） |
+| 元数据 | 个人路径、占位符、版本漂移、许可声明含糊 | 逐项清理（§五） |
+
+## 二、联网核实了什么、融合了什么、没融合什么
+
+一手/权威来源：
+
+- StackOne *Detection Isn't the Hard Part*（全文）：SFE **逐字段**按形状判 pass/drop，
+  drop ~45% 字段，FP 1.7% → 0.2%。
+- DeFuse arXiv:2609.22510v1（PDF 已下载校验）：max-pooling 文档级误报按
+  `1−(1−p)^N` 复合；固定阈值的 F1 只量阈值位置，需长度感知阈值 + 报 AUC。
+- Meta Llama Prompt Guard 2（模型卡/文档）：重叠分窗 + 取 max、报 AUC 与
+  固定 FPR 预算下的召回。
+- *The Guardrail Cries Wolf*（Zenodo 页面摘要）：截断扫描对末尾 payload 8.3%，
+  分窗恢复到 75% 但长 benign 误报 6% → 18%，代价必须同报。
+- OWASP AI Agent Security Cheat Sheet / Agentic Top 10 2026：最小权限、限流、
+  fail-closed、审计日志、stop switch（ASI02/ASI03/ASI08/ASI10）。
+- InjecGuard / NotInject（MIT，ACL 2025）：良性但含触发词的**过度防御**探针思路。
+
+**明确没融合**：Prompt Guard 2 的权重（gated Llama 4 Community License，需
+transformers）、任何第三方包、任何本地模型服务。项目继续 `dependencies = []`。
+**没接到的公开数据**：NotInject / HF eval suite，官方端点 502、镜像 503，
+本次不可达；用本地许可清楚的样本 + 1860 条确定性合成负例替代，
+**不冒充公开基准成绩**。
+
+## 三、检测能力 v2：真提升，但预注册判定未通过
+
+新预注册 `docs/semantic-injection-v2-plan.md`，新冻结集
+`experiments/semantic_injection_v2/frozen_split.json`，**v1 的判定线与结果未动**。
+新模块 `ai-service/evoguard/injection_scorer.py`：逐字段过滤 + 重叠分窗取 max +
+按窗口数分桶的 FP 预算阈值 + AUC（阈值无关）评价。
+
+| 组 | 留出 AUC | 留出 FP | 末尾 payload 检出 | 过度防御 FP | 四条全过 |
+|---|---|---|---|---|---|
+| baseline | 0.9917 | 0.000 | **0.000** | **0.1477** | 否 |
+| `v2_window_only` | **0.9947** | 0.000 | **1.000** | 0.1477 | 否 |
+| `v2_full`（申报组） | 0.9593 | 0.000 | **1.000** | **0.009** | 否 |
+
+**总判定：未通过**。`v2_full` 的 AUC 比 baseline 低 0.032，超过允许的 −0.01。
+
+- 确实修好了一个真实缺陷：`MAX_SCAN_CHARS=8000` 截断让末尾 payload 全漏，
+  重叠分窗把它从 0 拉到 1.0，AUC 还不降反升，FP 守住 5% 预算。
+- 逐字段过滤把过度防御误报 14.8% → 0.9%，但**全丢结构字段会损失排序质量**。
+- 两个机制各解决一半、简单叠加互相拖累。按预注册**没有**放宽判定线、
+  **没有**拿 test 调策略、**没有**把未通过改写成通过。
+- 逐组判定留在 `result.json` 的 `per_view_checks`，由
+  `tests/test_injection_scorer.py`（11 项）守门。
+
+## 四、发布就绪度：clean clone 回归修复
+
+上一轮实测：干净 clone 上 `3 failures + 5 errors + 35 skipped`，而 README 写 791 pass、
+CI 只跑这一条。本轮：
+
+- `.gitattributes` 锁 LF，修掉 `core.autocrlf=true` 把 fixture 从 16110 → 16122 字节、
+  触发 sha256 守门失败的问题。
+- 4 个 AgentDojo 产物测试、中文样本测试、源文件 sha 校验改为显式 `skipUnless`；
+  `test_reproducibility` 只跳过 3 个缺语料的脚本、其余 4 个字节一致性照验；
+  `evoguard eval` 缺语料时跳过 4 项并打印前置条件，不再抛 traceback。
+- 修 `chinese_injections_v1.py` 的真实 bug：离线缓存缺失抛的是 `SystemExit`
+  （不是 `Exception`），原 `except Exception` 接不住。
+- CI 补 `pip install -e .`、`evoguard config`、隔离输出的 demo 冒烟、
+  Python 3.10/3.11/3.13 矩阵与一个 Windows 组合、`evoguard eval` 子集。
+- README 中英写明「复现分层」：791 是语料齐全时的全量套件，clean clone 上
+  依赖语料的用例如实显示 skipped，不静默计为通过。
+
+## 五、元数据与合规
+
+- 清掉 `C:/Users/zs/...`、`E:/agent/learn/...`、`F:\Qwen3`、`/f/ollama` 等
+  开发机路径；文档命令改用相对路径与占位符。
+- `pyproject.toml` 删掉 `OWNER` 占位 URL、README 删掉 `<this-repo>` 占位。
+- 新建 `tests/fixtures/external/README.md`：说明 12 条 InjecAgent 夹具的
+  MIT 许可与来源，并精确化 README「语料正文不入库」的例外。
+- 版本统一由服务层任务处理（见 `docs/service-controls.md`）。
+
+## 六、企业级：结论是「没有达成」
+
+补上的是**工程基线**（鉴权、限流、结构化日志/request-id、配置校验、
+stop switch、Dockerfile、CI 可复现），对应 OWASP 若干控制项。
+`docs/service-controls.md` 明确列出默认关闭鉴权的理由与风险。
+
+仍然缺、且**不是加代码就能自证**的：
+
+1. **核心检测能力本身没达标** —— v2 预注册判定未通过；企业级不会部署一个
+   在自己留出集上没过线的检测器。
+2. 真实业务流量、真实身份体系与多租户隔离（当前单 SQLite、无 tenant 字段）。
+3. TLS / 反向代理 / WSGI、集中式日志与指标、持久化审计表与 schema 迁移。
+4. SLA、容量、限流策略的压测、故障演练、值班与事故流程。
+5. 公开基准未接通（网络不可达），跨域泛化仍未在独立公开语料上验证。
+
+所以准确说法是：**「可复现、可发布、工程基线齐备的研究原型」**，
+不是「企业级安全产品」。把这层说清楚，比写一个假的「已达到企业级」更值钱。
+
+## 七、复现
+
+```bash
+python -m unittest discover -s tests -q
+python scripts/run_semantic_injection_v2.py --verify
+python scripts/run_semantic_injection_v2.py --all     # 需要先有 data/external/
+evoguard demo
+evoguard config
+```

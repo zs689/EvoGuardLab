@@ -41,6 +41,23 @@ python ai-service/api/app.py           # http://127.0.0.1:8770
 # 4) 可选：检查本地模型是否就绪
 python scripts/check_model.py --base http://127.0.0.1:11434/v1
 
+> **复现分层**：`data/external/` 与 `_sandbox/` 被 `.gitignore` 排除（语料正文、
+> 下载缓存不随仓库分发，涉及许可与体积）。全新 clone 上 `demo` / `config` /
+> 核心回归可直接绿；依赖语料的评测与测试用 `skipUnless` 明确跳过并打印前置条件，
+> `evoguard eval` 只跑不依赖语料的两项，不再抛 traceback。导入语料后重跑，
+> 产物与仓库内已提交的报告逐字节一致。`.gitattributes` 把 fixtures 与产物锁成 LF，
+> 避免 Windows 的 `core.autocrlf=true` 改掉字节、触发 sha256 守门失败。
+> 文档里的「791 项」指**语料齐全时**的全量套件；clean clone 上会如实显示 skipped。
+
+**检测能力 v2（重新预注册，结果是负结果）**：`docs/semantic-injection-v2-plan.md`
+用联网核实的一手方法（StackOne SFE 逐字段过滤、Prompt Guard 2 重叠分窗取 max、
+DeFuse 长度/预算感知阈值与 AUC 口径）重做了最弱的一环；**没有引入** Prompt Guard 2
+的权重（gated 许可 + 需 transformers）。重叠分窗把「payload 埋在 8000 字符之后」
+的检出从 **0 拉到 1.0**、AUC 0.9917 → 0.9947；字段过滤把过度防御误报
+**14.8% → 0.9%**；但两者叠加会让 AUC 掉约 0.03。**预注册四条判定线未全部满足，
+总判定「未通过」**，没有放宽判定线、没有改结果；详见
+`experiments/semantic_injection_v2/report.md`。
+
 # 5) 真实模型全量评测（936 run，可断点续跑；重跑必须落新目录）
 python ai-service/real_model_train.py --output-dir experiments/train_A          # 训练产物（含 C/D 库）
 python ai-service/real_model_bench.py --library-dir experiments/train_A \
@@ -780,7 +797,7 @@ python ai-service/evolution_bench.py
 
 ```bash
 # 1. 启动服务（模型目录在 F 盘，别放 C 盘）
-cd /f/ollama && OLLAMA_MODELS='F:\Qwen3' ./ollama.exe serve &
+ollama serve &          # 按本机安装位置启动；不要写死盘符或模型目录
 # 2. 先让模型自己学一遍，训出两套库（约 7 分钟）
 python ai-service/real_model_train.py            # → data/library_d.db / library_c.db
 # 3. 全量 936 run，断点续跑（约 11 分钟）

@@ -29,8 +29,7 @@ dev = []
 evoguard = "evoguard_cli:main"
 
 [project.urls]
-Homepage = "https://github.com/OWNER/EvoGuardLab"
-Issues = "https://github.com/OWNER/EvoGuardLab/issues"
+# 发布时填入真实仓库地址；占位 URL 不写进元数据（避免死链与冒充上游）。
 
 [tool.setuptools]
 # 根目录放 CLI（py-module），evoguard 包映射到 ai-service/evoguard。

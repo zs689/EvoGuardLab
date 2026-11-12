@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """按角色配置的扫描器流水线 + 轨迹回放（借鉴 LlamaFirewall 的编排方法）。
 
-来源：`E:/agent/learn/LlamaFirewall`（meta-llama/PurpleLlama，MIT）。它的三件事值得学：
+来源：meta-llama/PurpleLlama 的 LlamaFirewall（MIT，本地只读研读）。它的三件事值得学：
   1. `Configuration = Mapping[Role, Sequence[ScannerType]]` —— 不同落点挂不同扫描器，
      而不是所有文本走同一套规则；
   2. `register_scanner` / `create_scanner` —— 扫描器可插拔、按名字懒加载；

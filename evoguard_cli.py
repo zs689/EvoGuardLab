@@ -85,6 +85,16 @@ def cmd_eval(_):
         ("labeled set", "eval_labeled.py"),
         ("ablation", "ablation_v1.py"),
     ]
+    # data/external/ 被 .gitignore 排除（许可 + 体积），clean clone 上没有语料。
+    # 这时不要抛 traceback：跳过依赖语料的四项，其余两项照跑，并把前置条件说清。
+    need_corpus = {"eval_action_scope.py", "eval_chinese_real.py",
+                   "eval_external_attacks.py", "eval_jailbreak_prompts.py"}
+    if not os.path.isfile(os.path.join(ROOT, "data", "external", "injecagent",
+                                       "cases.jsonl")):
+        print("[i] 外部语料未导入：跳过 4 项依赖 data/external/ 的评测；")
+        print("    labeled set / ablation 两项仍会跑。")
+        print("    跑全量需先导入语料（见 README「复现分层」）。")
+        scripts = [s for s in scripts if s[1] not in need_corpus]
     failed = []
     for name, script in scripts:
         print("== %s ==" % name)

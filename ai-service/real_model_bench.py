@@ -761,7 +761,7 @@ def main():
         models = ["mock"]          # mock 后端没有 list_models，冒烟要能跑
     except Exception as e:
         print("[×] 模型服务不可用：%s" % e, flush=True)
-        print("    先启动：cd /f/ollama && OLLAMA_MODELS='F:\\Qwen3' ./ollama.exe serve", flush=True)
+        print("    先启动本地 Ollama 服务（按本机安装位置），不要写死盘符/模型目录", flush=True)
         return 1
     print("[√] 服务可达，模型：%s ｜ 后端 %s" % (models, provider.name), flush=True)
 

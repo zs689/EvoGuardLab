@@ -103,6 +103,14 @@ class TestReproducibleArtifacts(unittest.TestCase):
                  ("eval_action_scope.py", ["report.md", "result.json"]),
                  # 真实中文语料：只统计 + 手法代号，不许把正文写进产物
                  ("eval_chinese_real.py", ["report.md", "result.json"])]
+        # clean clone 上 data/external/ 被 .gitignore 排除，这三个脚本无语料可跑。
+        # 只跳过它们，其余四个产物的字节一致性仍然必须验证（不静默整条跳过）。
+        if not os.path.isfile(os.path.join(ROOT, "data", "external",
+                                           "injecagent", "cases.jsonl")):
+            need_corpus = {"eval_jailbreak_prompts.py",
+                           "eval_action_scope.py",
+                           "eval_chinese_real.py"}
+            cases = [c for c in cases if c[0] not in need_corpus]
         for script, expect in cases:
             outs = [tempfile.mkdtemp(prefix="repro_a_"),
                     tempfile.mkdtemp(prefix="repro_b_")]

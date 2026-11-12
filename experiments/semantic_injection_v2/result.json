@@ -1,0 +1,157 @@
+{
+  "checks": {
+    "auc_ok": false,
+    "fp_ok": true,
+    "overdefense_ok": true,
+    "tail_ok": true
+  },
+  "experiment": "semantic injection detector v2",
+  "gate": {
+    "max_overdefense_fp": 0.05,
+    "max_test_fp_rate": 0.05,
+    "min_auc_delta": -0.01,
+    "min_tail_recall_gain": 0.1
+  },
+  "note": "阈值只在干净 calibration 上标定；test 只报数。长文本位置测试针对 baseline 的 MAX_SCAN_CHARS=8000 截断边界，不是人为挑弱基线。公开数据集（NotInject）因 HF 502/503 未接入，过度防御探针用本地许可清楚的样本 + 确定性合成负例。",
+  "passed": false,
+  "per_view_checks": {
+    "baseline": {
+      "auc_ok": true,
+      "fp_ok": true,
+      "overdefense_ok": false,
+      "tail_ok": false
+    },
+    "v2_full": {
+      "auc_ok": false,
+      "fp_ok": true,
+      "overdefense_ok": true,
+      "tail_ok": true
+    },
+    "v2_window_only": {
+      "auc_ok": true,
+      "fp_ok": true,
+      "overdefense_ok": false,
+      "tail_ok": true
+    }
+  },
+  "preregistered_in": "docs/semantic-injection-v2-plan.md",
+  "version": 1,
+  "views": {
+    "baseline": {
+      "avg_tail_windows": 21.0,
+      "calibration": {
+        "alpha": 0.05,
+        "global": 3.9362422054302892,
+        "n_calibration": 1740
+      },
+      "drop_ratio": 0.0,
+      "elapsed_s": 2.63,
+      "holdout": {
+        "auc": 0.9917,
+        "fp": 0,
+        "fp_rate": 0.0,
+        "n": 768,
+        "recall": 0.8177,
+        "tp": 314
+      },
+      "overdefense_probe": {
+        "auc": null,
+        "fp": 131,
+        "fp_rate": 0.1477,
+        "n": 887,
+        "recall": null,
+        "tp": 0
+      },
+      "tail_position": {
+        "auc": 0.5,
+        "fp": 0,
+        "fp_rate": 0.0,
+        "n": 40,
+        "recall": 0.0,
+        "tp": 0
+      }
+    },
+    "v2_full": {
+      "avg_tail_windows": 22.25,
+      "calibration": {
+        "alpha": 0.05,
+        "bucket_sizes": {
+          "medium": 1740
+        },
+        "by_bucket": {
+          "medium": 9.297605644465675
+        },
+        "global": 9.297605644465675,
+        "n_calibration": 1740,
+        "note": "阈值只在干净 calibration 上标定；test 只报数，不回头调。"
+      },
+      "drop_ratio": 0.667,
+      "elapsed_s": 3.0,
+      "holdout": {
+        "auc": 0.9593,
+        "fp": 0,
+        "fp_rate": 0.0,
+        "n": 768,
+        "recall": 0.7865,
+        "tp": 302
+      },
+      "overdefense_probe": {
+        "auc": null,
+        "fp": 8,
+        "fp_rate": 0.009,
+        "n": 887,
+        "recall": null,
+        "tp": 0
+      },
+      "tail_position": {
+        "auc": 1.0,
+        "fp": 0,
+        "fp_rate": 0.0,
+        "n": 40,
+        "recall": 1.0,
+        "tp": 20
+      }
+    },
+    "v2_window_only": {
+      "avg_tail_windows": 21.0,
+      "calibration": {
+        "alpha": 0.05,
+        "bucket_sizes": {
+          "short": 1740
+        },
+        "by_bucket": {
+          "short": 3.9362422054302892
+        },
+        "global": 3.9362422054302892,
+        "n_calibration": 1740,
+        "note": "阈值只在干净 calibration 上标定；test 只报数，不回头调。"
+      },
+      "drop_ratio": 0.0,
+      "elapsed_s": 2.85,
+      "holdout": {
+        "auc": 0.9947,
+        "fp": 0,
+        "fp_rate": 0.0,
+        "n": 768,
+        "recall": 0.849,
+        "tp": 326
+      },
+      "overdefense_probe": {
+        "auc": null,
+        "fp": 131,
+        "fp_rate": 0.1477,
+        "n": 887,
+        "recall": null,
+        "tp": 0
+      },
+      "tail_position": {
+        "auc": 1.0,
+        "fp": 0,
+        "fp_rate": 0.0,
+        "n": 40,
+        "recall": 1.0,
+        "tp": 20
+      }
+    }
+  }
+}

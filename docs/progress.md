@@ -1273,7 +1273,7 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
 
 ## 2026-11-10 融合 LlamaFirewall（读源码 → 改代码 → 验证）
 
-来源 `E:/agent/learn/LlamaFirewall`（meta-llama/PurpleLlama，MIT，固定提交 f64eebd…）。
+来源 meta-llama/PurpleLlama 的 LlamaFirewall（MIT，固定提交 f64eebd…）。
 那份是轻量源码学习版：没装依赖、没下模型权重、没跑过示例，所以结论来自**读代码**，
 不是复现上游效果。详见 `docs/llamafirewall-merge.md`。
 

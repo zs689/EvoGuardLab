@@ -54,6 +54,9 @@ class TestSemanticInjectionPlan(unittest.TestCase):
                 if k != "integrity_sha256"}
         self.assertEqual(R._fp(body), sig)
 
+    @unittest.skipUnless(
+        all(os.path.exists(p) for p in R.SOURCES.values()),
+        "外部语料未导入，源文件 sha256 校验跳过")
     def test_source_hashes_match(self):
         for k, p in R.SOURCES.items():
             self.assertTrue(os.path.exists(p), k)

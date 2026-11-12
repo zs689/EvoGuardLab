@@ -1,0 +1,16 @@
+# 字节级可复现性：fixtures / 产物一律 LF。
+# Windows 上 core.autocrlf=true 会把 LF 转成 CRLF，导致按 sha256 守门的
+# fixture 在 clone 后立刻失配（实测 16110 -> 16122 bytes）。
+* text=auto
+*.py     text eol=lf
+*.md     text eol=lf
+*.json   text eol=lf
+*.jsonl  text eol=lf
+*.html   text eol=lf
+*.txt    text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.toml   text eol=lf
+*.svg    text eol=lf
+*.sh     text eol=lf
+Dockerfile text eol=lf

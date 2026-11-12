@@ -83,21 +83,21 @@
 
 ## 六、复现
 
+在**仓库根目录**执行。两份标注导出是本机文件、不入库，路径按实际情况替换
+（文档里不写死任何开发机的盘符或用户名）：
+
 ```bash
-cd /d E:\agent\EvoGuardLab     # Windows cmd；Git Bash 用 cd "E:/agent/EvoGuardLab"
-python scripts/score_double_labels.py \
-  --a "E:/agent/labels.json" \
-  --b "C:/Users/zs/Downloads/labels_ext_annotator2.json" \
+A="<首轮 labels.json 的路径>"
+B60="<同学导出的 labels_annotator2.json 路径>"
+B200="<同学导出的 labels_ext_annotator2.json 路径>"
+
+python scripts/score_double_labels.py --a "$A" --b "$B200" \
   --map experiments/human_labels_v1/round2_ext_annotator_id_map.json \
   --n 100 --out experiments/human_labels_v1/double_result.json
-python scripts/score_double_labels.py \
-  --a "E:/agent/labels.json" \
-  --b "C:/Users/zs/Downloads/labels_annotator2.json" \
+python scripts/score_double_labels.py --a "$A" --b "$B60" \
   --map experiments/human_labels_v1/round2_id_map.json \
   --n 30 --out experiments/human_labels_v1/double_result_60.json
-python scripts/check_annotator_consistency.py \
-  --b60 "C:/Users/zs/Downloads/labels_annotator2.json" \
-  --b200 "C:/Users/zs/Downloads/labels_ext_annotator2.json"
+python scripts/check_annotator_consistency.py --b60 "$B60" --b200 "$B200"
 ```
 
 守门测试：`tests/test_double_labels.py`（13 项）、`tests/test_human_labels.py`（6 项）。

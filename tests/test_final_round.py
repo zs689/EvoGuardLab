@@ -208,6 +208,10 @@ class TestThresholdCalibration(unittest.TestCase):
 
 
 class TestChineseSamples(unittest.TestCase):
+    @unittest.skipUnless(
+        os.path.isfile(os.path.join(ROOT, "data", "external", "injecagent",
+                                    "cases.jsonl")),
+        "外部 InjecAgent 语料未导入")
     def test_sources_are_external_and_labeled(self):
         items = ZH.source_texts(3)
         self.assertTrue(items)

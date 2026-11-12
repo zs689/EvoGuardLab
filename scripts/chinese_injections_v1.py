@@ -132,7 +132,9 @@ def source_texts(limit_per_source=10):
                           "en": c["text"][:800]})
             if len(seen) >= 6:
                 break
-    except Exception:                       # noqa: BLE001
+    # 离线缓存缺失时 build_cases() 抛 SystemExit（不是 Exception 子类），
+    # 早期只接 Exception 会让 clean clone 上的调用方直接崩掉。
+    except (Exception, SystemExit):          # noqa: BLE001
         pass
     return items
 

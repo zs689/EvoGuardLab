@@ -105,9 +105,15 @@ class TestMetricDefinition(unittest.TestCase):
         self.assertIn("不能拿去凑", md)
 
 
+_CORPUS_MANIFEST = os.path.join(ROOT, "data", "external", "agentdojo",
+                                "manifest.json")
+
+
 @unittest.skipUnless(
     os.path.isfile(os.path.join(ROOT, "experiments", "agentdojo_eval_v1",
-                                "result.json")), "还没有生成产物")
+                                "result.json"))
+    and os.path.isfile(_CORPUS_MANIFEST),
+    "还没有生成产物，或外部 AgentDojo 语料未导入")
 class TestArtifact(unittest.TestCase):
     def setUp(self):
         with open(os.path.join(ROOT, "experiments", "agentdojo_eval_v1",

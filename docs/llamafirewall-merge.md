@@ -1,6 +1,6 @@
 # 从 LlamaFirewall 学到的方法，以及融进本项目的部分
 
-> 2026-11-10 · 来源：`E:/agent/learn/LlamaFirewall`  
+> 2026-11-10 · 来源：meta-llama/PurpleLlama（LlamaFirewall，MIT）  
 > 上游：`meta-llama/PurpleLlama` 的 LlamaFirewall，固定提交  
 > `f64eebd53003a87d9c2d2a3a712133534c214c8d`，目录内许可 **MIT**。
 

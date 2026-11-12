@@ -21,7 +21,7 @@ that distinction kept exposing real bugs in this very codebase.
 ## Quick start
 
 ```bash
-git clone <this-repo> && cd EvoGuardLab
+# 在仓库 checkout 根目录执行
 pip install -e .          # zero runtime dependencies, Python 3.10+
 
 evoguard demo             # full defence demo: same attacks, five configurations
@@ -31,6 +31,34 @@ evoguard config           # print the effective security configuration
 ```
 
 No install? `python evoguard_cli.py demo` works from a checkout — that is the same entry point.
+
+### Reproducibility tiers (clean checkout)
+
+`data/external/` and `_sandbox/` are gitignored — corpus text and download caches are
+**not** redistributed (licensing + size). On a fresh clone:
+
+- `evoguard demo`, `evoguard config` and the core regression pass as-is.
+- `evoguard eval` runs the two corpus-independent evaluations, skips the four that need
+  `data/external/`, and prints the prerequisite instead of raising a traceback.
+- Corpus-dependent tests are explicitly `skipUnless`-guarded, so `unittest discover`
+  stays green. Import the corpora (`scripts/import_external_attacks.py`) to run them;
+  the regenerated reports then match the committed artifacts byte-for-byte.
+- `.gitattributes` pins fixtures and artifacts to LF so Windows `core.autocrlf=true`
+  cannot change a byte and break the sha256 gates.
+
+The "791 tests" figure is the full suite **with corpora present**; on a clean clone the
+corpus-dependent cases are reported as skipped, not silently counted as passes.
+
+### Detector v2 (preregistered — outcome is a negative result)
+
+`docs/semantic-injection-v2-plan.md` re-ran the weakest spot using methods verified
+against primary sources: StackOne SFE (per-field filtering), Prompt Guard 2
+(overlapping windows + max — **weights not used**, they are gated and need transformers),
+and DeFuse (length/budget-aware thresholds, report AUC). Overlapping windows fixed the
+truncation blind spot (tail-payload recall **0 → 1.0**, AUC 0.9917 → 0.9947), and field
+filtering cut over-defense FP **14.8% → 0.9%** — but combining both costs ~0.03 AUC.
+**The preregistered four-point gate was not met.** The gate was not relaxed and the
+result was not rewritten; see `experiments/semantic_injection_v2/report.md`.
 
 ## What it actually measures
 
@@ -79,7 +107,7 @@ The scope layer exists because of a specific finding: natural-language indirect 
 | Chinese jailbreak techniques (34) | L1 recall | **0.029** | regex is a dead end on Chinese; documented, not fixed by adding rules |
 | Chinese harmful-request set (108) | L1 recall | **0.000** | wrong task — that is content moderation, not injection detection |
 | Chinese indirect injection (120, self-built) | recall / FP | **0.917 / 0.000** | in-sample: rules were finalised on this set, so it is coverage, not generalisation |
-| Regression suite | tests | **791 pass** | `python -m unittest discover -s tests` |
+| Regression suite | tests | **791 tests, green** (corpus-dependent cases skip on a clean clone) | `python -m unittest discover -s tests` |
 
 The Chinese indirect-injection set is **built by this repo**, not a public corpus — no public
 Chinese indirect-injection corpus exists. It is 10 carriers × 12 techniques, all distinct.
@@ -138,7 +166,9 @@ tests/                   791 tests, including reproducibility (byte-identical re
 3. **Never round away precision in an approval digest** — a digest collision is a free approval.
 4. **Artifacts must be byte-identical across runs** — reproducibility is tested, not claimed.
 5. **No attack text in artifacts.** Corpus files stay out of git; reports carry hashes and
-   technique codes only.
+   technique codes only. Two documented exceptions: a 12-line MIT InjecAgent test fixture
+   and group keys in frozen split manifests — both licensed quotations, not redistributed
+   corpora (see `tests/fixtures/external/README.md`).
 
 ## License
 

@@ -6,11 +6,15 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.13"]
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11", "3.13"]
+        include:
+          - os: windows-latest
+            python-version: "3.11"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,5 +22,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Show version
         run: python -V
-      - name: Full regression (no third-party deps)
+      - name: Install (editable, zero runtime deps)
+        run: pip install -e .
+      - name: CLI smoke - config
+        run: evoguard config
+      - name: Defence demo (isolated output)
+        run: python scripts/defense_demo.py --out ${{ runner.temp }}/demo_smoke
+      - name: Core regression on a clean checkout
         run: python -m unittest discover -s tests -q
+      - name: Eval subset without external corpus
+        run: evoguard eval
