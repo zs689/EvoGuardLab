@@ -1633,3 +1633,19 @@ stop switch / 结构化日志 / 配置校验，12 条守门测试）、`app.py` 
 
 台账状态 **✅5 / 🟡12 / ⬜10**。测试 861 → **874 全绿**，干净 clone 同为 874
 （41 项语料相关 skip）。仍不说「企业级」。
+
+### 同日第三轮：第二轮整改（继续完成未完成任务）
+
+按 `docs/review-remediation/README.md` 台账继续推进未完成的 EG 项。
+
+**新增**：`enterprise/jobs.py` + `/api/jobs*` 五条路由、`scripts/jobs_smoke.py`、
+`docs/semantic-injection-v3-plan.md` + `v3_gate.py`、`docs/data-governance.md`、
+`docs/review-remediation/perf-before-after.md`；五个新测试文件。
+
+**关键结果**：8 并发作业提交 P95 14.1 ms（同步路径约 3.5 s），请求线程解耦；
+同负载改前改后对比写 P95 3216→3447 ms **无实质改善**；
+WAL 尝试造成 3/24 `readonly` 500，按证据撤回；
+v3 判定线冻结但**实验未跑**；合成敏感标记从各出口均不泄露。
+
+**数字**：903 tests OK、19/19 gate、jobs_smoke 11/11。
+台账 ✅6/🟡17/⬜4（剩 EG-014/018/019/026）。仍不说「企业级」。

@@ -30,9 +30,16 @@ evoguard demo             # same attacks under five guard configurations
 evoguard config           # effective security configuration (JSON)
 evoguard test             # full regression (use the printed count; docs don't hardcode it)
 evoguard scorecard        # evidence-based self-assessment + gap list
+python scripts/review_checks.py --gate   # objective per-finding gates
 ```
 
 Without installing anything, `python evoguard_cli.py demo` is the same entry point.
+
+**If you need non-blocking runs**: `POST /api/jobs` returns a job id immediately
+(8-concurrent submit P95 ≈ 14 ms) and a single worker executes it in the background;
+`GET /api/jobs/{id}` polls, `Idempotency-Key` prevents duplicate side effects, and
+a crash leaves an expired lease as `unknown` **without auto-replaying** (the side
+effect may already have happened). See [API contract](docs/api-contract-v1.json).
 
 **What to look at after `demo`**: `experiments/defense_demo_v2/demo.md` reports
 `detected` (did the detector fire) *separately from* `executed` (did the tool
@@ -55,10 +62,13 @@ python scripts/check_docker_context.py
 This is a local research prototype, **not** a production security product.
 Independent review found hard blockers; the remediation ledger is
 [docs/review-remediation/README.md](docs/review-remediation/README.md).
-In particular: `POST /api/run` is still synchronous, tenant isolation is
-per-tenant SQLite files (not database RLS), rate limiting is per-process, and
-the v2 detector **did not pass its own pre-registered gate**. Do not read the
-scorecard total as a certification.
+In particular: tenant isolation is per-tenant SQLite files (not database RLS),
+rate limiting is per-process, the job queue is single-process/single-worker,
+and the v2 detector **did not pass its own pre-registered gate** (v3 is only
+pre-registered, not executed). A same-workload before/after comparison showed
+**no material write-path speedup**; see
+[perf-before-after](docs/review-remediation/perf-before-after.md).
+Do not read the scorecard total as a certification.
 
 ### Reproducibility tiers (clean checkout)
 

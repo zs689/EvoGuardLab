@@ -18,6 +18,12 @@ python scripts/review_checks.py --gate   # 逐项客观门槛，不是自评分�
 
 不装包也行：`python evoguard_cli.py demo` 是同一个入口。
 
+**不想被长实验卡住**：`POST /api/jobs` 只写一行就返回任务 ID（8 并发提交
+P95 ≈ 14 ms），后台单 worker 顺序执行；`GET /api/jobs/{id}` 轮询，
+`Idempotency-Key` 保证重复提交不产生第二次副作用；进程崩溃后过期租约
+标成 `unknown`，**不自动重放**（副作用可能已经发生），需人工对账后显式
+retry。详见 [接口契约](docs/api-contract-v1.json)。
+
 **跑完看什么**：打开 `experiments/defense_demo_v2/demo.md`，找「检测命中」
 和「工具真的执行」两列。这个项目的核心主张就是——**检测到 ≠ 拦住了**；
 一个 `decision=deny` 却留下 `executed > 0` 的守卫，在这里算失败，照实记数。

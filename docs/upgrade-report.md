@@ -266,3 +266,48 @@ python -m unittest discover -s tests -q Ran 874 tests ... OK
 Docker daemon 不可达（镜像层未 build）、GitHub CI 未实跑（全部本地工作、
 未创建远程仓库/推送/发布）、真实浏览器交互未自动化、真实企业流量与
 SSO/多副本未验、v3 预注册未做。
+
+## 十、第二轮整改（2026-11-13，同日续）
+
+第一轮收尾时明确「下一轮该动的是 v3 预注册和持久作业」。这一轮照做。
+逐项台账 `docs/review-remediation/README.md`，第二轮证据 `after.md` §七，
+性能对比 `perf-before-after.md`。
+
+### 做了什么
+
+- 持久作业（EG-009）：`enterprise/jobs.py` + `/api/jobs*`，幂等键/租约/
+  unknown 不自动重放；`tests/test_jobs.py` 10/10、`jobs_smoke.py` 11/11。
+  8 并发提交 P95 **14.1 ms**，完成 P95 1785 ms —— 请求线程不再被卡住。
+- 审计跨进程（EG-008）：`BEGIN IMMEDIATE` + 流式校验，两独立进程并发写 2/2。
+- v3 预注册（EG-017）：8 条判定线冻结（`v3_gate.py` + sha256），
+  `tests/test_v3_prereg.py` 7/7；**实验未执行**，v2 负结果归档不动。
+- 详情读取预算、前端企业令牌会话、数据分类 + 合成敏感标记、缓存 LRU/TTL。
+
+### 关键负结果（同负载对比，不是拿不同参数凑的）
+
+git worktree 检出 `b39e462` 与当前工作树用**同一份脚本、同一参数、
+各自全新隔离库**各跑 3 轮 × 4 场景 × 24 请求 / 8 并发：
+
+| 场景 | 改前 P95 | 改后 P95 | availability |
+|---|---|---|---|
+| write_run | 3216.41 ms | 3446.68 ms | 1.0 → 1.0 |
+| read_health | 26.44 ms | 23.13 ms | 1.0 → 1.0 |
+| read_runs | 14.60 ms | 23.26 ms | 1.0 → 1.0 |
+
+写路由吞吐 5.5 → 5.35 rps。**没有实质性能改善**。
+中途加 WAL 曾让 P95「降到 1521 ms」，但那是每轮 3–4 个 500 快速返回
+把分布拉低（`availability=0.875`），traceback 是
+`attempt to write a readonly database`；按证据撤回 WAL 后 24/24 成功。
+
+### 最终数字
+
+```
+Ran 903 tests ... OK
+review_checks.py --gate   19/19 pass
+jobs_smoke 11/11 / audit_multiprocess 2/2 / v3_prereg 7/7
+semantic_cache 7/7 / data_governance 3/3
+```
+
+台账 ✅5/🟡12/⬜10 → **✅6/🟡17/⬜4**。仍未解决：检测 v2 未过线、
+隔离不是 RLS、写路径性能、单进程、多副本与真实业务流量；
+Docker 镜像层、GitHub CI、真实浏览器与 Linux wheel 未实测。

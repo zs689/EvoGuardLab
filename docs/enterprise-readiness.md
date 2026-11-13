@@ -20,7 +20,9 @@
 | `service_controls` | Bearer 鉴权（`hmac.compare_digest` 恒定时间比对）、按 actor 滑动窗口限流、停止开关、启动期 fail-closed、结构化日志 | `tests/test_service_controls.py`（13 项） |
 | `enterprise/tenancy` | `X-Tenant-Id` 解析、每租户配额、未知租户收紧到最小权限、SQL 缺租户条件守门 | `tests/test_enterprise.py::TestTenancy` |
 | `enterprise/observability` | 结构化日志管道（sink 故障不影响主流程）、Prometheus 文本指标（counter/gauge/histogram）、span 追踪、只采元数据的流量采样 | `TestObservability` + `GET /metrics` 实测 |
-| `enterprise/audit` | 审计表（`tenant_id` 非空约束）、版本化迁移（v1→v4 幂等）、按租户查询与保留期清理、**逐行哈希链 + 归档锚点** | `TestAudit` + `TestAuditTamperEvidence` + `TestAuditRetention`（改行/删行被抓，合法清理后仍可验） |
+| `enterprise/audit` | 审计表（`tenant_id` 非空约束）、版本化迁移（v1→v4 幂等）、按租户查询与保留期清理、**逐行哈希链 + 归档锚点**、`BEGIN IMMEDIATE` 跨进程事务、流式校验 | `TestAudit` + `TestAuditTamperEvidence` + `TestAuditRetention` + `test_audit_multiprocess`（两独立进程并发写） |
+| `enterprise/jobs` | 持久作业：任务 ID / 轮询 / 取消 / 幂等键 / 租约 / 崩溃后 `unknown` 不自动重放；按租户分库、队列有界 | `tests/test_jobs.py` 10/10 + `scripts/jobs_smoke.py` 11/11 |
+| `semantic_guard` | 有界 LRU 缓存 + TTL + 作用域隔离，**临时失败不入缓存** | `tests/test_semantic_cache.py` 7/7 |
 | `enterprise/resilience` | 熔断三态、超时预算、SLO 计算（分母 0 返回 `None`）、演练骨架 | `TestResilience` |
 | `enterprise/tls_proxy` | TLS 上下文构建（证书缺失报错不降级）、代理头按对端可信度采信 | `TestTLSProxy` + `tests/test_tls_handshake.py`（真握手） |
 | `enterprise/scorecard` | 按证据打分、输出缺口 | `TestScorecard` |
@@ -49,9 +51,13 @@
   `require_tenant_filter()` 字符串守门强得多，但**仍然不是 RLS**：跨库聚合、
   统一备份、schema 变更要企业侧自己处理；换成 PostgreSQL + `ROW LEVEL
   SECURITY` 才是数据库层策略。见台账 EG-001。
-- **持久作业与写路径性能**：`POST /api/run` 仍同步执行。改后 8 并发 P95
-  **3500 ms**，与独立审查改前测的 3534.7 ms 同一量级 —— 热路径 DDL 优化
-  对写瓶颈没用。EG-009 / EG-010 未解决。
+- **持久作业与写路径性能**：同步 `POST /api/run` 仍在兼容期；新增
+  `/api/jobs` 把提交与执行拆开（8 并发提交 P95 14.1 ms，完成 P95 1785 ms）。
+  作业化改善的是**提交响应**，不是实验本身变快。同负载改前改后对比显示
+  写路径 P95 3216→3447 ms，**无实质改善**（`review-remediation/perf-before-after.md`）。
+  WAL 尝试因 3/24 `readonly` 500 按证据撤回。EG-009 / EG-010 仍未完成。
+- **前端会话**：已有 `sessionStorage` + Bearer 令牌传递与 401/403 反馈，
+  但真实反代认证、失效/登出流程与 CSRF 未在部署拓扑实测（EG-020）。
 - **多机 / 多副本一致性**：指标与限流都是**进程内内存**，N 个副本各算各的。
   真实部署要在网关或 Redis 做集中限流。
 - **集中式日志与追踪后端**：只有 sink 接口与本地文件实现，没有部署拓扑。
@@ -79,13 +85,18 @@ wheel 制品在源码树外可用、请求体上限与堆栈不外泄、审计�
 热路径 DDL 消除、游标分页、探针拆分与指标口径、压测四类状态、
 前端可选面板解耦、机器可读接口契约、CI 逐项硬门槛。
 
+第二轮（同日）继续：持久作业、审计跨进程事务与流式校验、v3 预注册
+（判定线冻结、实验未跑）、详情读取预算、前端企业令牌会话、数据分类与
+合成敏感标记验收、缓存有界与临时失败隔离；并做了同负载改前改后对比，
+按证据撤回了引入 500 的 WAL。台账从 ✅5/🟡12/⬜10 推进到 ✅6/🟡17/⬜4。
+
 **没解决的硬缺口**（不因改了一堆代码就改口）：
 
-1. 核心检测 v2 **仍未过自己的预注册线**，v3 预注册未做；
+1. 核心检测 v2 **仍未过自己的预注册线**；v3 只完成预注册，实验与独立复跑都没做；
 2. 隔离是按租户分库，**不是数据库 RLS**；
-3. `POST /api/run` 仍同步阻塞，8 并发 P95 ≈ 3.5 s，与改前同量级；
+3. 写路径性能无实质改善，`POST /api/run` 同步路径仍在；
 4. 单进程限流/指标、无真实业务流量、无 SSO、无多副本验证；
 5. Docker 镜像层与 GitHub CI **本轮未实测**（daemon / 远程仓库都没连）。
 
-> 结论一句话：**工程形态与可验证据补齐了一大截，但审查的三个核心判断没变。**
+> 结论一句话：**工程形态与可验证据又推进了一批，但审查的核心判断没变。**
 > 能在本机复现并修掉的都修了；修不了的，逐条写清了为什么。
