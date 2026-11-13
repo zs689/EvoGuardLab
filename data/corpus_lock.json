@@ -1,0 +1,77 @@
+{
+  "generated_at": "2026-11-13T21:59:18",
+  "purpose": "语料本体不入库；这里锁生成产物的哈希、许可与上游版本状态。",
+  "schema": 1,
+  "sources": [
+    {
+      "cases": true,
+      "cases_bytes": 77316,
+      "cases_lines": 120,
+      "cases_sha256": "cc22347c2c57018f77141115ea52344b7c1c367e314e022f4d0d0bd68b0a14d0",
+      "commit": null,
+      "license": "MIT",
+      "license_url": "https://github.com/ethz-spylab/agentdojo/blob/main/LICENSE",
+      "manifest": true,
+      "name": "agentdojo",
+      "pin_status": "unpinned",
+      "repo": "ethz-spylab/agentdojo",
+      "upstream_files": 4
+    },
+    {
+      "cases": true,
+      "cases_bytes": 212412,
+      "cases_lines": 413,
+      "cases_sha256": "5fdeee47f7edd6ffd5b09f4069198fe3dc5182de44117e10411911d93471c41c",
+      "commit": null,
+      "license": null,
+      "license_url": null,
+      "manifest": true,
+      "name": "chinese",
+      "pin_status": "unpinned",
+      "repo": null,
+      "upstream_files": 0
+    },
+    {
+      "cases": true,
+      "cases_bytes": 31586,
+      "cases_lines": 62,
+      "cases_sha256": "f32b4cd2ccfc5c9f6fcc63d2ee96d547dfae6e99a9da6641dc07fab1fe7862ef",
+      "commit": null,
+      "license": null,
+      "license_url": null,
+      "manifest": true,
+      "name": "chinese_jailbreak",
+      "pin_status": "unpinned",
+      "repo": null,
+      "upstream_files": 0
+    },
+    {
+      "cases": true,
+      "cases_bytes": 2729604,
+      "cases_lines": 2108,
+      "cases_sha256": "c17e347cf27853c1915709628fde24cba42fd6cb3a0181c7cc86af4a659f9e06",
+      "commit": null,
+      "license": null,
+      "license_url": null,
+      "manifest": true,
+      "name": "injecagent",
+      "pin_status": "unpinned",
+      "repo": null,
+      "upstream_files": 4
+    },
+    {
+      "cases": false,
+      "cases_bytes": null,
+      "cases_lines": null,
+      "cases_sha256": null,
+      "commit": null,
+      "license": null,
+      "license_url": null,
+      "manifest": true,
+      "name": "jailbreak_classification",
+      "pin_status": "unpinned",
+      "repo": null,
+      "upstream_files": 0
+    }
+  ]
+}

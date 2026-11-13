@@ -385,6 +385,110 @@ def job_worker(tenant_id="default"):
         return w
 
 
+def real_model_state(metrics_path=None, checkpoint_path=None,
+                     progress_path=None, report_paths=None):
+    """真实模型评测的状态判定（EG-019）。
+
+    以前只靠「runs.jsonl 比 metrics.json 新」推断，两个进程同时跑时
+    会把进行中的评测当成已完成，前端就会显示上一轮的旧数字。
+    现在优先读**显式进度文件**（原子发布）；没有才回退到 mtime 推断，
+    并明确标注 `source=mtime_legacy`，不假装那是可信状态。
+    """
+    metrics_path = metrics_path or REAL_METRICS
+    checkpoint_path = checkpoint_path or REAL_CHECKPOINT
+    progress_path = progress_path or os.path.join(
+        os.path.dirname(checkpoint_path), "progress.json")
+    report_paths = report_paths or {
+        "report": REAL_REPORT, "analysis": REAL_ANALYSIS,
+        "attribution": REAL_ATTRIBUTION}
+
+    n_done = 0
+    ck_mtime = 0
+    if os.path.exists(checkpoint_path):
+        ck_mtime = os.path.getmtime(checkpoint_path)
+        with open(checkpoint_path, encoding="utf-8") as f:
+            n_done = sum(1 for line in f if line.strip())
+
+    metrics = _read_json(metrics_path, None)
+    progress = None
+    if os.path.exists(progress_path):
+        try:
+            with open(progress_path, encoding="utf-8") as f:
+                progress = json.load(f)
+        except (OSError, ValueError) as exc:
+            # 损坏的进度文件不能被当成「没有进度」而回退到 mtime 猜 ——
+            # 那等于把不可信状态伪装成可用状态。
+            progress = {"__corrupt__": repr(exc)}
+    out = {
+        "checkpoint_runs": n_done,
+        "metrics": None,
+        "report": "",
+        "analysis": "",
+        "attribution": "",
+        "stale_metrics_runs": (metrics or {}).get("runs_completed"),
+        "run_id": None,
+        "progress": None,
+        "source": "none",
+        "error": "",
+    }
+
+    if isinstance(progress, dict) and progress.get("__corrupt__"):
+        out["error"] = "progress.json 损坏：%s" % progress["__corrupt__"]
+        # 只要文件存在但读不懂，就保持 not ready，不按 mtime 猜
+        out.update({"source": "progress_corrupt", "ready": False,
+                    "running": False, "status": "unknown"})
+        return out
+
+    if isinstance(progress, dict) and progress.get("status"):
+        # 显式进度是唯一可信来源：status 不是 completed 就一律 not ready，
+        # 不管 metrics.json 有多新。
+        status = str(progress.get("status"))
+        ready = status == "completed"
+        out.update({
+            "source": "progress",
+            "run_id": progress.get("run_id"),
+            "progress": progress,
+            "ready": ready,
+            "running": status in ("running", "starting", "resuming"),
+            "status": status,
+            "completed": progress.get("completed"),
+            "total": progress.get("total"),
+            "protocol": progress.get("protocol"),
+            "config_hash": progress.get("config_hash"),
+            "library_hash": progress.get("library_hash"),
+        })
+        if ready and metrics is not None:
+            out["metrics"] = metrics
+            for k, p in report_paths.items():
+                out[k] = _read_text(p, "")
+        return out
+
+    if isinstance(progress, dict) and not progress.get("status"):
+        out["error"] = "progress.json 存在但缺 status 字段"
+        out.update({"source": "progress_corrupt", "ready": False,
+                    "running": False, "status": "unknown"})
+        return out
+
+    # 回退：旧产物没有显式进度，只能按 mtime 推断，并如实标注来源
+    if metrics is not None:
+        mt = os.path.getmtime(metrics_path)
+        legacy_running = n_done > int(metrics.get("runs_completed") or 0) \
+            or ck_mtime > mt
+    else:
+        legacy_running = n_done > 0
+    out.update({
+        "source": "mtime_legacy",
+        "ready": metrics is not None and not legacy_running,
+        "running": legacy_running,
+        "status": "unknown",
+    })
+    if out["ready"]:
+        out["metrics"] = metrics
+        for k, p in report_paths.items():
+            out[k] = _read_text(p, "")
+    return out
+
+
 def _read_text(path, default=""):
     try:
         with open(path, encoding="utf-8") as f:
@@ -721,35 +825,12 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, m)
 
     def h_real_model(self):
-        """真实模型评测进度/结果。评测跑一半时也能看，不返回假数字。
+        """真实模型评测进度/结果。
 
-        关键：上一轮跑完会留下旧的 metrics.json。新一轮 --fresh 重跑时，
-        检查点会持续增长而 metrics 还是旧的 —— 只看「metrics 存在」会
-        把「正在跑」误报成「已完成」，前端就会显示过期数字。
+        EG-019：优先读显式进度文件（原子发布），没有才回退 mtime 推断
+        并标注 `source=mtime_legacy`。进行中的评测**不再**被当成已完成。
         """
-        n_done = 0
-        ck_mtime = 0
-        if os.path.exists(REAL_CHECKPOINT):
-            ck_mtime = os.path.getmtime(REAL_CHECKPOINT)
-            with open(REAL_CHECKPOINT, encoding="utf-8") as f:
-                n_done = sum(1 for line in f if line.strip())
-        m = _read_json(REAL_METRICS, None)
-        mt_mtime = os.path.getmtime(REAL_METRICS) if os.path.exists(REAL_METRICS) else 0
-        running = n_done > 0 and (
-            m is None
-            or n_done > int(m.get("runs_completed") or 0)
-            or ck_mtime > mt_mtime)
-        ready = m is not None and not running
-        return self._send(200, {
-            "ready": ready,
-            "running": running,
-            "checkpoint_runs": n_done,
-            "metrics": m if ready else None,
-            "stale_metrics_runs": (m or {}).get("runs_completed"),
-            "report": _read_text(REAL_REPORT, "") if ready else "",
-            "analysis": _read_text(REAL_ANALYSIS, "") if ready else "",
-            "attribution": _read_text(REAL_ATTRIBUTION, "") if ready else "",
-        })
+        self._send(200, real_model_state())
 
     def h_taxonomy(self):
         self._send(200, {"markdown": _read_text(TAXONOMY, "（未找到 docs/taxonomy.md）")})
@@ -954,6 +1035,10 @@ def validate_enterprise_config():
 
 
 def main():
+    # EG-014：服务进程默认给模型调用套上熔断与并发上限。
+    # 离线评测脚本（real_model_bench / evoguard eval）不设这个变量 ——
+    # 评测要真实失败率，不能让自己的熔断器把「模型不行」记成「被挡住」。
+    os.environ.setdefault("AGENTLAB_LLM_RESILIENCE", "1")
     # 启动期 fail-closed：配置不合法（坏数值 / 阈值文件缺失或损坏）就不起来，
     # 避免带着半吊子控制对外提供服务。冒烟测试直接构造 Server，不走这里。
     errors = CONTROLS.validate_config()

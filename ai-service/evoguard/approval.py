@@ -192,7 +192,11 @@ class ApprovalGate:
             # 由 _version_mismatch 判为不可复用，而不是猜一个默认值补上。
             have = {r[1] for r in c.execute(
                 "PRAGMA table_info(approval_requests)")}
-            for col in ("tool_schema_version",):
+            # EG-026：租户绑定、外部效果回执与对账状态。老库用 ALTER 补列，
+            # 老审批保持「缺该字段」的事实（tenant_id=NULL 表示未绑定租户，
+            # 由 approve() 决定是否放行），不猜默认值。
+            for col in ("tool_schema_version", "tenant_id", "effect_status",
+                        "effect_receipt"):
                 if col not in have:
                     c.execute("ALTER TABLE approval_requests ADD COLUMN %s TEXT"
                               % col)
@@ -230,7 +234,8 @@ class ApprovalGate:
     def _new_request(self, run_id, tool, args, *, resource_scope=None,
                      candidate_version=None, checkpoint_id=None,
                      idempotency_key=None, policy_digest_value=None,
-                     first_write=False, tool_schema_version=None):
+                     first_write=False, tool_schema_version=None,
+                     tenant_id=None):
         rid = core.new_id("appr")
         body = canonical_json(args)
         ad = digest(args)
@@ -243,19 +248,21 @@ class ApprovalGate:
                 "args_canonical,resource_scope,candidate_version,idempotency_key,"
                 "policy_digest,status,created_at,expires_at,approved_by,"
                 "decided_at,consumed_at,checkpoint_id,reason,first_write,"
-                "tool_schema_version) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "tool_schema_version,tenant_id) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (rid, now, run_id, tool, ad, body,
                  resource_scope or resource_scope_of(args),
                  candidate_version, key, policy_digest_value, PENDING,
                  now, now + self.ttl, None, None, None, checkpoint_id,
-                 "等待人工审批", 1 if first_write else 0, tool_schema_version))
+                 "等待人工审批", 1 if first_write else 0, tool_schema_version,
+                 tenant_id))
         return rid
 
     def require(self, run_id, tool, args, *, allowed_tools=None,
                 tool_contract=None, candidate_version=None,
                 checkpoint_id=None, idempotency_key=None, first_write=False,
-                tool_schema_version=None, policy_digest_value=None):
+                tool_schema_version=None, policy_digest_value=None,
+                tenant_id=None):
         """唯一的执行门禁：通过就消费一次审批，否则抛 ApprovalRequired。
 
         调用方在**真正执行写操作之前**调它；首次写入与恢复期重放写入走同一条路。
@@ -277,6 +284,9 @@ class ApprovalGate:
                 (run_id, tool, ad, APPROVED))]
         mismatch = None
         for r in rows:
+            # EG-026：审批绑定租户。跨租户复用在企业模式下等于越权。
+            if tenant_id and r.get("tenant_id") and r["tenant_id"] != tenant_id:
+                raise ApprovalDenied(r["id"], "租户不匹配，原审批不能复用")
             if r["policy_digest"] and r["policy_digest"] != pd:
                 raise ApprovalDenied(r["id"], "权限/工具契约已变更，原审批不能复用")
             if r["expires_at"] < self.clock():
@@ -325,7 +335,7 @@ class ApprovalGate:
             run_id, tool, args, candidate_version=candidate_version,
             checkpoint_id=checkpoint_id, idempotency_key=idempotency_key,
             policy_digest_value=pd, first_write=first_write,
-            tool_schema_version=tool_schema_version)
+            tool_schema_version=tool_schema_version, tenant_id=tenant_id)
         return self._raise(rid, tool, checkpoint_id)
 
     def _consume_atomic(self, request_id, expected=None):
@@ -390,11 +400,17 @@ class ApprovalGate:
                 "idempotency_key": r["idempotency_key"],
                 "candidate_version": r["candidate_version"]}
 
-    def approve(self, request_id, approved_by="human"):
+    def approve(self, request_id, approved_by="human", tenant_id=None):
         self.expire_stale()
         r = self.get(request_id)
         if not r:
             raise ApprovalDenied(request_id, "审批请求不存在")
+        # EG-026：审批人必须属于同一租户。企业模式下这是「租户级审批人绑定」
+        # 的最小实现；真实 IdP 的角色解析仍然没有（见台账 EG-026）。
+        if tenant_id and r.get("tenant_id") and r["tenant_id"] != tenant_id:
+            raise ApprovalDenied(
+                request_id, "审批人租户 %s 与请求租户 %s 不一致"
+                % (tenant_id, r["tenant_id"]))
         with self.store.conn() as c:
             # 条件迁移：只有 pending 能变 approved。并发下第二个会 rowcount=0。
             cur = c.execute(
@@ -422,6 +438,36 @@ class ApprovalGate:
             raise ApprovalDenied(request_id,
                                  "状态为 %s，不能再拒绝" % r["status"])
         return self.get(request_id)
+
+    def mark_effect(self, request_id, ok=True, receipt=None):
+        """记录外部效果回执（EG-026）。
+
+        本地 SQLite 只能证明「审批被消费了」，证明不了「外部系统真的执行了」。
+        调用方在外部动作成功后必须回填回执；没回填的会被 `reconcile()` 列出。
+        """
+        with self.store.conn() as c:
+            cur = c.execute(
+                "UPDATE approval_requests SET effect_status=?, effect_receipt=? "
+                "WHERE id=? AND status=?",
+                ("succeeded" if ok else "failed", receipt, request_id, CONSUMED))
+            return cur.rowcount == 1
+
+    def reconcile(self, tenant_id=None, limit=200):
+        """已消费但**没有效果回执**的审批：崩溃后可能「执行了但没记账」。
+
+        这一层不自动重放（外部副作用可能已经发生），只负责把它们列出来
+        让人对账 —— 与作业队列的 `unknown` 是同一个原则。
+        """
+        sql = ("SELECT * FROM approval_requests WHERE status=? "
+               "AND effect_status IS NULL")
+        args = [CONSUMED]
+        if tenant_id:
+            sql += " AND tenant_id=?"
+            args.append(tenant_id)
+        sql += " ORDER BY consumed_at ASC LIMIT ?"
+        args.append(int(limit))
+        with self.store.conn() as c:
+            return [dict(r) for r in c.execute(sql, args)]
 
     def _set(self, request_id, status, reason):
         with self.store.conn() as c:

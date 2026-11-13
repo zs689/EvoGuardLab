@@ -67,7 +67,7 @@ python scripts/review_checks.py --gate --out docs/review-remediation/after  # �
 | **EG-011** 运行数据路径和迁移 | 🟡 | 集中配置 `AGENTLAB_ASSET_ROOT` / `DATA_ROOT` / `DB` / `AUDIT_DB`，默认保持 checkout 兼容；业务库可指向可写卷；按租户分库 | `review_checks` EG-011；wheel serve 实测业务库落在工作目录 | 业务 schema 的**版本迁移、备份/恢复/回滚 runbook** 未做；旧库升级异常配置诊断未做 |
 | **EG-015** 性能基线和发布门槛 | 🟡 | 重写压测：四类状态（成功/受控拒绝/服务失败/客户端错误/连接失败）分开报，可用率分母排除 429/404；纳入 `POST /api/run` 写路由；3 轮 × 4 场景；记录 revision、环境、配置；输出原始 `samples.jsonl`；支持 `--baseline --max-regression` | `review_checks` EG-015 用构造计数验算 SLI；真跑一轮见 `experiments/loadtest_v1/result.json` | 固定并发≠固定到达率，未处理 coordinated omission；CPU/峰值 RSS 未采集（零依赖边界）；**绝对门槛未冻结**（没有业务目标，不擅自编数字当 SLA） |
 | **EG-017** 检测 v2 未过线 | 🟡 | **v2 负结果原样归档**（`passed=false` 守门）；新写 `docs/semantic-injection-v3-plan.md` 独立预注册：冻结集按 schema 整组划分、新增未见过 schema 验收集与五个切片、以「副作用是否发生」为主指标之一、8 条判定线写死在 `v3_gate.py:GATE` 并用 sha256 冻结 | `tests/test_v3_prereg.py` 7/7；`v2_archive_intact()`；`review_checks` EG-017 | **实验尚未执行**；「由未参与调参的一方复跑」是明确写下的前置条件，本地没有第二位调参者；公开语料仍不可达，`test_unseen_schema` 是确定性合成而非外部分布。不放宽 v2 任何判定线 |
-| **EG-018** 语料供应链 | ⬜ | — | — | 预先锁定上游不可变版本/预期哈希/逐资产许可清单未做 |
+| **EG-018** 语料供应链 | 🟡 | `scripts/verify_corpus.py` + `data/corpus_lock.json`（入库，不含语料本体）：锁每个源的 `cases.jsonl` sha256/字节/行数、license、上游文件数；篡改（改一字节/行数变）判失败；缺许可/上游未锁定记为告警，`--strict` 才判红。`label_sheet` 已排除（是标注页不是语料） | `tests/test_corpus_supply_chain.py` 7/7；实跑：5 个源 `PASS` + 9 条告警（4 源缺 license、全部 commit 未锁定） | **上游 commit 仍是 `git_sha: cache` 占位符，未回填不可变 SHA**；4 个源缺 license/license_url，补齐前不能对外分发；CI 未把它设为硬门槛（干净 clone 无料） |
 | **EG-021** 首次体验 | 🟡 | `loadAll()` 拆成「必需元信息」+「可选面板 `Promise.allSettled`」，任一可选请求失败只让对应面板显示空状态；`fillTasks()` 对 `META` 缺失加保护；中英 README 补五分钟离线 demo | `review_checks` EG-021（`node --check` 语法通过） | **真实浏览器**（桌面/移动/键盘、慢网络、权限不足）未实测，本机没有浏览器自动化 |
 | **EG-023** CI 客观门槛 | ✅ | 同一检查入口 `review_checks.py --gate`；构建上下文门禁；wheel 清单 + CLI 冒烟；Linux/Windows 双平台 venv；`release-gate` 汇总 job；证据上传；自评分数降级为提示，**不单独放行** | `review_checks` EG-023（8 项门槛齐全）；`.github/workflows/test.yml` | 全部为本地配置，**CI 未在 GitHub 上跑过**；无法声称 CI 绿 |
 
@@ -82,12 +82,12 @@ python scripts/review_checks.py --gate --out docs/review-remediation/after  # �
 | **EG-010** 存储性能 | 🟡 | 热路径零 DDL、`runs.started_at` 索引、连接次数可观测（`Store.conn_opened` 经 `/api/health` 暴露）；**按审查要求做了同脚本、同参数、各自全新隔离库的改前改后对比** | `perf-before-after.md` + `perf/before.json` / `perf/after.json`：写 P95 3216→3447 ms、吞吐 5.5→5.35 rps、两边 availability 1.0 | **没有性能改善**，数字都在三轮波动内。尝试过 WAL，24 并发出现 3/24 `readonly` 500，**按验收证据撤回**（详见报告）；连接池、锁等待剖析、磁盘写入量、断电持久性验证未做 |
 | **EG-012** 查询与响应体容量 | 🟡 | `limit` clamp 到 200；`started_at` 稳定游标 + `next_cursor`；列表建索引；**详情聚合读取加预算**（四类轨迹各 `LIMIT cap+1`，响应带 `truncated` 与 `detail_limit`） | `review_checks` EG-012；`core.py` 四个 `list_*` 加可选 limit，内部诊断调用不传、语义不变；70 项 core/api 回归全绿 | 技能/经验分页、EXPLAIN 命中索引的大样本验证**未做** |
 | **EG-013** 探针与可观测性 | ✅ | `/api/live`（不碰 DB）、`/api/ready`（依赖不满足 503）、`/api/health`（诊断，保留原字段）拆分；探针流量单列 `evoguard_probe_requests_total`，**不进业务 SLI**；告警规则同步并加指标名一致性检查 | `review_checks` EG-013 两项；`deploy/alerts.yml` 新增 probe-scrape / audit-failure 告警 | 真实部署拓扑里的抓取凭证、错误预算与一条完整追踪**未验** |
-| **EG-014** 下游韧性 | ⬜ | — | — | 熔断/超时未进业务调用路径；限流仍进程内；半开探测数、共享限流层**未做** |
+| **EG-014** 下游韧性 | 🟡 | 新增 `gateway.ResilientProvider`：熔断（失败阈值/冷却/半开）+ 有界并发（超出排队超时直接 `E_OVERLOADED`）+ 调用统计；**接入真实模型调用路径**（`runtime.answer` → `gateway.get_provider()`）。服务进程启动时默认开启（`app.py` setdefault），离线评测**不开** —— 否则熔断会把「模型不行」记成「被自己挡住」，污染实验 | `tests/test_resilient_provider.py` 6/6：熔断打开后不再打下游、冷却半开成功后闭合、并发超限拒绝而非无限排队、get_provider 开关生效 | 超时仍是底层 provider 的 socket 超时，没有强制总预算中断；**共享限流层/多副本熔断状态**未做；半开探测数无独立指标 |
 | **EG-016** 生产部署与灾备 | 🟡 | Dockerfile：非 root、只读友好、独立卷、healthcheck、优雅停止；`AGENTLAB_BIND` 可配；`.env.example` 补全套配置 | 同上 EG-003 | 反代 TLS 拓扑、私有依赖、备份/恢复演练、RPO/RTO、证书轮换与回滚 runbook**未做** |
-| **EG-019** 实验产物并发读取 | ⬜ | — | — | run ID、显式进度计数、原子发布清单、完成件摘要校验**未做**；`h_real_model` 仍按 mtime 推断并全量扫 JSONL |
+| **EG-019** 实验产物并发读取 | 🟡 | 评测写 `progress.json`（`run_id / status / completed / total / protocol / config_hash / library_hash`），**tmp+fsync+os.replace 原子发布**，`--fresh` 先清旧状态；`/api/real-model` 抽成纯函数 `real_model_state()`，**优先读显式进度**，只有没有进度时才回退 mtime 并标 `source=mtime_legacy`；进度损坏 → `progress_corrupt` 且 not ready，不猜 | `tests/test_real_model_progress.py` 6/6：running 压过更新的 metrics、completed 才放产物、损坏不被当成完成、旧产物标来源 | 没有跨进程文件锁（两个评测进程同时写同一目录仍会互相覆盖进度）；完成件只记录 config/library 指纹，**没有对产物做逐字节摘要校验** |
 | **EG-020** 企业前端会话 | 🟡 | 顶栏加令牌输入；所有 `api()` 请求统一带 `Authorization: Bearer`；401/403 给可理解反馈；令牌只存 `sessionStorage`（关标签失效），不进 URL / `localStorage` / DOM 明文；支持空值退出与 Enter 提交 | `review_checks` EG-020（9 项静态检查）；`node --check` 通过 | **真实浏览器登录/刷新/退出、反代认证与角色权限未在部署拓扑实测**；CSRF 保护未做（当前 API 无 cookie 会话） |
 | **EG-022** 数据治理与保密 | 🟡 | `docs/data-governance.md`：六类字段分类与保留期、入口最小化、加密/备份部署说明、已知限制；用合成敏感标记 `CANARY_SECRET_9f2c7b1e` 真发请求并从日志/指标/health/列表/详情逐出口验证不泄露 | `tests/test_data_governance.py` 3/3；`service_controls.log()` 白名单 | **租户级删除/导出/保留冻结 HTTP API 未做**（只有按租户保留期清理）；锚点未备份到独立权限域；业务库 `steps.answer/expect` 仍可能含模型输出正文，无字段级脱敏；静态加密与恢复演练未做 |
-| **EG-026** 审批与真实副作用恢复 | ⬜ | — | — | 租户级审批人绑定、审批有效期、策略版本、执行幂等键、外部效果回执、崩溃对账**未做**（审查标为 design_gap） |
+| **EG-026** 审批与真实副作用恢复 | 🟡 | 审批表加 `tenant_id / effect_status / effect_receipt`（ALTER 幂等迁移）；`approve()` 校验审批人租户与请求一致；`require()` 复用审批时校验租户，跨租户复用直接拒绝；`mark_effect()` 记录外部回执；`reconcile()` 列出「已消费但无回执」的请求供人工对账，**不自动重放**。有效期、策略版本失效、结算幂等键沿用既有实现 | `tests/test_approval_tenant.py` 7/7；原有 `tests/test_approval.py` 16 项不破坏 | **没有真实外部审批人/业务系统回执**：`approved_by` 仍是本地字符串，`mark_effect` 要调用方自己填；没有审批人角色解析（IdP）、没有外部效果查询；多副本下的审批状态共享未做。审查标 design_gap 的核心原因仍然成立 |
 
 ## 阶段 C
 
@@ -104,11 +104,11 @@ python scripts/review_checks.py --gate --out docs/review-remediation/after  # �
 | 状态 | 数量 | ID |
 |---|---|---|
 | ✅ 完成 | **6** | EG-002, EG-004, EG-007, EG-008, EG-013, EG-023 |
-| 🟡 部分 | **17** | EG-001, 003, 005, 006, 009, 010, 011, 012, 015, 016, 017, 020, 021, 022, 024, 025, 027 |
-| ⬜ 未做 | **4** | EG-014, EG-018, EG-019, EG-026 |
+| 🟡 部分 | **21** | EG-001, 003, 005, 006, 009, 010, 011, 012, 014, 015, 016, 017, 018, 019, 020, 021, 022, 024, 025, 026, 027 |
+| ⬜ 未做 | **0** | — |
 | 合计 | **27** | 与审查 `finding_count` 一致 |
 
-第一轮是 ✅5 / 🟡12 / ⬜10；第二轮把 6 项从「未做」推进到「部分/完成」。
+第一轮 ✅5 / 🟡12 / ⬜10；第二轮 ✅6 / 🟡17 / ⬜4；第三轮把剩下 4 项全部推进到「部分」，**未做项归零**。
 「✅」的判据是**该项的全部验收条件都能给出可复验证据**。差一条就降到 🟡：
 例如 EG-003 的镜像层没实测、EG-024 没让第三方实测五分钟跑通、EG-009
 还是单 worker，都不算完成。剩下 4 项没有被写成「预留接口已具备」而混过去。

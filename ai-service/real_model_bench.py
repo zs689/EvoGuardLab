@@ -141,9 +141,42 @@ def case_key(c, mode):
                                 c["fault_type"], mode)
 
 
+def progress_path():
+    return os.path.join(OUT, "progress.json")
+
+
+def write_progress(run_id, completed, total, status, started_at,
+                   protocol="", config_hash="", library_hash=""):
+    """原子发布进度（EG-019）：tmp + fsync + os.replace。
+
+    以前只靠 runs.jsonl / metrics.json 的 mtime 推断，进程被杀、或者两个
+    实例同时跑时，会把「正在跑」当成「已完成」，前端就显示上一轮的旧数字。
+    显式进度是唯一可信来源：读到的要么是旧状态、要么是新状态，不会半截。
+    """
+    rec = {
+        "schema": 1, "run_id": run_id, "status": status,
+        "completed": int(completed), "total": int(total),
+        "started_at": started_at, "updated_at": time.time(),
+        "protocol": protocol, "config_hash": config_hash,
+        "library_hash": library_hash,
+        "out": os.path.relpath(OUT, ROOT).replace("\\", "/"),
+    }
+    p = progress_path()
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(rec, f, ensure_ascii=False, sort_keys=True)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, p)
+    return rec
+
+
 def load_checkpoint(fresh):
     if fresh and os.path.exists(CHECKPOINT):
         os.remove(CHECKPOINT)
+    if fresh and os.path.exists(progress_path()):
+        # 新一轮开始前先清掉上一轮的状态，否则读的人会看到旧的 completed
+        os.remove(progress_path())
     done = {}
     if os.path.exists(CHECKPOINT):
         with open(CHECKPOINT, encoding="utf-8") as f:
@@ -869,6 +902,12 @@ def main():
             print("[!] 预热失败（继续跑）：%s" % e, flush=True)
 
     t_start = time.time()
+    run_id = core.new_id("run")
+    total_runs = len(cases) * 4
+    write_progress(run_id, len(done), total_runs, "running", t_start,
+                   protocol=baseline.PROTOCOL,
+                   config_hash=bl["config_hash"],
+                   library_hash=bl["library_hash"])
     fout = open(CHECKPOINT, "a", encoding="utf-8")
     try:
         for i, (c, m) in enumerate(todo, 1):
@@ -894,12 +933,22 @@ def main():
                 rate = i / el if el else 0
                 left = (len(todo) - i) / rate if rate else 0
                 ok = sum(1 for x in done.values() if x["success"])
+                write_progress(run_id, len(done), total_runs, "running",
+                               t_start, protocol=baseline.PROTOCOL,
+                               config_hash=bl["config_hash"],
+                               library_hash=bl["library_hash"])
                 print("  [%d/%d] %.0fs 已完成 %d/%d run，成功 %d，预计剩余 %.0fs"
                       % (i, len(todo), el, len(done), len(cases) * 4,
                          ok, left), flush=True)
     finally:
         fout.close()
         store.close()
+        if sys.exc_info()[0] is not None:
+            # 异常退出要留下明确状态，不要让下一次读的人对着半截检查点猜
+            write_progress(run_id, len(done), total_runs, "failed", t_start,
+                           protocol=baseline.PROTOCOL,
+                           config_hash=bl["config_hash"],
+                           library_hash=bl["library_hash"])
 
     single_cases = [c for c in cases if c["suite"] == "single"]
     comp_cases = [c for c in cases if c["suite"] == "composite"]
@@ -938,6 +987,12 @@ def main():
     man = baseline.freeze(ROOT, os.path.dirname(REPORT), config=cfg,
                           libraries=bl["libraries"],
                           note="真实模型全量评测（P0 06 冻结基线）")
+    # 完成件已冻结，最后一步才把状态写成 completed —— 读到 completed 就代表
+    # metrics/report/manifest 都在了，不会出现「进度说完成、产物还没落盘」。
+    write_progress(run_id, len(done), total_runs, "completed", t_start,
+                   protocol=baseline.PROTOCOL,
+                   config_hash=man["config_hash"],
+                   library_hash=man["library_hash"])
     print("== 基线 ==", flush=True)
     print("  manifest：%s" % man["manifest_path"], flush=True)
     print("  总指纹 %s ｜ 配置 %s ｜ 技能库 %s"

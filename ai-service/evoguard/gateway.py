@@ -29,6 +29,7 @@
 import json
 import os
 import re
+import threading
 import urllib.error
 import urllib.request
 
@@ -313,6 +314,67 @@ class OllamaNativeProvider(Provider):
 _CACHE = {}
 
 
+class ResilientProvider(Provider):
+    """熔断 + 有界并发 + 排队上限（EG-014）。
+
+    熔断器和超时预算早就在 `enterprise/resilience.py` 里，但**没接进真正
+    被请求调用的 provider** —— 下游挂了，请求照样打过去，一直打到超时。
+    这里把它包在实际调用链上。
+
+    为什么默认只在服务进程开（`app.py` 启动时设 `AGENTLAB_LLM_RESILIENCE=1`）：
+    离线评测要的是**真实失败率**，如果评测中途熔断，会把「模型不行」误记成
+    「被自己的熔断器挡住」，那是对实验数据的污染。评测脚本不设这个变量。
+    """
+
+    def __init__(self, inner, breaker=None, max_concurrency=4,
+                 queue_timeout=2.0, name=None):
+        self.inner = inner
+        self.name = name or getattr(inner, "name", type(inner).__name__)
+        if breaker is None:
+            from enterprise import resilience as R
+            breaker = R.CircuitBreaker(
+                failure_threshold=int(
+                    os.environ.get("AGENTLAB_CB_THRESHOLD") or 5),
+                cooldown_s=float(os.environ.get("AGENTLAB_CB_COOLDOWN") or 30))
+        self.breaker = breaker
+        self._sem = threading.Semaphore(max(1, int(max_concurrency)))
+        self.queue_timeout = float(queue_timeout)
+        self.stats = {"ok": 0, "failed": 0,
+                      "rejected_open": 0, "rejected_busy": 0}
+
+    def complete(self, messages, temperature=0.0, max_tokens=256):
+        if not self._sem.acquire(timeout=self.queue_timeout):
+            self.stats["rejected_busy"] += 1
+            raise LLMError("E_OVERLOADED",
+                           "模型调用并发已满，排队 %.1fs 超时"
+                           % self.queue_timeout)
+        try:
+            if not self.breaker.allow():
+                self.stats["rejected_open"] += 1
+                raise LLMError("E_CIRCUIT_OPEN",
+                               "下游连续失败，熔断打开（%s）"
+                               % self.breaker.state)
+            try:
+                out = self.inner.complete(
+                    messages, temperature=temperature,
+                    max_tokens=max_tokens)
+            except Exception:
+                self.breaker.record(False)
+                self.stats["failed"] += 1
+                raise
+            self.breaker.record(True)
+            self.stats["ok"] += 1
+            return out
+        finally:
+            self._sem.release()
+
+    def snapshot(self):
+        d = dict(self.stats)
+        d["breaker"] = self.breaker.snapshot()
+        d["inner"] = type(self.inner).__name__
+        return d
+
+
 def get_provider(force=None):
     """按环境变量取后端。同一个进程内复用，避免每次新建连接配置。"""
     mode = force or os.environ.get("AGENTLAB_LLM") or "mock"
@@ -326,8 +388,22 @@ def get_provider(force=None):
         p = OllamaNativeProvider(json_mode=False)
     else:
         p = LocalProvider()
-    _CACHE[mode] = p
-    return p
+    _CACHE[mode] = _maybe_resilient(p, mode)
+    return _CACHE[mode]
+
+
+def _maybe_resilient(provider, mode):
+    """服务进程显式开启；评测脚本不开，避免熔断污染真实失败率。"""
+    flag = (os.environ.get("AGENTLAB_LLM_RESILIENCE") or "").strip().lower()
+    if flag not in ("1", "true", "on"):
+        return provider
+    if isinstance(provider, ResilientProvider):
+        return provider
+    return ResilientProvider(
+        provider,
+        max_concurrency=int(os.environ.get("AGENTLAB_LLM_MAX_CONCURRENCY") or 4),
+        queue_timeout=float(os.environ.get("AGENTLAB_LLM_QUEUE_TIMEOUT") or 2.0),
+        name=mode)
 
 
 def reset_cache():
