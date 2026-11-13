@@ -33,6 +33,12 @@
   标为 `unknown` 并**不自动重放**，需人工对账后显式 retry。
 - **前端令牌只存 `sessionStorage`**：已在顶栏实现 Bearer 传递与 401/403
   反馈，但真实反代认证、失效/登出流程与 CSRF 保护未在部署拓扑实测。
+- **熔断与并发上限是进程内的**：`ResilientProvider` 接进了真实模型调用路径，
+  但熔断状态、信号量、限流都是单进程语义，多副本各算各的。
+- **审批没有真实外部审批人**：`approved_by` 是本地字符串，外部效果要调用方
+  自己 `mark_effect()` 回填；`reconcile()` 只列出待对账项，不自动重放。
+- **语料上游版本未锁定**：`git_sha: cache` 是占位符，4 个源缺 license；
+  锁清单只能证明生成产物没被改（见 `docs/corpus-supply-chain.md`）。
 - **归档锚点表 `audit_anchors` 与审计库同库**：能改库的人理论上也能插锚点
   伪造删除。生产部署应把锚点备份到独立权限域（见 `docs/data-governance.md`）。
 - **业务库 `steps.answer` / `expect` 可能含模型输出正文**：接口不透传，

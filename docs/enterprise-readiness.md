@@ -23,6 +23,10 @@
 | `enterprise/audit` | 审计表（`tenant_id` 非空约束）、版本化迁移（v1→v4 幂等）、按租户查询与保留期清理、**逐行哈希链 + 归档锚点**、`BEGIN IMMEDIATE` 跨进程事务、流式校验 | `TestAudit` + `TestAuditTamperEvidence` + `TestAuditRetention` + `test_audit_multiprocess`（两独立进程并发写） |
 | `enterprise/jobs` | 持久作业：任务 ID / 轮询 / 取消 / 幂等键 / 租约 / 崩溃后 `unknown` 不自动重放；按租户分库、队列有界 | `tests/test_jobs.py` 10/10 + `scripts/jobs_smoke.py` 11/11 |
 | `semantic_guard` | 有界 LRU 缓存 + TTL + 作用域隔离，**临时失败不入缓存** | `tests/test_semantic_cache.py` 7/7 |
+| `gateway.ResilientProvider` | 熔断（阈值/冷却/半开）+ 有界并发 + 排队超时，接进真实模型调用路径；服务默认开、评测不开 | `tests/test_resilient_provider.py` 6/6 |
+| 语料供应链 | `data/corpus_lock.json` 锁生成产物哈希/许可；篡改判失败、缺许可告警 | `scripts/verify_corpus.py` + `test_corpus_supply_chain` 7/7 |
+| 评测进度 | `progress.json` 原子发布 + run ID + 配置/库指纹；损坏不猜 | `tests/test_real_model_progress.py` 6/6 |
+| 审批 | 租户绑定、策略版本失效、有效期、结算幂等键、效果回执、待对账列表 | `tests/test_approval_tenant.py` 7/7 + `test_approval.py` 16 项 |
 | `enterprise/resilience` | 熔断三态、超时预算、SLO 计算（分母 0 返回 `None`）、演练骨架 | `TestResilience` |
 | `enterprise/tls_proxy` | TLS 上下文构建（证书缺失报错不降级）、代理头按对端可信度采信 | `TestTLSProxy` + `tests/test_tls_handshake.py`（真握手） |
 | `enterprise/scorecard` | 按证据打分、输出缺口 | `TestScorecard` |
@@ -58,6 +62,15 @@
   WAL 尝试因 3/24 `readonly` 500 按证据撤回。EG-009 / EG-010 仍未完成。
 - **前端会话**：已有 `sessionStorage` + Bearer 令牌传递与 401/403 反馈，
   但真实反代认证、失效/登出流程与 CSRF 未在部署拓扑实测（EG-020）。
+- **语料供应链未锁死**：4 个源缺 license，全部源的上游 commit 仍是
+  `git_sha: cache` 占位符。锁清单只能证明生成产物没被改，**不能证明上游版本**
+  （EG-018，`verify_corpus.py --strict` 会失败）。
+- **审批没有真实外部审批人**：`approved_by` 是本地字符串，`mark_effect()`
+  要调用方自己填回执；没有 IdP 角色解析与外部效果查询（EG-026 仍是 design_gap）。
+- **熔断只在单进程内**：`ResilientProvider` 的熔断状态与并发信号量都是
+  进程级，多副本各算各的；超时仍是 socket 超时，没有强制总预算中断（EG-014）。
+- **评测进度无跨进程锁**：两个评测进程写同一目录仍会互相覆盖 `progress.json`；
+  完成件没有逐字节摘要校验（EG-019）。
 - **多机 / 多副本一致性**：指标与限流都是**进程内内存**，N 个副本各算各的。
   真实部署要在网关或 Redis 做集中限流。
 - **集中式日志与追踪后端**：只有 sink 接口与本地文件实现，没有部署拓扑。

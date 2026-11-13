@@ -162,3 +162,35 @@ tests/test_data_governance.py             3/3
 台账状态从 ✅5 / 🟡12 / ⬜10 变成 **✅6 / 🟡17 / ⬜4**（剩下 EG-014、018、019、026）。
 仍未解决：检测 v2 未过线、隔离不是 RLS、写路径性能、单进程、多副本与真实业务流量。
 Docker 镜像层、GitHub CI、真实浏览器与 Linux wheel 依旧**未实测**。
+
+## 八、第三轮（2026-11-13 晚）：把「未做」清零
+
+第二轮结束时还剩 EG-014 / 018 / 019 / 026 四项完全没动。这一轮全部推进到
+「部分」，**未做项归零**（✅6 / 🟡21 / ⬜0），但完成项仍是 6 —— 不拿「都动过」
+当成「都做完」。
+
+| 项 | 做了什么 | 证据 |
+|---|---|---|
+| EG-014 下游韧性 | `gateway.ResilientProvider`：熔断 + 有界并发 + 统计，接进 `runtime.answer` 的真实调用路径；服务进程默认开，评测脚本不开 | `tests/test_resilient_provider.py` 6/6 |
+| EG-018 语料供应链 | `scripts/verify_corpus.py` + `data/corpus_lock.json`（入库不含语料）；篡改判失败、缺许可/未锁定告警 | `tests/test_corpus_supply_chain.py` 7/7；实跑 9 条告警 |
+| EG-019 评测进度 | `progress.json` 原子发布 + run_id + 指纹；`real_model_state()` 优先显式进度，损坏不猜 | `tests/test_real_model_progress.py` 6/6 |
+| EG-026 审批 | 租户绑定、效果回执、`reconcile()` 待对账列表；有效期/策略版本/幂等键沿用 | `tests/test_approval_tenant.py` 7/7；原有 16 项不破坏 |
+
+### 这一轮的负结果 / 已知缺口
+
+- **EG-018 的上游 commit 仍是 `git_sha: cache` 占位符**，4 个源缺 license。
+  锁清单只能证明「生成产物没被改」，**证明不了上游版本**。`--strict` 会失败。
+- **EG-014 的超时**仍是底层 socket 超时，没有强制总预算中断；多副本共享
+  熔断状态与限流层没做。
+- **EG-019 没有跨进程文件锁**：两个评测进程写同一目录仍会互相覆盖进度；
+  完成件没有逐字节摘要校验。
+- **EG-026 没有真实外部审批人**：`approved_by` 是本地字符串，`mark_effect`
+  要调用方自己填；审查标 design_gap 的核心原因仍然成立。
+
+### 第三轮数字
+
+```
+python -m unittest discover -s tests -q   Ran 929 tests ... OK
+python scripts/verify_corpus.py            PASS（9 条告警）
+python scripts/verify_corpus.py --strict   1（预期：上游未锁定）
+```

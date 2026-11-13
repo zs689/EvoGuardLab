@@ -85,3 +85,24 @@
 
 验收：903 tests OK、19/19 gate、jobs_smoke 11/11。
 台账 ✅5/🟡12/⬜10 → **✅6/🟡17/⬜4**（剩 EG-014/018/019/026）。
+
+### 第三轮（2026-11-13 晚）
+
+把台账里最后 4 项「未做」全部推进到「部分」，未做项归零（✅6 / 🟡21 / ⬜0）。
+
+- **EG-014** `gateway.ResilientProvider`：熔断 + 有界并发 + 调用统计，
+  接进 `runtime.answer` 的真实调用路径；服务进程默认开、离线评测不开
+  （避免熔断污染真实失败率）。6 项测试。
+- **EG-018** `scripts/verify_corpus.py` + `data/corpus_lock.json`：
+  锁 `cases.jsonl` 的 sha256/行数/许可；篡改判失败；缺许可与上游未锁定
+  记为告警，`--strict` 判红。7 项测试；实跑 9 条告警（4 源缺 license、
+  全部 commit 未锁定 —— 如实不补假值）。
+- **EG-019** 评测写 `progress.json`（run_id + 状态 + 指纹，tmp+fsync+
+  os.replace 原子发布）；`/api/real-model` 优先显式进度，损坏标
+  `progress_corrupt` 不猜。6 项测试。
+- **EG-026** 审批加 `tenant_id / effect_status / effect_receipt`；
+  跨租户批准与复用直接拒绝；`mark_effect()` 记外部回执；`reconcile()`
+  列「已消费但无回执」供人工对账，不自动重放。7 项测试，原有 16 项不破坏。
+
+验收：929 tests OK。仍未解决：上游 commit 未锁、审批没有真实外部审批人、
+超时无强制预算、评测进度无跨进程锁、写路径性能、单进程、多副本。
