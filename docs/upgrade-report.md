@@ -212,3 +212,48 @@ CLI          : evoguard config / scorecard / serve --port 均可用
 `skipped=41` 全部是依赖 `data/external/` 语料的用例（该目录按许可与体积
 不入库），不是失败。干净 clone 上分数与主仓库**完全一致**，说明打分依赖的
 是仓库里的产物，而不是这台机器上的任何东西。
+
+## 九、独立审查整改（2026-11-12 ~ 13）
+
+依据 `EvoGuardLab_企业与高性能客观审查_2026-11-12.json`（revision `793c6d1`，
+27 项发现：3 P0 / 20 P1 / 4 P2）。**审查明确「仓库自评分数不计入结论」** ——
+上一轮 §八 的 84.8/100 是自评，不再当进度用。
+
+逐项台账：`docs/review-remediation/README.md`；修前证据 `before.md`；
+修后证据 `after.md`。状态汇总 **✅5 / 🟡12 / ⬜10**。
+
+### 真做完的（有可复验产物）
+
+`EG-002` 企业模式启动期 fail-closed、`EG-004` 独立 wheel 在源码树外可用、
+`EG-007` 审计归档锚点、`EG-013` 探针拆分与指标口径、`EG-023` CI 逐项硬门槛。
+另有 12 项部分完成、10 项明确没做，逐条写明原因与接口位置，不假装实现。
+
+### 关键负结果（必须写在前面）
+
+改后 `POST /api/run` 8 并发 P95 **3500.09 ms**，独立审查改前测的是
+**3534.7 ms** —— 同一量级。把 schema DDL 移出热路径、加索引**没有解决写瓶颈**，
+瓶颈在同步执行与 SQLite 写锁（EG-009 / EG-010 仍未完成）。两组参数不完全一致，
+不做百分比对比；要下结论得在改前提交上用同一脚本重跑，本轮没做。
+
+### 验收数字
+
+```
+python scripts/review_checks.py --gate    14/14 pass, GATE_EXIT=0
+python scripts/enterprise_smoke.py        9/9
+python scripts/wheel_smoke.py             10/10（独立 venv、源码树外空目录）
+python scripts/check_docker_context.py    5/5（规则级；镜像层未实测）
+python scripts/check_wheel_manifest.py    PASS（对 wheel 制品本身）
+python -m unittest tests.test_api_contract  8/8
+python scripts/drill.py                  5/5
+python -m unittest discover -s tests -q Ran 874 tests ... OK
+```
+
+### 最终复验（干净 clone）
+
+见 `docs/review-remediation/after.md` 与本节末尾的提交记录。
+
+### 明确没验的
+
+Docker daemon 不可达（镜像层未 build）、GitHub CI 未实跑（全部本地工作、
+未创建远程仓库/推送/发布）、真实浏览器交互未自动化、真实企业流量与
+SSO/多副本未验、v3 预注册未做。

@@ -5,6 +5,28 @@ Self-Evolving Agent Reliability & Autonomous Recovery
 
 > 一句话：不只让 Agent 从错误里「学到经验」，还要用**独立测试**证明这条经验真的有用、且没有把原本能做的事弄坏。
 
+## 五分钟离线跑通（不需要语料 / 网络 / 模型）
+
+```bash
+# 在仓库 checkout 根目录执行
+pip install -e .                 # 零运行时依赖，Python 3.10+
+evoguard demo                    # 同一批攻击 × 五档守卫配置
+evoguard config                  # 打印生效的安全配置
+evoguard test                    # 全量回归（数量以输出为准，文档不写死）
+python scripts/review_checks.py --gate   # 逐项客观门槛，不是自评分数
+```
+
+不装包也行：`python evoguard_cli.py demo` 是同一个入口。
+
+**跑完看什么**：打开 `experiments/defense_demo_v2/demo.md`，找「检测命中」
+和「工具真的执行」两列。这个项目的核心主张就是——**检测到 ≠ 拦住了**；
+一个 `decision=deny` 却留下 `executed > 0` 的守卫，在这里算失败，照实记数。
+
+更多入口：[接口契约](docs/api-contract-v1.json) ·
+[企业边界与已知缺口](docs/enterprise-readiness.md) ·
+[独立审查整改台账](docs/review-remediation/README.md) ·
+[贡献指引](CONTRIBUTING.md) · [安全策略](SECURITY.md) · [变更记录](CHANGELOG.md)。
+
 ## 这是什么 / 不是什么
 
 **是**：一个可复现的本地研究原型 —— Agent 轨迹检查器（31 条轨迹规则 + 20 条静态规则）、

@@ -3,7 +3,9 @@
 **Does a deny actually stop the tool call?** A reproducible benchmark for AI-agent guardrails that
 measures the *execution effect*, not just the detection hit.
 
-[中文说明](README.zh.md) · [Architecture](docs/architecture.svg) · [Experiments](experiments/) · MIT
+[中文说明](README.zh.md) · [Architecture](docs/architecture.svg) · [Experiments](experiments/) ·
+[API contract](docs/api-contract-v1.json) · [Enterprise boundaries](docs/enterprise-readiness.md) ·
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md) · MIT
 
 ---
 
@@ -18,19 +20,45 @@ Every security decision here carries six fields —
 accidentally claim a block that did not happen. Most of the work below exists because
 that distinction kept exposing real bugs in this very codebase.
 
-## Quick start
+## Quick start / 五分钟离线跑通
+
+No corpus, no network, no GPU. From a checkout:
 
 ```bash
-# 在仓库 checkout 根目录执行
 pip install -e .          # zero runtime dependencies, Python 3.10+
-
-evoguard demo             # full defence demo: same attacks, five configurations
-evoguard test             # 814 regression tests
-evoguard eval             # re-run every experiment and print the numbers
-evoguard config           # print the effective security configuration
+evoguard demo             # same attacks under five guard configurations
+evoguard config           # effective security configuration (JSON)
+evoguard test             # full regression (use the printed count; docs don't hardcode it)
+evoguard scorecard        # evidence-based self-assessment + gap list
 ```
 
-No install? `python evoguard_cli.py demo` works from a checkout — that is the same entry point.
+Without installing anything, `python evoguard_cli.py demo` is the same entry point.
+
+**What to look at after `demo`**: `experiments/defense_demo_v2/demo.md` reports
+`detected` (did the detector fire) *separately from* `executed` (did the tool
+actually run). A deny that still leaves `executed > 0` is a failed guard, and
+this repo counts it that way. That is the whole point.
+
+```bash
+# Objective gates, not a self-score (EG-023)
+python scripts/review_checks.py --gate
+python scripts/check_docker_context.py
+```
+
+> 中文最短路径：在仓库根目录执行 `pip install -e .` → `evoguard demo` →
+> 打开 `experiments/defense_demo_v2/demo.md`。看「检测命中」与「工具真的执行」
+> 两列是不是分开的。全程离线、不需要外部语料、不需要模型。
+> 完整中文说明见 [README.zh.md](README.zh.md)。
+
+### Known limits (read before deploying)
+
+This is a local research prototype, **not** a production security product.
+Independent review found hard blockers; the remediation ledger is
+[docs/review-remediation/README.md](docs/review-remediation/README.md).
+In particular: `POST /api/run` is still synchronous, tenant isolation is
+per-tenant SQLite files (not database RLS), rate limiting is per-process, and
+the v2 detector **did not pass its own pre-registered gate**. Do not read the
+scorecard total as a certification.
 
 ### Reproducibility tiers (clean checkout)
 

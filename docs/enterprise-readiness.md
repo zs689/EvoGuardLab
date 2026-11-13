@@ -8,6 +8,8 @@
 
 自评分数由 `evoguard scorecard` 生成，见 `docs/enterprise-scorecard.md`。
 分数是**找缺口用的排序依据**，不是认证、不是 SLA、不代表可以生产部署。
+**独立审查明确「仓库自评分数不计入结论」**：27 项发现的逐项状态以
+[整改台账](review-remediation/README.md) 为准，别只看那个分数。
 
 ---
 
@@ -18,12 +20,13 @@
 | `service_controls` | Bearer 鉴权（`hmac.compare_digest` 恒定时间比对）、按 actor 滑动窗口限流、停止开关、启动期 fail-closed、结构化日志 | `tests/test_service_controls.py`（13 项） |
 | `enterprise/tenancy` | `X-Tenant-Id` 解析、每租户配额、未知租户收紧到最小权限、SQL 缺租户条件守门 | `tests/test_enterprise.py::TestTenancy` |
 | `enterprise/observability` | 结构化日志管道（sink 故障不影响主流程）、Prometheus 文本指标（counter/gauge/histogram）、span 追踪、只采元数据的流量采样 | `TestObservability` + `GET /metrics` 实测 |
-| `enterprise/audit` | 审计表（`tenant_id` 非空约束）、版本化迁移（v1→v3 幂等）、按租户查询、保留期清理、**逐行哈希链** | `TestAudit` + `TestAuditTamperEvidence`（改一行 / 删一行都能发现） |
+| `enterprise/audit` | 审计表（`tenant_id` 非空约束）、版本化迁移（v1→v4 幂等）、按租户查询与保留期清理、**逐行哈希链 + 归档锚点** | `TestAudit` + `TestAuditTamperEvidence` + `TestAuditRetention`（改行/删行被抓，合法清理后仍可验） |
 | `enterprise/resilience` | 熔断三态、超时预算、SLO 计算（分母 0 返回 `None`）、演练骨架 | `TestResilience` |
 | `enterprise/tls_proxy` | TLS 上下文构建（证书缺失报错不降级）、代理头按对端可信度采信 | `TestTLSProxy` + `tests/test_tls_handshake.py`（真握手） |
 | `enterprise/scorecard` | 按证据打分、输出缺口 | `TestScorecard` |
-| 服务接线 | `request_id → 鉴权 → 限流 → 停止开关 → 租户 → 配额 → 路由`，含指标/审计/追踪 | `tests/test_enterprise.py::TestLiveService`（起真进程发真 HTTP） |
-| 压测与演练 | 1000 请求 / 20 并发的实测底数；5 条故障演练（注入→断言→恢复） | `experiments/loadtest_v1/result.json`、`experiments/drill_v1/result.json` |
+| 服务接线 | `request_id → 鉴权 → 限流 → 停止开关 → 租户 → 配额 → 路由`，含指标/审计/追踪；企业模式 token→身份绑定、按租户分库、角色与启动期 fail-closed | `TestLiveService` + `scripts/enterprise_smoke.py`（9/9） |
+| 压测与演练 | 3 轮 × 4 场景（含写路由）× 24 请求 / 8 并发，四类状态分开报 + 原始样本；5 条故障演练（注入→断言→恢复） | `experiments/loadtest_v1/result.json`、`experiments/drill_v1/result.json` |
+| 契约与门槛 | `docs/api-contract-v1.json` + 防漂移测试；`scripts/review_checks.py --gate` 逐项硬门槛 | `tests/test_api_contract.py`（8/8）、`docs/review-remediation/after.md` |
 
 ## 二、预留接口（结构给了，实现等企业接）
 
@@ -39,10 +42,16 @@
 
 ## 三、明确不做（写清楚，免得被当成「应该有」）
 
-- **数据库层行级隔离**：sqlite 没有 RLS。`require_tenant_filter()` 是**应用层**
-  字符串守门，能挡住「忘了写 `WHERE tenant_id`」的常见错误，但**不是隔离**。
-  真要隔离必须换 PostgreSQL 并上 `ROW LEVEL SECURITY`，或在表名前缀/独立 schema
-  上做物理隔离。这是本仓库最大的架构级缺口，见 scorecard「多租户」一维。
+- **数据库层行级隔离（RLS）**：sqlite 没有 RLS，本仓库也没有 PostgreSQL。
+  企业模式下改用**按租户分库**：`tenant_db_path()` 给每个租户一个独立
+  sqlite 文件，`get_store(tenant)` 按身份取对应库；`scripts/enterprise_smoke.py`
+  实测 acme 有 1 条 run 时 beta 查到 0 条。这是**物理隔离**，比原来的
+  `require_tenant_filter()` 字符串守门强得多，但**仍然不是 RLS**：跨库聚合、
+  统一备份、schema 变更要企业侧自己处理；换成 PostgreSQL + `ROW LEVEL
+  SECURITY` 才是数据库层策略。见台账 EG-001。
+- **持久作业与写路径性能**：`POST /api/run` 仍同步执行。改后 8 并发 P95
+  **3500 ms**，与独立审查改前测的 3534.7 ms 同一量级 —— 热路径 DDL 优化
+  对写瓶颈没用。EG-009 / EG-010 未解决。
 - **多机 / 多副本一致性**：指标与限流都是**进程内内存**，N 个副本各算各的。
   真实部署要在网关或 Redis 做集中限流。
 - **集中式日志与追踪后端**：只有 sink 接口与本地文件实现，没有部署拓扑。
@@ -59,12 +68,24 @@
 在这个文件里把 0.9593 讲成成功。企业不会部署一个「在留出集上没过自己定的线」
 的检测器 —— 这一点比任何一次调参都重要。
 
-## 五、这一轮补了什么 / 还差什么
+## 五、独立审查之后：这一轮补了什么 / 还差什么
 
-补了（都是能自己验的）：真实进程级验收、Prometheus 抓取与告警规则、压测底数、
-故障演练、审计哈希链、TLS 真握手、scorecard 与 CI 守门线。
+2026-11-12 的独立审查给了 27 项发现，并明确「仓库自评分数不计入结论」。
+这一轮按它的交接规则整改：**先复现差距 → 再改 → 留修前修后证据**。
+逐项状态（✅5 / 🟡12 / ⬜10）与证据见 [整改台账](review-remediation/README.md)。
 
-还差（写进 scorecard 缺口清单）：数据库层 RLS、检测器 v3 预注册。
+补了（都能自己验）：企业模式身份绑定与按租户分库、启动期 fail-closed、
+wheel 制品在源码树外可用、请求体上限与堆栈不外泄、审计归档锚点、
+热路径 DDL 消除、游标分页、探针拆分与指标口径、压测四类状态、
+前端可选面板解耦、机器可读接口契约、CI 逐项硬门槛。
 
-> 结论一句话：**工程形态基本齐了，核心检测没过线，隔离是应用层的。**
-> 前一句靠代码，后一句靠诚实。
+**没解决的硬缺口**（不因改了一堆代码就改口）：
+
+1. 核心检测 v2 **仍未过自己的预注册线**，v3 预注册未做；
+2. 隔离是按租户分库，**不是数据库 RLS**；
+3. `POST /api/run` 仍同步阻塞，8 并发 P95 ≈ 3.5 s，与改前同量级；
+4. 单进程限流/指标、无真实业务流量、无 SSO、无多副本验证；
+5. Docker 镜像层与 GitHub CI **本轮未实测**（daemon / 远程仓库都没连）。
+
+> 结论一句话：**工程形态与可验证据补齐了一大截，但审查的三个核心判断没变。**
+> 能在本机复现并修掉的都修了；修不了的，逐条写清了为什么。
