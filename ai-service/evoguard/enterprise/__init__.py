@@ -7,12 +7,15 @@
 |---|---|---|---|
 | tenancy | 租户解析、每租户配额、SQL 隔离守门 | TenantResolver（JWT/SSO/API key） | 物理隔离 / 跨库分片 |
 | observability | 结构化日志 sink、Prometheus 指标、span 追踪 | LogSink / MetricsExporter / TraceExporter | 日志聚合后端、OTel Collector |
-| audit | 审计表、schema 版本与迁移、保留清理、逐行哈希链可验篡改 | AuditSink（外接 SIEM） | 集中式审计存储 |
+| audit | 审计表、v1→v4 迁移、保留清理、逐行哈希链、归档锚点（合法清理后仍可验） | AuditSink（外接 SIEM） | 集中式审计存储 |
 | resilience | 熔断、超时预算、SLO 计算、故障演练 | AlertSink（PagerDuty/Webhook） | 真实值班流程 |
 | tls_proxy | TLSContext 构建、代理头信任解析 | 证书轮换 / ACME | 应用内证书生命周期 |
 | scorecard | 按证据打分、输出缺口清单 | 权重与阈值可配 | 第三方认证 |
 
 **这些都不是合规认证**。`docs/enterprise-readiness.md` 写明每项的边界。
+2026-11-12 独立审查的 27 项发现与逐项状态见
+`docs/review-remediation/README.md` —— 审查明确「仓库自评分数不计入结论」，
+以台账为准。
 
 子模块按需导入（`from enterprise import tenancy`），避免任一模块出错拖垮整包。
 """

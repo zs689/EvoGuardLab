@@ -541,6 +541,32 @@ PROBES = {
 }
 
 
+def external_review_summary(root=ROOT):
+    """把独立审查的台账摘要挂在自评旁边。
+
+    独立审查明确写了「仓库自评分数不计入结论」。这个分数是模块自证，
+    九个维度里有几个是「我写的探针检查我写的模块」—— 单看 84.8 很容易
+    误以为没事了。所以必须同时显示审查口径：27 项里到底几项真完成。
+    """
+    text = _read(_p(root, "docs", "review-remediation", "README.md"))
+    if not text:
+        return None
+    import re
+    row = re.search(r"\|\s*✅\s*完成\s*\|\s*\*\*(\d+)\*\*", text)
+    part = re.search(r"\|\s*🟡\s*部分\s*\|\s*\*\*(\d+)\*\*", text)
+    none = re.search(r"\|\s*⬜\s*未做\s*\|\s*\*\*(\d+)\*\*", text)
+    if not (row and part and none):
+        return None
+    return {
+        "source": "docs/review-remediation/README.md",
+        "total": 27,
+        "done": int(row.group(1)),
+        "partial": int(part.group(1)),
+        "not_done": int(none.group(1)),
+        "note": "独立审查口径；本 scorecard 的自评分数不计入其结论。",
+    }
+
+
 def evaluate(root=ROOT):
     dims = []
     weighted = 0.0
@@ -559,20 +585,28 @@ def evaluate(root=ROOT):
         for g in d["gaps"]:
             all_gaps.append({"dimension": d["name"], "gap": g})
     return {
-        "version": 1,
+        "version": 2,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "total": total,
+        "external_review": external_review_summary(root),
         "dimensions": dims,
         "gaps": all_gaps,
-        "disclaimer": "这是按可核对证据的自评，不是认证、不是 SLA、不代表可生产部署。",
+        "disclaimer": ("这是按可核对证据的**自评**，不是认证、不是 SLA、"
+                       "不代表可生产部署；独立审查明确不计入本分数。"),
     }
 
 
 def render_markdown(report):
     L = ["# 企业就绪度自评（scorecard）", "",
          "> 总分 **%s / 100** —— %s" % (report["total"],
-                                        report["disclaimer"]), "",
-         "| 维度 | 权重 | 得分 | 缺口数 |", "|---|---|---|---|"]
+                                        report["disclaimer"]), ""]
+    ext = report.get("external_review")
+    if ext:
+        L += ["> **独立审查口径**：27 项发现中 ✅ %d 完成 / 🟡 %d 部分 / "
+              "⬜ %d 未做。**不要只看上面的分数** —— 审查明确「仓库自评分数"
+              "不计入结论」，以 [整改台账](docs/review-remediation/README.md) 为准。"
+              % (ext["done"], ext["partial"], ext["not_done"]), ""]
+    L += ["| 维度 | 权重 | 得分 | 缺口数 |", "|---|---|---|---|"]
     for d in report["dimensions"]:
         L.append("| %s | %.0f%% | %.1f/5 | %d |"
                  % (d["name"], d["weight"] * 100, d["score"], len(d["gaps"])))

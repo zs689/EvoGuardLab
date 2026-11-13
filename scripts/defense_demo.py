@@ -32,11 +32,24 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-sys.path.insert(0, os.path.join(ROOT, "ai-service", "evoguard"))
+_EVO = os.path.join(ROOT, "ai-service", "evoguard")
+IS_CHECKOUT = os.path.isdir(_EVO)
+if IS_CHECKOUT:
+    sys.path.insert(0, _EVO)
+else:
+    # wheel 场景：模块已安装在 site-packages/evoguard（EG-004）
+    try:
+        import evoguard as _pkg
+        sys.path.insert(0, os.path.dirname(_pkg.__file__))
+    except ImportError:
+        pass
 
 import security as S  # noqa: E402
 
-DEFAULT_OUT = os.path.join(ROOT, "experiments", "defense_demo_v2")
+# wheel 场景绝不往只读的安装目录写产物，改写到当前工作目录。
+DEFAULT_OUT = (os.path.join(ROOT, "experiments", "defense_demo_v2")
+               if IS_CHECKOUT
+               else os.path.join(os.getcwd(), "evoguard_demo_out"))
 SINK = "http://127.0.0.1:9/collect"      # 丢弃端口：即使被调用也连不上，且我们根本不连
 
 # 四档：off / audit / enforce / enforce + WRAP（内容隔离单独消融）

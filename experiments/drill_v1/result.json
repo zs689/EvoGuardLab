@@ -4,13 +4,13 @@
     "故障注入通过环境变量完成，属于「已知可控故障」，不是混沌工程的随机注入。",
     "没有验证长时间（小时级）稳定性与内存增长。"
   ],
-  "generated_at": "2026-11-12T19:00:08",
+  "generated_at": "2026-11-13T14:27:30",
   "results": [
     {
       "drill": "auth",
       "note": "403/401 的取舍：这里用 401（未认证），不是 403（已认证无权限），因为请求根本没有可识别的主体。",
       "passed": true,
-      "seconds": 0.55,
+      "seconds": 0.56,
       "steps": [
         {
           "expect": 401,
@@ -28,7 +28,7 @@
       "drill": "kill_switch",
       "note": "开关刻意只拦 WRITE_METHODS，GET 保持可读 —— 否则事故中运维连健康检查都用不了，等于把自己关在门外。",
       "passed": true,
-      "seconds": 1.09,
+      "seconds": 1.08,
       "steps": [
         {
           "expect": 200,

@@ -1,0 +1,134 @@
+{
+  "version": "1.0.0",
+  "status": "local-only, not published",
+  "title": "EvoGuardLab HTTP API contract v1",
+  "generated_for_revision": "post-793c6d1",
+  "compatibility": {
+    "policy": "新增字段向后兼容；删除/改名/改语义需升主版本并给出迁移窗口。",
+    "deprecation": "先在响应里加 deprecated 标记，至少保留一个版本再移除。",
+    "frozen_fields": ["detected", "decision", "attempted", "executed", "effect", "reason"],
+    "note": "六字段契约表示「检测建议 != 实际拦截」，任何版本都不允许把 detected 当作 executed 报。"
+  },
+  "base": {
+    "scheme": "http",
+    "bind_default": "127.0.0.1",
+    "port_default": 8770,
+    "bind_env": "AGENTLAB_BIND",
+    "content_type": "application/json; charset=utf-8",
+    "notes": "生产部署必须置于 TLS 反代之后；应用本身不终止 TLS。"
+  },
+  "auth": {
+    "demo": {
+      "mode": "AGENTLAB_MODE=demo",
+      "required": false,
+      "tenant_source": "X-Tenant-Id（仅本地演示，不可信）",
+      "warning": "默认无鉴权，只可绑回环。"
+    },
+    "enterprise": {
+      "mode": "AGENTLAB_MODE=enterprise",
+      "required": true,
+      "scheme": "Authorization: Bearer <token>",
+      "token_whitelist": "AGENTLAB_IDENTITY_MAP 的键",
+      "identity_source": "token -> {tenant, actor, roles}",
+      "ignored_headers": ["X-Tenant-Id", "X-Actor"],
+      "roles": ["reader", "executor", "approver", "ops"],
+      "startup_fail_closed": ["AGENTLAB_API_TOKEN", "AGENTLAB_IDENTITY_MAP", "AGENTLAB_AUDIT_DB", "AGENTLAB_DB", "AGENTLAB_APPROVAL_BACKEND"]
+    }
+  },
+  "common_request_headers": {
+    "Authorization": "Bearer token（企业模式必需）",
+    "X-Tenant-Id": "仅 demo 生效；企业模式忽略",
+    "X-Actor": "仅 demo 生效；企业模式忽略",
+    "Content-Type": "POST 需要 application/json"
+  },
+  "common_response_headers": {
+    "X-Request-Id": "每条响应都回显，用于日志/审计对账",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'self' ..."
+  },
+  "limits": {
+    "max_body_bytes": 65536,
+    "max_body_bytes_env": "AGENTLAB_MAX_BODY_BYTES",
+    "over_body_status": 413,
+    "max_page_size": 200,
+    "max_page_size_env": "AGENTLAB_MAX_PAGE_SIZE",
+    "rate_limit_default": 60,
+    "rate_window_default_seconds": 60
+  },
+  "errors": {
+    "shape": {"error": {"code": "string", "message": "string"}, "request_id": "string"},
+    "codes": [
+      {"code": "E_BAD_REQUEST", "http": 400, "meaning": "请求体/参数不合法"},
+      {"code": "E_TOO_LARGE", "http": 413, "meaning": "请求体超过硬上限"},
+      {"code": "E_FORBIDDEN", "http": 403, "meaning": "身份无对应角色"},
+      {"code": "E_NOT_FOUND", "http": 404, "meaning": "路由或资源不存在"},
+      {"code": "E_UNAVAILABLE", "http": 503, "meaning": "依赖未启用"},
+      {"code": "E_NOT_READY", "http": 503, "meaning": "企业模式缺审批后端，写工具禁用"},
+      {"code": "E_INTERNAL", "http": 500, "meaning": "内部错误；**不含堆栈**，只给 request_id"},
+      {"code": "identity_not_bound", "http": 401, "meaning": "token 不在身份映射表"},
+      {"code": "rate_limited", "http": 429, "meaning": "限流；带 retry_after"},
+      {"code": "tenant_quota", "http": 429, "meaning": "租户配额耗尽"},
+      {"code": "kill_switch", "http": 503, "meaning": "停止开关拦下写请求"},
+      {"code": "body_too_large", "http": 413, "meaning": "入口守卫拒收大 body"},
+      {"code": "invalid_tenant", "http": 400, "meaning": "demo 模式租户头不合法"}
+    ]
+  },
+  "pagination": {
+    "endpoint": "/api/runs",
+    "params": {
+      "limit": "1..MAX_PAGE_SIZE，默认 60；超出自动 clamp",
+      "cursor": "上一页最后一条的 started_at；WHERE started_at < cursor"
+    },
+    "order": "started_at DESC, id DESC（稳定排序键）",
+    "response": {"n": "本页条数", "items": "数组", "limit": "生效上限", "next_cursor": "下一页游标或 null"},
+    "note": "响应体大小不随历史总量线性增长。"
+  },
+  "routes": [
+    {"method": "GET", "path": "/api/live", "kind": "probe", "auth_in_enterprise": true, "description": "存活：不碰 DB、不进业务 SLI", "response": {"ok": true}},
+    {"method": "GET", "path": "/healthz", "kind": "probe", "auth_in_enterprise": true, "description": "存活探针别名"},
+    {"method": "GET", "path": "/api/ready", "kind": "probe", "auth_in_enterprise": true, "description": "就绪：DB/审计不满足返回 503", "response": {"ready": "bool", "checks": {}, "audit": {}}},
+    {"method": "GET", "path": "/api/health", "kind": "diagnostic", "auth_in_enterprise": true, "description": "诊断信息（保留原字段）", "response": {"ok": true, "version": "string", "mode": "string", "tenant": "string"}},
+    {"method": "GET", "path": "/api/metrics", "kind": "business", "auth_in_enterprise": true, "description": "前端唯一 JSON 数字来源；缺失返回 404", "errors": ["E_NOT_FOUND"]},
+    {"method": "GET", "path": "/api/metrics/prometheus", "kind": "metrics", "auth_in_enterprise": true, "description": "Prometheus 文本", "content_type": "text/plain; version=0.0.4; charset=utf-8"},
+    {"method": "GET", "path": "/metrics", "kind": "metrics", "auth_in_enterprise": true, "description": "Prometheus 抓取根路径", "content_type": "text/plain; version=0.0.4; charset=utf-8"},
+    {"method": "GET", "path": "/api/meta", "kind": "business", "auth_in_enterprise": true, "description": "Agent/故障/任务/组合元数据"},
+    {"method": "GET", "path": "/api/real-model", "kind": "business", "auth_in_enterprise": true, "description": "真实模型评测进度；不用 mtime 冒充完成"},
+    {"method": "GET", "path": "/api/taxonomy", "kind": "business", "auth_in_enterprise": true, "description": "故障分类法 Markdown"},
+    {"method": "GET", "path": "/api/report", "kind": "business", "auth_in_enterprise": true, "description": "实验报告 Markdown"},
+    {"method": "GET", "path": "/api/skills", "kind": "business", "auth_in_enterprise": true, "description": "技能库列表"},
+    {"method": "GET", "path": "/api/experiences", "kind": "business", "auth_in_enterprise": true, "description": "经验库列表"},
+    {"method": "GET", "path": "/api/runs", "kind": "business", "auth_in_enterprise": true, "description": "运行历史（游标分页）", "pagination": true},
+    {"method": "GET", "path": "/api/runs/{rid}", "kind": "business", "auth_in_enterprise": true, "description": "单次运行详情：steps/diagnoses/recoveries/faults"},
+    {"method": "POST", "path": "/api/run", "kind": "business", "auth_in_enterprise": true, "roles_required": ["executor"], "description": "触发一次实验运行；企业模式还需审批后端", "request": {"agent_type": "string", "task_id": "string", "fault_type": "string", "mode": "baseline|A|B|C|D|R", "fault_chain": "optional array"}, "errors": ["E_BAD_REQUEST", "E_FORBIDDEN", "E_NOT_READY"]}
+  ],
+  "static_routes": [
+    {"method": "GET", "path": "/", "description": "前端首页"},
+    {"method": "GET", "path": "/index.html", "description": "前端首页"},
+    {"method": "GET", "path": "/static/{path}", "description": "静态资源；路径穿越一律 404"}
+  ],
+  "audit": {
+    "store": "AGENTLAB_AUDIT_DB（sqlite）",
+    "required_field": "tenant_id",
+    "integrity": "逐行 SHA-256 链；合法保留期清理写 audit_anchors 归档锚点",
+    "verify": "AuditStore.verify() 返回 (ok, info)",
+    "failure_signal": "evoguard_audit_failures_total + /api/ready 变 503",
+    "probe_exclusion": "探针请求不写业务审计行"
+  },
+  "six_field_contract": [
+    {"field": "detected", "meaning": "检测器是否命中"},
+    {"field": "decision", "meaning": "守卫给出的建议"},
+    {"field": "attempted", "meaning": "是否尝试调用工具"},
+    {"field": "executed", "meaning": "工具是否真的执行（真实副作用）"},
+    {"field": "effect", "meaning": "产生了什么效果"},
+    {"field": "reason", "meaning": "判定原因"}
+  ],
+  "known_gaps": [
+    "POST /api/run 仍同步阻塞，没有持久作业 ID / 轮询 / 取消 / 幂等键（EG-009）。",
+    "浏览器看板没有与企业鉴权兼容的会话方案（EG-020）。",
+    "没有跨副本共享限流层（EG-014）。",
+    "SDK 与自动化兼容性测试尚未交付。"
+  ]
+}

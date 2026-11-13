@@ -10,17 +10,29 @@
   2. 前端静态文件从 frontend/ 目录提供，前后端同源，不需要 CORS 配置
   3. 所有接口只读；跑实验走 POST /api/run，明确由用户点击触发
 """
+import hmac
 import json
 import os
 import re
 import sys
+import threading
 import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
-sys.path.insert(0, os.path.join(ROOT, "ai-service", "evoguard"))
+# EG-004：checkout 布局里模块在 ROOT/ai-service/evoguard；wheel 布局里
+# 它们已装到 site-packages/evoguard。两种都要能让 `import core` 成功。
+_EVO = os.path.join(ROOT, "ai-service", "evoguard")
+if os.path.isdir(_EVO):
+    sys.path.insert(0, _EVO)
+else:
+    try:
+        import evoguard as _pkg
+        sys.path.insert(0, os.path.dirname(_pkg.__file__))
+    except ImportError:
+        pass
 
 import core       # noqa: E402
 import sim        # noqa: E402
@@ -106,19 +118,106 @@ def _audit(rid, method, path, status, actor, decision):
                   "status": status, "actor": actor, "decision": decision})
 
 
-METRICS = os.path.join(ROOT, "experiments", "metrics.json")
-REAL_METRICS = os.path.join(ROOT, "experiments", "real_model", "metrics.json")
-REAL_REPORT = os.path.join(ROOT, "experiments", "real_model", "report.md")
-REAL_ANALYSIS = os.path.join(ROOT, "experiments", "real_model", "analysis.md")
-REAL_ATTRIBUTION = os.path.join(ROOT, "experiments", "real_model", "attribution.md")
-REAL_CHECKPOINT = os.path.join(ROOT, "experiments", "real_model", "runs.jsonl")
-REPORT = os.path.join(ROOT, "experiments", "evolution_report.md")
-TAXONOMY = os.path.join(ROOT, "docs", "taxonomy.md")
-FRONTEND = os.path.join(ROOT, "frontend")
-DB = os.path.join(ROOT, "data", "evoguard.db")
+# ---- 集中配置（EG-011）--------------------------------------------------
+# 所有可变路径与只读资产集中在这里解析。默认仍是仓库内相对路径，
+# 因此 checkout 直接跑不受影响；容器/企业部署用环境变量指到可写挂载点。
+ASSET_ROOT = os.environ.get("AGENTLAB_ASSET_ROOT", ROOT)
+DATA_ROOT = os.environ.get("AGENTLAB_DATA_ROOT", os.path.join(ROOT, "data"))
+# 业务库：显式环境变量优先，其次落在 DATA_ROOT。以前写死在仓库里，
+# 只读根文件系统 + 独立数据卷这种最基本的部署形态都起不来。
+DB = os.path.abspath(os.environ.get("AGENTLAB_DB")
+                     or os.path.join(DATA_ROOT, "evoguard.db"))
+TENANT_DB_ROOT = os.path.join(DATA_ROOT, "tenants")
+
+METRICS = os.path.join(ASSET_ROOT, "experiments", "metrics.json")
+REAL_METRICS = os.path.join(ASSET_ROOT, "experiments", "real_model", "metrics.json")
+REAL_REPORT = os.path.join(ASSET_ROOT, "experiments", "real_model", "report.md")
+REAL_ANALYSIS = os.path.join(ASSET_ROOT, "experiments", "real_model", "analysis.md")
+REAL_ATTRIBUTION = os.path.join(ASSET_ROOT, "experiments", "real_model", "attribution.md")
+REAL_CHECKPOINT = os.path.join(ASSET_ROOT, "experiments", "real_model", "runs.jsonl")
+REPORT = os.path.join(ASSET_ROOT, "experiments", "evolution_report.md")
+TAXONOMY = os.path.join(ASSET_ROOT, "docs", "taxonomy.md")
+FRONTEND = os.path.join(ASSET_ROOT, "frontend")
+
+# ---- 硬上限（EG-005 / EG-012）-------------------------------------------
+MAX_BODY_BYTES = int(os.environ.get("AGENTLAB_MAX_BODY_BYTES", 65536))
+MAX_PAGE_SIZE = int(os.environ.get("AGENTLAB_MAX_PAGE_SIZE", 200))
+# 探针路由：不进业务 SLI，也不该触发「无业务流量」告警（EG-013）。
+PROBE_PATHS = frozenset(("/metrics", "/api/metrics/prometheus",
+                         "/api/live", "/healthz", "/api/ready"))
+
+# ---- 运行模式与身份绑定（EG-001 / EG-002）--------------------------------
+# demo：默认，离线零依赖，X-Tenant-Id 仅作本地演示作用域（不可信）。
+# enterprise：身份必须由 token→(tenant,actor,roles) 映射表给出，
+#             忽略客户端自报的租户头；缺必要配置就在启动期拒绝。
+MODE = os.environ.get("AGENTLAB_MODE", "demo").strip().lower()
+if MODE not in ("demo", "enterprise"):
+    MODE = "demo"
+
+
+def _load_identity_map():
+    raw = os.environ.get("AGENTLAB_IDENTITY_MAP", "").strip()
+    if not raw:
+        return {}
+    try:
+        obj = json.loads(raw)
+        return obj if isinstance(obj, dict) else {}
+    except ValueError:
+        return {}
+
+
+IDENTITY_MAP = _load_identity_map()
+
+
+def lookup_identity(presented):
+    """企业模式的 token 白名单就是映射表的键；用恒定时间比对，避免时序侧信道。
+
+    不能直接用 `IDENTITY_MAP.get(token)`：字典哈希查找的时间会随键分布
+    变化。表通常很小（几个到几十个身份），线性 compare_digest 足够。
+    """
+    presented = str(presented or "")
+    for key, ident in IDENTITY_MAP.items():
+        try:
+            if hmac.compare_digest(str(key).encode("utf-8"),
+                                   presented.encode("utf-8")):
+                return ident
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+# 企业模式下写工具需要审批后端；没配就禁用写工具，绝不「先执行再补审批」。
+APPROVAL_BACKEND = os.environ.get("AGENTLAB_APPROVAL_BACKEND", "").strip()
+
+# EG-006：运行时审计写失败必须**有信号**。以前 except: pass，
+# 监控永远看不到「成功响应已发出但审计没落盘」这种最危险的状态。
+AUDIT_FAILURES = 0
+_AUDIT_FAIL_LOCK = threading.Lock()
+
+
+def record_audit_failure():
+    global AUDIT_FAILURES
+    with _AUDIT_FAIL_LOCK:
+        AUDIT_FAILURES += 1
+    if METRICS_REG is not None:
+        METRICS_REG.inc("evoguard_audit_failures_total")
+
+
+def audit_state():
+    """给就绪探针用：审计不可用 / 写失败都不算 ready。"""
+    if AUDIT is None:
+        return {"ok": False, "reason": "audit_not_configured"}
+    if AUDIT_FAILURES:
+        return {"ok": False, "reason": "audit_write_failed",
+                "failures": AUDIT_FAILURES}
+    return {"ok": True}
+
 
 ROUTES = [
     ("GET", r"^/api/health$", "h_health"),
+    ("GET", r"^/api/live$", "h_live"),
+    ("GET", r"^/healthz$", "h_live"),
+    ("GET", r"^/api/ready$", "h_ready"),
     ("GET", r"^/api/metrics$", "h_metrics"),
     ("GET", r"^/api/metrics/prometheus$", "h_metrics_prometheus"),
     ("GET", r"^/metrics$", "h_metrics_prometheus"),
@@ -140,6 +239,56 @@ def _read_json(path, default):
             return json.load(f)
     except Exception:
         return default
+
+
+# ---- 业务库工厂（EG-010 / EG-001）----------------------------------------
+# 以前每个 handler 都 `core.Store(DB)`，而 Store.__init__ 会跑一遍
+# CREATE TABLE IF NOT EXISTS；/api/health 每次请求还要三次 COUNT。
+# 这里按路径缓存一个已初始化的实例：Store 的每个方法自己开连接，
+# 实例本身无状态，多线程共享安全。
+_STORES = {}
+_STORES_LOCK = threading.Lock()
+
+
+def tenant_db_path(tenant_id):
+    """按租户分库 —— **物理隔离**，不是「拼一句 WHERE」的字符串守门。
+
+    sqlite 没有行级安全（RLS）；在单文件数据库里声称租户隔离是骗人的。
+    这里给每个租户一个独立 sqlite 文件，跨租户读不到就是读不到。
+    default 沿用原库，保证既有归档与 861 项测试不变。
+    """
+    tid = tenant_id or "default"
+    if tid == "default":
+        return DB
+    # 租户名会进文件路径，必须白名单，防 ../ 穿越
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", tid):
+        raise ValueError("非法租户 ID：%r" % tid)
+    return os.path.join(TENANT_DB_ROOT, tid, "evoguard.db")
+
+
+def get_store(tenant_id="default"):
+    path = tenant_db_path(tenant_id)
+    with _STORES_LOCK:
+        store = _STORES.get(path)
+        if store is None:
+            store = core.Store(path)            # 唯一一次 schema DDL
+            # skills / experience 的建表也移出请求路径（EG-010）
+            experience.ensure_schema(store)
+            skills.ensure_schema(store)
+            # 列表排序命中索引，避免 SCAN + TEMP B-TREE（EG-012）
+            with store.conn() as c:
+                c.execute("CREATE INDEX IF NOT EXISTS idx_runs_started_at "
+                          "ON runs(started_at DESC)")
+            store._eg_ready = True
+            _STORES[path] = store
+    return store
+
+
+def store_health(tenant_id="default"):
+    try:
+        return get_store(tenant_id).health()
+    except Exception as exc:                    # noqa: BLE001
+        return {"ok": False, "error": type(exc).__name__}
 
 
 def _read_text(path, default=""):
@@ -189,8 +338,26 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+    def _drain(self, n):
+        """分块读完并丢弃，不把内容攒进内存。"""
+        left = n
+        while left > 0:
+            try:
+                chunk = self.rfile.read(min(8192, left))
+            except OSError:
+                break
+            if not chunk:
+                break
+            left -= len(chunk)
+
     def _err(self, code, msg, http=400):
-        self._send(http, {"error": {"code": code, "message": msg}})
+        # 对外只给稳定错误码 + request_id；内部细节（堆栈、路径、SQL）
+        # 一律不进响应体。排障靠服务端日志里的同一个 request_id。
+        payload = {"error": {"code": code, "message": msg}}
+        rid = getattr(self, "_rid", "")
+        if rid:
+            payload["request_id"] = rid
+        self._send(http, payload)
 
     def _static(self, path):
         rel = "index.html" if path in ("/", "/index.html") else path.lstrip("/")
@@ -222,8 +389,13 @@ class Handler(BaseHTTPRequestHandler):
                 except core.ApiError as e:
                     return self._err(e.code, e.message, e.http)
                 except Exception:
+                    # 堆栈只写受控服务端日志，不带进响应（EG-005）。
+                    rid = getattr(self, "_rid", "")
+                    print("[error] request_id=%s %s" % (rid, fn),
+                          file=sys.stderr, flush=True)
                     traceback.print_exc()
-                    return self._err("E_INTERNAL", traceback.format_exc()[-500:], 500)
+                    return self._err("E_INTERNAL",
+                                     "内部错误，请提供 request_id 联系管理员", 500)
         return self._err("E_NOT_FOUND", "接口不存在：%s" % path, 404)
 
     def _reject(self, status, rid, method, path, actor, decision, retry_after=None):
@@ -245,7 +417,7 @@ class Handler(BaseHTTPRequestHandler):
                             "method": method, "path": path, "status": status,
                             "decision": decision})
             except Exception:           # noqa: BLE001 - 审计失败不改响应
-                pass
+                record_audit_failure()
 
     def _guarded(self, method):
         """统一入口：request-id、鉴权、限流、stop switch、租户、配额、审计、指标。
@@ -259,11 +431,44 @@ class Handler(BaseHTTPRequestHandler):
         self._tenant_id = "default"
         # 回显到响应头：客户端报「某次请求出错」时能直接对上服务端日志与审计行。
         self._rid = rid
+        self._roles = ()
+        self._identity_verified = False
         t0 = time.perf_counter()
 
-        ok, reason, actor = CONTROLS.authorize(self.headers)
-        if not ok:
-            return self._reject(401, rid, method, path, actor, reason)
+        # EG-005：入口就有硬上限。以前按 Content-Length 无脑 read()，
+        # 一个 100MiB 的声明长度就能把进程内存吃满。超限不读正文、直接关连接。
+        cl = self.headers.get("Content-Length")
+        if cl is not None:
+            try:
+                n = int(cl)
+            except ValueError:
+                n = -1
+            if n < 0 or n > MAX_BODY_BYTES:
+                # 分块排掉**整个**正文再回 413：只排前 64KiB 的话，
+                # 剩余数据还留在 socket 里，客户端有时拿到 413、有时
+                # 直接 RST（实测同一检查两次结果不同）。排空全部能让
+                # 响应稳定送达；_drain 每次只读 8KB 且丢弃，内存始终
+                # 有界 —— 这里防的是「按 Content-Length 一次性分配」，
+                # 不是零 I/O。
+                self._drain(n)
+                self.close_connection = True
+                return self._reject(413, rid, method, path, "anonymous",
+                                    "body_too_large")
+
+        if MODE == "enterprise":
+            # 企业模式的 token 白名单 = IDENTITY_MAP 的键。
+            # 不能先过 CONTROLS.authorize：那层只认单一的
+            # AGENTLAB_API_TOKEN，会让映射表里其余身份全部 401。
+            presented = (self.headers.get("Authorization") or "").partition(" ")[2].strip()
+            ident = lookup_identity(presented)
+            if not isinstance(ident, dict) or not ident.get("tenant"):
+                return self._reject(401, rid, method, path, "anonymous",
+                                    "identity_not_bound")
+            actor = str(ident.get("actor") or "anonymous")
+        else:
+            ok, reason, actor = CONTROLS.authorize(self.headers)
+            if not ok:
+                return self._reject(401, rid, method, path, actor, reason)
         allowed, retry_after = CONTROLS.check_rate(actor)
         if not allowed:
             return self._reject(429, rid, method, path, actor,
@@ -271,7 +476,18 @@ class Handler(BaseHTTPRequestHandler):
         if CONTROLS.kill_switch(method):
             return self._reject(503, rid, method, path, actor, "kill_switch")
 
-        if TENANT_RESOLVER is not None:
+        if MODE == "enterprise":
+            # EG-001：租户/主体/角色全部来自已验证的映射，客户端自报的
+            # X-Tenant-Id 与 X-Actor 一律忽略。
+            self._tenant_id = str(ident["tenant"])
+            self._roles = tuple(ident.get("roles") or ())
+            self._identity_verified = True
+            if TENANT_QUOTA is not None:
+                q_ok, q_retry = TENANT_QUOTA.check(self._tenant_id)
+                if not q_ok:
+                    return self._reject(429, rid, method, path, actor,
+                                        "tenant_quota", q_retry)
+        elif TENANT_RESOLVER is not None:
             tenant = TENANT_RESOLVER.resolve(self.headers)
             if tenant is None:
                 return self._reject(400, rid, method, path, actor,
@@ -288,14 +504,21 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             status = self._response_status or 500
             latency_ms = round((time.perf_counter() - t0) * 1000.0, 3)
+            # EG-013：探针/抓取流量单独计数，不进业务可用率与延迟 SLI。
+            # 否则「只有 Prometheus 在抓、没有任何业务」也会被算成有流量。
+            is_probe = path in PROBE_PATHS
             if METRICS_REG is not None:
                 label = _route_label(path)
-                METRICS_REG.inc("evoguard_requests_total",
-                                {"route": label, "status": str(status)})
-                METRICS_REG.observe("evoguard_request_duration_seconds",
-                                    latency_ms / 1000.0, {"route": label})
+                if is_probe:
+                    METRICS_REG.inc("evoguard_probe_requests_total",
+                                    {"route": label, "status": str(status)})
+                else:
+                    METRICS_REG.inc("evoguard_requests_total",
+                                    {"route": label, "status": str(status)})
+                    METRICS_REG.observe("evoguard_request_duration_seconds",
+                                        latency_ms / 1000.0, {"route": label})
             _audit(rid, method, path, status, actor, "allowed")
-            if AUDIT is not None:
+            if AUDIT is not None and not is_probe:
                 try:
                     AUDIT.emit({"tenant_id": self._tenant_id,
                                 "request_id": rid, "actor": actor,
@@ -303,7 +526,7 @@ class Handler(BaseHTTPRequestHandler):
                                 "status": status, "decision": "allowed",
                                 "latency_ms": latency_ms})
                 except Exception:       # noqa: BLE001
-                    pass
+                    record_audit_failure()
             if TRACER is not None:
                 TRACER.record("http.request", latency_ms,
                               route=_route_label(path), status=status)
@@ -315,17 +538,53 @@ class Handler(BaseHTTPRequestHandler):
         self._guarded("POST")
 
     # ---------------- 接口 ----------------
+    # ---------------- 运维探针（EG-013）--------------------------------
+    def h_live(self):
+        """存活：只证明进程还能回应。**不碰数据库、不跑 COUNT、不进业务 SLI**。
+
+        以前 /api/health 会建 Store 并执行三次 COUNT，Kubernetes liveness
+        每分钟打一次就等于每分钟给数据库加三次读；而且探针流量混进
+        evoguard_requests_total，「无业务流量」告警永远不响。
+        """
+        self._send(200, {"ok": True})
+
+    def h_ready(self):
+        """就绪：依赖不满足就 503，让反代/编排把流量摘走。"""
+        db = store_health(self._tenant_id)
+        audit = audit_state()
+        checks = {
+            "db": bool(db.get("ok", True)),
+            "audit": audit["ok"] if MODE == "enterprise"
+                     else (AUDIT is None or audit["ok"]),
+        }
+        ready = all(checks.values())
+        self._send(200 if ready else 503, {
+            "ready": ready,
+            "mode": MODE,
+            "checks": checks,
+            "audit": audit,
+            "version": VERSION,
+        })
+
     def h_health(self):
-        store = core.Store(DB)
+        """诊断用（保留原字段，兼容既有前端与冒烟测试）。
+
+        用缓存的 Store 而不是每次 new —— 热路径不再重复跑 schema DDL。
+        要做存活/就绪判断请用 /api/live 与 /api/ready。
+        """
         d = CONTROLS.describe()
         self._send(200, {"ok": True, "version": VERSION,
                          "auth_enabled": d["auth_enabled"],
                          "rate_limit": d["rate_limit"],
+                         "mode": MODE,
                          "tenant": getattr(self, "_tenant_id", "default"),
+                         "identity_verified": self._identity_verified,
                          "audit_enabled": AUDIT is not None,
                          "audit_error": AUDIT_ERROR,
-                         "db": store.health(),
-                         "metrics_exists": os.path.exists(METRICS)})
+                         "audit_failures": AUDIT_FAILURES,
+                         "db": store_health(self._tenant_id),
+                         "metrics_exists": os.path.exists(METRICS),
+                         "db_path": tenant_db_path(self._tenant_id)})
 
     def h_metrics_prometheus(self):
         """Prometheus 文本格式；企业接 scrape 即可。
@@ -405,16 +664,14 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, {"markdown": _read_text(REPORT, "（未生成报告）")})
 
     def h_skills(self):
-        store = core.Store(DB)
-        skills.ensure_schema(store)
+        store = get_store(self._tenant_id)
         rows = skills.list_skills(store)
         for r in rows:
             r["chain"] = core.as_chain(r["strategy"])
         self._send(200, {"n": len(rows), "items": rows})
 
     def h_experiences(self):
-        store = core.Store(DB)
-        experience.ensure_schema(store)
+        store = get_store(self._tenant_id)
         with store.conn() as c:
             rows = [dict(r) for r in c.execute(
                 "SELECT id,task_type,failure_type,recovery_action,recovery_result,"
@@ -426,19 +683,31 @@ class Handler(BaseHTTPRequestHandler):
                          "items": rows})
 
     def h_runs(self):
-        store = core.Store(DB)
-        m = re.search(r"[?&]limit=(\d+)", self.path)
-        limit = int(m.group(1)) if m else 60
+        # EG-012：以前 `limit` 由查询串直接 int()，客户端可以要 2^31-1 行，
+        # 一次把整张 runs 表拉进内存。现在设上限，并用 started_at 做稳定游标。
+        store = get_store(self._tenant_id)
+        qs = self.path.split("?", 1)[1] if "?" in self.path else ""
+        m = re.search(r"(?:^|&)limit=(\d+)", qs)
+        limit = min(MAX_PAGE_SIZE, max(1, int(m.group(1)) if m else 60))
+        cm = re.search(r"(?:^|&)cursor=([0-9]+(?:\.[0-9]+)?)", qs)
+        cursor = float(cm.group(1)) if cm else None
+        where, params = "", []
+        if cursor is not None:
+            where = " WHERE r.started_at < ?"
+            params.append(cursor)
+        sql = ("SELECT r.id,r.mode,r.status,r.success,r.tokens,r.latency_ms,"
+               "r.started_at,e.agent_type,e.task_id,e.fault_type "
+               "FROM runs r LEFT JOIN experiments e ON e.id=r.experiment_id"
+               + where + " ORDER BY r.started_at DESC, r.id DESC LIMIT ?")
+        params.append(limit)
         with store.conn() as c:
-            rows = [dict(r) for r in c.execute(
-                "SELECT r.id,r.mode,r.status,r.success,r.tokens,r.latency_ms,"
-                "e.agent_type,e.task_id,e.fault_type "
-                "FROM runs r LEFT JOIN experiments e ON e.id=r.experiment_id "
-                "ORDER BY r.started_at DESC LIMIT ?", (limit,)).fetchall()]
-        self._send(200, {"n": len(rows), "items": rows})
+            rows = [dict(r) for r in c.execute(sql, params).fetchall()]
+        next_cursor = rows[-1]["started_at"] if len(rows) == limit else None
+        self._send(200, {"n": len(rows), "items": rows,
+                         "limit": limit, "next_cursor": next_cursor})
 
     def h_run(self, rid):
-        store = core.Store(DB)
+        store = get_store(self._tenant_id)
         run = store.get_run(rid)
         out = {"run": run,
                "steps": store.list_steps(rid),
@@ -448,7 +717,19 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, out)
 
     def h_run_once(self):
+        # 二次校验：_guarded 已在入口挡过，这里保留纵深防御，
+        # 避免将来有人绕过统一入口直接调本方法。
         n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_BODY_BYTES:
+            return self._err("E_TOO_LARGE", "请求体超过上限", 413)
+        # EG-002：企业模式下写工具默认禁用，除非身份带 executor 角色
+        # 且配置了审批后端。缺能力时**不调用写工具**，不是先跑再补审批。
+        if MODE == "enterprise":
+            if "executor" not in self._roles:
+                return self._err("E_FORBIDDEN", "该身份没有执行角色", 403)
+            if not APPROVAL_BACKEND:
+                return self._err("E_NOT_READY",
+                                 "企业模式未配置审批后端，写工具已禁用", 503)
         try:
             body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
         except Exception:
@@ -466,9 +747,7 @@ class Handler(BaseHTTPRequestHandler):
             for f in body["fault_chain"]:
                 if not isinstance(f, dict) or f.get("type") not in sim.FAULT_TYPES:
                     return self._err("E_BAD_REQUEST", "fault_chain 里有未知故障类型")
-        store = core.Store(DB)
-        experience.ensure_schema(store)
-        skills.ensure_schema(store)
+        store = get_store(self._tenant_id)
         exp = store.create_experiment("web/%s/%s/%s/%s" % (at, tid, ft, mode),
                                       at, tid, ft, 0, 7, mode)
         if body.get("fault_chain"):
@@ -502,10 +781,43 @@ def _parse_port(argv):
     return 8770
 
 
+def validate_enterprise_config():
+    """EG-002：企业入口的启动期 fail-closed 校验。
+
+    目的不是「多几个开关」，是让「看起来起来了、其实缺了身份源和审计」
+    这种最危险的状态根本起不来。返回人类可读的缺失项列表；空列表才放行。
+    """
+    errors = []
+    if not CONTROLS.config.auth_enabled:
+        errors.append("AGENTLAB_API_TOKEN 未设置（显式开关：企业模式不允许"
+                      "无鉴权启动；实际 token 白名单是 IDENTITY_MAP 的键）")
+    if not IDENTITY_MAP:
+        errors.append("AGENTLAB_IDENTITY_MAP 未设置或不是合法 JSON "
+                      "（token→tenant/actor/roles 绑定）")
+    else:
+        for tok, ident in IDENTITY_MAP.items():
+            if not isinstance(ident, dict) or not ident.get("tenant"):
+                errors.append("身份映射 %r 缺 tenant" % tok)
+            elif not re.fullmatch(r"[A-Za-z0-9_-]{1,64}",
+                                  str(ident["tenant"])):
+                errors.append("身份映射 %r 的 tenant 含非法字符" % tok)
+    if not os.environ.get("AGENTLAB_AUDIT_DB"):
+        errors.append("AGENTLAB_AUDIT_DB 未设置（企业模式必须持久化审计）")
+    if AUDIT_ERROR:
+        errors.append("审计库初始化失败：" + AUDIT_ERROR)
+    if not os.environ.get("AGENTLAB_DB"):
+        errors.append("AGENTLAB_DB 未设置（业务库必须指向可写持久卷）")
+    if not APPROVAL_BACKEND:
+        errors.append("AGENTLAB_APPROVAL_BACKEND 未设置（写工具默认禁用）")
+    return errors
+
+
 def main():
     # 启动期 fail-closed：配置不合法（坏数值 / 阈值文件缺失或损坏）就不起来，
     # 避免带着半吊子控制对外提供服务。冒烟测试直接构造 Server，不走这里。
     errors = CONTROLS.validate_config()
+    if MODE == "enterprise":
+        errors = errors + validate_enterprise_config()
     if errors:
         for e in errors:
             print("配置错误：" + e, file=sys.stderr, flush=True)
@@ -516,9 +828,24 @@ def main():
     port = _parse_port(sys.argv[1:])
     if not os.path.isdir(FRONTEND):
         raise SystemExit("找不到前端目录：%s" % FRONTEND)
-    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print("EvoGuard  ->  http://127.0.0.1:%d" % port, flush=True)
-    print("数据：%s" % METRICS, flush=True)
+    # 本地默认只绑回环（最小暴露面）；容器/内网部署显式设为 0.0.0.0，
+    # 但必须置于 TLS 反代之后并开启鉴权 —— Dockerfile 里写明了这一点。
+    bind = os.environ.get("AGENTLAB_BIND", "127.0.0.1")
+    srv = ThreadingHTTPServer((bind, port), Handler)
+    # 优雅下线：SIGTERM 默认会直接杀掉进程，正在处理的请求会被截断。
+    # shutdown() 必须在另一个线程里调（同线程会死锁）。
+    import signal
+
+    def _stop(_signum, _frame):
+        threading.Thread(target=srv.shutdown, daemon=True).start()
+
+    try:
+        signal.signal(signal.SIGTERM, _stop)
+    except (ValueError, OSError):        # 非主线程里注册不了，忽略
+        pass
+    print("EvoGuard  ->  http://%s:%d (mode=%s)" % (bind, port, MODE),
+          flush=True)
+    print("数据：%s" % DB, flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

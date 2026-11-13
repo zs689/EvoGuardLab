@@ -1,11 +1,19 @@
 # EvoGuardLab — 告警规则（参考）
 #
 # 用到的指标（都来自 ai-service/api/app.py 的接线）：
-#   evoguard_requests_total{route}          总请求数
-#   evoguard_rejected_total{decision}       被守卫拒绝的请求
+#   evoguard_requests_total{route}           业务请求数（**不含探针/抓取**）
+#   evoguard_probe_requests_total{route}     存活/就绪/抓取等运维探针，单独计数
+#   evoguard_audit_failures_total            运行时审计写失败（EG-006）
+#   evoguard_rejected_total{decision}        被守卫拒绝的请求
 #        decision ∈ missing_or_malformed_token | invalid_token | rate_limited
-#                   kill_switch | invalid_tenant | tenant_quota
-#   evoguard_request_duration_seconds{route} 延迟直方图
+#                   kill_switch | invalid_tenant | tenant_quota | identity_not_bound
+#                   body_too_large
+#   evoguard_request_duration_seconds{route} 业务延迟直方图（不含探针）
+#
+# EG-013：以前 /metrics、/api/health 这些抓取流量也计入业务 SLI，
+# 于是「只有 Prometheus 在抓、完全没有业务」会被算成有流量，
+# EvoGuardNoTraffic 永远不响。现在探针单独一个 counter，下面的规则
+# 只看业务 counter，语义才对得上。
 #
 # 判定线是**默认值，不是实测值**：本仓库没有生产流量，这些阈值标定的是
 # 「会让人半夜起来看一眼」的量级，接真流量后必须重新标定（见 docs/enterprise-readiness.md）。
@@ -30,8 +38,25 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "实例活着但 10 分钟没有流量"
-          description: "要么上游断了，要么 scrape 到了错的端口。指标为 0 不等于系统健康。"
+          summary: "实例活着但 10 分钟没有业务流量"
+          description: "探针流量不计入本指标（EG-013），所以这里为 0 是真的没有业务请求。先看上游，再看是不是抓错了端口。"
+
+      - alert: EvoGuardProbeScrapeStalled
+        expr: sum(rate(evoguard_probe_requests_total[10m])) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "探针计数没有增长，抓取可能断了"
+          description: "和 EvoGuardNoTraffic 分开：这条说明连健康检查/Prometheus 抓取都没到，优先查 scrape 凭证与网络。"
+
+      - alert: EvoGuardAuditWriteFailure
+        expr: increase(evoguard_audit_failures_total[5m]) > 0
+        labels:
+          severity: page
+        annotations:
+          summary: "审计写入失败（成功响应可能已发出）"
+          description: "企业模式 /api/ready 会因此变 503。按 request_id 对账，确认没有静默丢失的审计行。"
 
   - name: evoguard-security
     rules:

@@ -1,0 +1,85 @@
+# EvoGuardLab 构建上下文白名单（EG-003）
+#
+# 关键：**Git 的 .gitignore 不会限制 Docker 的构建上下文**。
+# 日常工作树里有 data/*.db、data/external/ 语料、.git、.env、实验产物、
+# 缓存和本地沙箱。以前 Dockerfile 是 `COPY . /app`，从工作树直接 build
+# 会把这些全部塞进镜像层 —— 即使后面删了，历史层里仍然能翻出来。
+#
+# 这里用黑名单把「绝不该进上下文」的东西挡掉；Dockerfile 同时改成显式
+# COPY 清单，两层都要。只靠其中一层都不够：规则写漏了 COPY 清单还兜得住，
+# 反过来有人把 COPY 改回 `.` 时这份名单也还挡得住。
+#
+# 说明：本项目刻意零运行时依赖，构建只需要源码与少量只读资产，
+# 不需要数据目录。数据由运行期挂载（VOLUME /app/data）提供。
+
+# --- 版本控制与本地元数据 ---
+.git
+.gitignore
+.gitattributes
+.github
+*.egg-info
+**/*.egg-info
+
+# --- 本地凭据 / 配置（绝不进镜像）---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+**/secrets*
+**/*token*
+!scripts/live_client.py
+
+# --- 本地数据与数据库（运行期挂载，不进镜像）---
+data
+data/**
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.sqlite
+**/*.sqlite3
+_sandbox
+_sandbox/**
+tmp
+tmp/**
+
+# --- 外部语料（许可 + 体积 + 隐私）---
+data/external
+data/external/**
+corpus/**
+
+# --- 实验产物、缓存、日志 ---
+# 注意：不能写成 `experiments` + `experiments/**` 再 `!experiments/metrics.json`
+# —— Docker 规定父目录一旦被排除，子文件无法用 ! 重新包含。
+# 所以只排除一级条目，再显式放行那个只读资产。
+experiments/*
+!experiments/metrics.json
+__pycache__
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.typed
+*.log
+dist
+build
+.venv
+venv
+node_modules
+
+# --- 测试与审查工作区（不是运行资产）---
+tests
+docs/review-remediation
+docs/enterprise-scorecard.md
+_enterprise_review*
+_plan_work*
+_review_work*
+*.docx
+
+# --- 仍然需要保留的只读资产 ---
+# pyproject.toml / README.md / LICENSE / evoguard_cli.py
+# ai-service/evoguard/** / ai-service/api/app.py / config/**
+# frontend/** / docs/taxonomy.md / scripts/defense_demo.py
+# 这些没有被上面的规则排除，Dockerfile 里再显式 COPY 一次。

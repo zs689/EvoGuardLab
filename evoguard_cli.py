@@ -22,20 +22,76 @@ import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 EVO = os.path.join(ROOT, "ai-service", "evoguard")
-if EVO not in sys.path:
-    sys.path.insert(0, EVO)
-if os.path.join(ROOT, "ai-service") not in sys.path:
-    sys.path.insert(0, os.path.join(ROOT, "ai-service"))
+IS_CHECKOUT = os.path.isdir(EVO)
+
+
+def _installed_asset_root():
+    """wheel 安装后，data-files 落在 sys.prefix/share/evoguardlab。"""
+    p = os.path.join(sys.prefix, "share", "evoguardlab")
+    return p if os.path.isdir(p) else ""
+
+
+def _asset_root():
+    return ROOT if IS_CHECKOUT else _installed_asset_root()
+
+
+def _add_evoguard_path():
+    """checkout 与 wheel 两种布局都要能让 `import security` 找到顶层模块。
+
+    以前只往 sys.path 塞 `ROOT/ai-service/evoguard`，装到 site-packages
+    后那个目录根本不存在 —— `config` / `scan` 直接 ModuleNotFoundError。
+    wheel 场景改为把已安装的 `evoguard` 包目录加进来（EG-004）。
+    """
+    if IS_CHECKOUT:
+        for p in (EVO, os.path.dirname(EVO)):
+            if p not in sys.path:
+                sys.path.insert(0, p)
+        return
+    try:
+        import evoguard as _pkg
+        p = os.path.dirname(_pkg.__file__)
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    except ImportError:
+        pass
+
+
+_add_evoguard_path()
 
 
 def _run(script, *args):
-    path = os.path.join(ROOT, "scripts", script)
-    return subprocess.call([sys.executable, path, *args], cwd=ROOT)
+    base = _asset_root()
+    if not base:
+        print("[×] 找不到运行资产目录。请用源码 checkout，或重新安装 wheel。")
+        return 2
+    path = os.path.join(base, "scripts", script)
+    if not os.path.isfile(path):
+        print("[×] `%s` 是源码 checkout 专用命令（需要 tests/ 或 experiments/ 等"
+              "仓库资产，wheel 不分发它们）。" % script)
+        print("    从仓库根目录运行：python evoguard_cli.py %s"
+              % os.path.splitext(script)[0])
+        return 2
+    cwd = ROOT if IS_CHECKOUT else os.getcwd()
+    return subprocess.call([sys.executable, path, *args], cwd=cwd)
+
+
+def _checkout_only(name):
+    print("[×] `%s` 只在源码 checkout 下可用：它需要仓库内的脚本/测试/实验产物，"
+          "这些不在 wheel 分发清单里。" % name)
+    print("    从仓库根目录运行：python evoguard_cli.py %s" % name)
+    return 2
 
 
 def cmd_demo(_):
-    """完整防御演示：同一批攻击在五档配置下的真实执行后果。"""
-    return _run("defense_demo.py")
+    """完整防御演示：同一批攻击在五档配置下的真实执行后果。
+
+    wheel 场景把产物写到当前目录下的隔离文件夹，不往只读的 site-packages
+    或用户的仓库里塞东西（EG-004：用用户数据目录保存可变文件）。
+    """
+    if IS_CHECKOUT:
+        return _run("defense_demo.py")
+    return _run("defense_demo.py", "--out",
+                os.path.join(os.getcwd(), "evoguard_demo_out"))
 
 
 def cmd_scan(a):
@@ -77,6 +133,8 @@ def cmd_intent(a):
 
 def cmd_eval(_):
     """跑全部可复现实验。每个脚本自己写 experiments/ 下的产物。"""
+    if not IS_CHECKOUT:
+        return _checkout_only("eval")
     scripts = [
         ("action_scope", "eval_action_scope.py"),
         ("chinese corpus", "eval_chinese_real.py"),
@@ -107,14 +165,32 @@ def cmd_eval(_):
 
 
 def cmd_test(_):
+    if not IS_CHECKOUT:
+        return _checkout_only("test")
     return subprocess.call([sys.executable, "-m", "unittest",
                             "discover", "-s", "tests", "-q"], cwd=ROOT)
 
 
 def cmd_serve(a):
-    app = os.path.join(ROOT, "ai-service", "api", "app.py")
+    asset = _asset_root()
+    if IS_CHECKOUT:
+        app = os.path.join(ROOT, "ai-service", "api", "app.py")
+        return subprocess.call([sys.executable, app, "--port", str(a.port)],
+                               cwd=ROOT)
+    app = os.path.join(asset, "api", "app.py")
+    if not asset or not os.path.isfile(app):
+        print("[×] wheel 里缺少 api/app.py，无法启动看板。请重新安装。")
+        return 2
+    # wheel 场景显式把只读资产与可写数据目录分开：源码树只读，
+    # 业务库写到当前工作目录（审查 EG-011：可变文件不进安装目录）。
+    env = dict(os.environ)
+    data = os.path.join(os.getcwd(), "evoguard_data")
+    env["AGENTLAB_ASSET_ROOT"] = asset
+    env["AGENTLAB_ROOT"] = asset
+    env["AGENTLAB_DATA_ROOT"] = data
+    env["AGENTLAB_DB"] = os.path.join(data, "evoguard.db")
     return subprocess.call([sys.executable, app, "--port", str(a.port)],
-                           cwd=ROOT)
+                           cwd=os.getcwd(), env=env)
 
 
 def cmd_config(_):
@@ -136,11 +212,14 @@ def cmd_config(_):
 
 
 def cmd_scorecard(a):
-    """企业就绪度自评：按可核对证据打分，列出缺口。
-
-    分数是「下一轮先补哪」的排序依据，不是认证。--min 用于回归守门：
+    """分数是「下一轮先补哪」的排序依据，不是认证。--min 用于回归守门：
     这一轮比上一轮低了就非零退出，避免在没有任何人注意的情况下退步。
+
+    wheel 场景不适用：scorecard 读的是仓库里的实验产物与文档，
+    装好的包里没有这些证据，跑出来只会是一个没有意义的低分。
     """
+    if not IS_CHECKOUT:
+        return _checkout_only("scorecard")
     from enterprise import scorecard
     report = scorecard.evaluate(ROOT)
     text = (json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)
@@ -187,10 +266,10 @@ def main(argv=None):
     p.add_argument("goal", help="用户最初的目标")
     p.set_defaults(func=cmd_intent)
 
-    p = sub.add_parser("eval", help="跑全部可复现实验")
+    p = sub.add_parser("eval", help="跑全部可复现实验 [checkout-only]")
     p.set_defaults(func=cmd_eval)
 
-    p = sub.add_parser("test", help="跑回归测试")
+    p = sub.add_parser("test", help="跑回归测试 [checkout-only]")
     p.set_defaults(func=cmd_test)
 
     p = sub.add_parser("serve", help="启动本地看板")
@@ -200,7 +279,8 @@ def main(argv=None):
     p = sub.add_parser("config", help="打印生效的安全配置")
     p.set_defaults(func=cmd_config)
 
-    p = sub.add_parser("scorecard", help="企业就绪度自评（打分 + 缺口清单）")
+    p = sub.add_parser("scorecard",
+                       help="企业就绪度自评（打分 + 缺口清单）[checkout-only]")
     p.add_argument("--json", action="store_true", help="输出 JSON")
     p.add_argument("--out", default="", help="写入文件（相对路径按仓库根解析）")
     p.add_argument("--min", type=float, default=None,

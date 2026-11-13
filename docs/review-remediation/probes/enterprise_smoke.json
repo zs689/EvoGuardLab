@@ -1,0 +1,72 @@
+{
+  "boundaries": [
+    "身份源是本地 token→身份映射表，不是真实 IdP/SSO；企业接入需替换。",
+    "审批后端是 stub 标记，没有真实审批流（EG-026 仍是设计缺口）。",
+    "隔离靠按租户分库，不是数据库 RLS；跨库聚合需企业侧自行处理。",
+    "未测导出接口与缓存键的租户作用域（当前没有这两类企业端点）。"
+  ],
+  "checks": [
+    {
+      "detail": "缺配置时启动被拒绝：服务启动失败：配置错误：AGENTLAB_IDENTITY_MAP 未设置或不是合法 JSON （token→tenant/actor/roles 绑定）\n配置错误：AGENTLA",
+      "evidence": "app.py main()",
+      "id": "EG-002/fail-closed",
+      "pass": true
+    },
+    {
+      "detail": "未绑定 token + 伪造租户头 -> 401（期望 401）",
+      "evidence": "GET /api/health",
+      "id": "EG-001/unbound-identity",
+      "pass": true
+    },
+    {
+      "detail": "自报 evil，实际 tenant=acme verified=True",
+      "evidence": "token -> (tenant, actor, roles)",
+      "id": "EG-001/header-spoofing",
+      "pass": true
+    },
+    {
+      "detail": "reader 角色 POST /api/run -> 403",
+      "evidence": "h_run_once 角色检查",
+      "id": "EG-001/role-reject",
+      "pass": true
+    },
+    {
+      "detail": "executor POST /api/run -> 200",
+      "evidence": "真实副作用已发生",
+      "id": "EG-001/executor-allowed",
+      "pass": true
+    },
+    {
+      "detail": "acme runs=1，beta runs=0",
+      "evidence": "按租户分库（独立 sqlite 文件）",
+      "id": "EG-001/tenant-isolation",
+      "pass": true
+    },
+    {
+      "detail": "beta 的 tenant=beta",
+      "evidence": "紧接 acme 请求之后",
+      "id": "EG-001/no-context-leak",
+      "pass": true
+    },
+    {
+      "detail": "探针在鉴权开启下可访问（3641 bytes）",
+      "evidence": "GET /metrics",
+      "id": "EG-001/probe-auth",
+      "pass": true
+    },
+    {
+      "detail": "acme 审计 4 行，链验证=True（ok）",
+      "evidence": "AuditStore.query/verify",
+      "id": "EG-001/audit-identity",
+      "pass": true
+    }
+  ],
+  "generated_at": "2026-11-13T14:15:40",
+  "passed": true,
+  "summary": {
+    "fail": 0,
+    "pass": 9,
+    "total": 9
+  },
+  "version": 1
+}

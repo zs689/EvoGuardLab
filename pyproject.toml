@@ -36,10 +36,26 @@ evoguard = "evoguard_cli:main"
 # 不用 packages.find：它会顺手把 package_dir 改成 ai-service，
 # 结果根目录的 evoguard_cli.py 找不到（实测 `pip install -e .` 后
 # 入口直接 ModuleNotFoundError）。
+#
+# EG-004：以前只写了 packages = ["evoguard"]，enterprise/ 子包、
+# Inspector、前端、配置与演示脚本全都不在 wheel 里，装完只剩一个
+# 跑不起来的 CLI。这里显式列出**实际承诺分发**的模块与只读资产。
 py-modules = ["evoguard_cli"]
-packages = ["evoguard"]
-package-dir = { "" = ".", "evoguard" = "ai-service/evoguard" }
+packages = ["evoguard", "evoguard.enterprise", "evoguard_inspect"]
+package-dir = { "" = ".", "evoguard" = "ai-service/evoguard", "evoguard_inspect" = "ai-service/evoguard_inspect" }
 include-package-data = false
+
+# wheel 内的只读运行资产。安装后落在 sys.prefix/share/evoguardlab/，
+# CLI 与 app.py 通过 AGENTLAB_ASSET_ROOT / AGENTLAB_ROOT 找到它们。
+# 可变数据（业务库、实验输出）一律不进 wheel，写到用户指定目录或当前目录。
+[tool.setuptools.data-files]
+"share/evoguardlab/scripts" = ["scripts/defense_demo.py"]
+"share/evoguardlab/api" = ["ai-service/api/app.py"]
+"share/evoguardlab/frontend" = ["frontend/index.html"]
+"share/evoguardlab/config" = ["config/thresholds_v1.json",
+                              "config/thresholds_v2_calibrated.json"]
+"share/evoguardlab/docs" = ["docs/taxonomy.md"]
+"share/evoguardlab/experiments" = ["experiments/metrics.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

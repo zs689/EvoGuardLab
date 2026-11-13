@@ -1,0 +1,87 @@
+{
+  "checks": [
+    {
+      "detail": "缺 .dockerignore，Git 忽略规则不会限制 Docker COPY",
+      "evidence": ".dockerignore",
+      "id": "EG-003/.dockerignore",
+      "status": "fail"
+    },
+    {
+      "detail": "仍是 `COPY . /app`，会夹带被忽略的 data/ 与 .git/",
+      "evidence": "Dockerfile",
+      "id": "EG-003/COPY",
+      "status": "fail"
+    },
+    {
+      "detail": "清理 1 行后验链失败：{'reason': 'prev_mismatch', 'first_bad_id': 2, 'checked': 0, 'unhashed': 0}",
+      "evidence": "AuditStore: emit×3 -> purge_before -> verify()",
+      "id": "EG-007/retention",
+      "status": "fail"
+    },
+    {
+      "detail": "仍是 `200 <= c < 500`，429/404 被算进可用率",
+      "evidence": "scripts/loadtest.py",
+      "id": "EG-015/SLI",
+      "status": "fail"
+    },
+    {
+      "detail": "入口无请求体硬上限，直接按 Content-Length 读完整",
+      "evidence": "ai-service/api/app.py",
+      "id": "EG-005/body-limit",
+      "status": "fail"
+    },
+    {
+      "detail": "畸形 JSON=400，2MiB body=400（都应是 4xx，不是 500）",
+      "evidence": "真 HTTP: POST /api/run",
+      "id": "EG-005/stable-4xx",
+      "status": "pass"
+    },
+    {
+      "detail": "h_health 仍构造 core.Store(DB)（每次请求跑 DDL）",
+      "evidence": "ai-service/api/app.py:h_health",
+      "id": "EG-010/health-ddl",
+      "status": "fail"
+    },
+    {
+      "detail": "业务库路径写死在仓库内，容器只读时无法挂载",
+      "evidence": "ai-service/api/app.py",
+      "id": "EG-011/db-path",
+      "status": "fail"
+    },
+    {
+      "detail": "`limit` 由查询串直接 int()，无最大值约束",
+      "evidence": "ai-service/api/app.py:h_runs",
+      "id": "EG-012/page-limit",
+      "status": "fail"
+    },
+    {
+      "detail": "健康检查语义混合，监控抓取计入业务流量",
+      "evidence": "ai-service/api/app.py:ROUTES",
+      "id": "EG-013/probes",
+      "status": "fail"
+    },
+    {
+      "detail": "初始化用裸 Promise.all，任一可选请求失败会中断整个看板",
+      "evidence": "frontend/index.html",
+      "id": "EG-021/optional-panels",
+      "status": "fail"
+    },
+    {
+      "detail": "CI 只有单一自评总分与 unittest 绿灯",
+      "evidence": ".github/workflows/test.yml",
+      "id": "EG-023/gate",
+      "status": "fail"
+    }
+  ],
+  "generated_at": "2026-11-13T00:10:41",
+  "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
+  "revision": "793c6d1a4ae7eee961e3e0bfeb259bfb8585a2ba",
+  "seconds": 1.35,
+  "summary": {
+    "fail": 11,
+    "pass": 1,
+    "skip": 0,
+    "total": 12
+  },
+  "version": 1
+}

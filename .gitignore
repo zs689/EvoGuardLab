@@ -11,6 +11,9 @@ data/*.db-shm
 
 # 外部攻击语料：只保留下载器与清单，语料本身不入库（许可 + 体积）
 data/external/
+# 按租户分库的运行期数据（EG-001 物理隔离）：目录随租户动态生成，
+# 里面是真实业务库，绝不入库。
+data/tenants/
 experiments/**/*.db
 experiments/**/*.db-wal
 experiments/**/*.db-shm

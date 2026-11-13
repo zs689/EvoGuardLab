@@ -742,25 +742,36 @@ async function openRun(rid) {
   } catch (e) { showErr('读取轨迹失败：' + e.message); }
 }
 
-/* ---------------- 数据加载 ---------------- */
+function panelEmpty(sel, msg) {
+  const e = $(sel);
+  if (e) e.innerHTML = '<div class="note">' + esc(msg) + '</div>';
+}
+
+/* ---------------- 数据加载 ----------------
+   EG-021：基础导航/表单与可选面板解耦。
+   以前任一可选请求失败（比如首次启动 /api/metrics 返回 404）就会跳进
+   最外层 catch，下拉框、任务模板、技能库全都不初始化 —— 一个还没跑过
+   评测的空库，整个看板等于废掉。现在每个面板各自成败、各自显示状态。 */
 async function loadAll() {
   hideErr();
+
+  // 1) 健康检查只影响状态灯。失败也**不 return**：导航与表单仍可用，
+  //    提交时若后端真的不通，doRun 会给出明确错误。
   try {
     const h = await api('/api/health');
     $('#dot').className = 'dot ok';
-    $('#health-text').textContent = '服务在线 · ' + h.version + ' · ' + h.db.runs + ' runs';
+    $('#health-text').textContent = '服务在线 · ' + h.version + ' · ' +
+      ((h.db && h.db.runs) ?? 0) + ' runs';
   } catch (e) {
     $('#dot').className = 'dot bad';
     $('#health-text').textContent = '服务未连接';
-    showErr('后端未连接。请在 EvoGuardLab 目录执行：python ai-service/api/app.py');
-    return;
   }
+
+  // 2) 元信息是唯一必需项：它驱动 Agent / 任务 / 故障下拉框。
+  let metaOk = false;
   try {
     META = await api('/api/meta');
-    METRICS = await api('/api/metrics');
-    const [sk, ex] = await Promise.all([api('/api/skills'), api('/api/experiences')]);
-    SKILLS = sk.items; EXP = ex;
-    const agents = META.agent_types;
+    const agents = META.agent_types || [];
     $('#f-agent').innerHTML = '<option value="">全部 Agent</option>' +
       agents.map(a => '<option value="' + a + '">' + a + '</option>').join('');
     $('#r-agent').innerHTML = agents.map(a => '<option value="' + a + '">' + a + '</option>').join('');
@@ -768,15 +779,39 @@ async function loadAll() {
       '<option value="' + i + '">' + esc(x.agent) + ' · ' + esc(x.a.type) +
       ' + ' + esc(x.b.type) + '</option>').join('');
     fillTasks();
-    renderKpis(); renderComposite(); renderSkills(); renderExp();
-    $('#chip-model').textContent = '故障 ' + META.fault_types.length + ' 类';
+    $('#chip-model').textContent = '故障 ' + (META.fault_types || []).length + ' 类';
+    metaOk = true;
   } catch (e) {
-    showErr('指标未就绪：' + e.message + '。请先跑 python ai-service/evolution_bench.py');
+    showErr('元信息未就绪：' + e.message + '。基础导航仍可使用。');
   }
+
+  // 3) 可选面板：用 allSettled，任何一个失败都不连累其它面板。
+  const [mR, sR, eR] = await Promise.allSettled([
+    api('/api/metrics'), api('/api/skills'), api('/api/experiences')
+  ]);
+  METRICS = mR.status === 'fulfilled' ? mR.value : null;
+  SKILLS = sR.status === 'fulfilled' ? (sR.value.items || []) : [];
+  EXP = eR.status === 'fulfilled' ? eR.value : {items: [], stats: {}};
+
+  if (!METRICS) {
+    panelEmpty('#kpis', '指标未生成：先跑 python ai-service/evolution_bench.py。其余面板仍可使用。');
+    panelEmpty('#comp-kpis', '缺少组合对照指标，暂不展示。');
+  } else {
+    try { renderKpis(); renderComposite(); }
+    catch (e) { panelEmpty('#kpis', '指标格式异常：' + e.message); }
+  }
+  if (sR.status === 'rejected') panelEmpty('#skills-body', '技能库读取失败：' + sR.reason.message);
+  if (eR.status === 'rejected') panelEmpty('#exp-body', '经验库读取失败：' + eR.reason.message);
+  try { renderSkills(); renderExp(); }
+  catch (e) { showErr('面板渲染失败：' + e.message); }
+  return metaOk;
 }
 
 function fillTasks() {
   // 任务模板直接来自 /api/meta（真实 sim.TASKS），不硬编码、不靠历史推断
+  // META 可能因权限不足 / 后端未启动而缺失；此时下拉框保持为空，
+  // 不能让一个可选依赖把整个初始化流程抛断（EG-021）。
+  if (!META) return;
   const at = $('#r-agent').value;
   const list = (META && META.tasks && META.tasks[at]) || [];
   $('#r-task').innerHTML = list.map(t =>

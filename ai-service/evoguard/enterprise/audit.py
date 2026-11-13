@@ -16,7 +16,7 @@ import sqlite3
 import threading
 import time
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 def _migrate_1(conn):
@@ -58,7 +58,38 @@ def _migrate_3(conn):
         conn.execute("ALTER TABLE audit_events ADD COLUMN row_hash TEXT")
 
 
-MIGRATIONS = [(1, _migrate_1), (2, _migrate_2), (3, _migrate_3)]
+def _migrate_4(conn):
+    """归档锚点表（EG-007）。
+
+    按保留期删掉旧行后，剩余第一行的 prev_hash 指向一条已不存在的行，
+    朴素链式校验必然报 prev_mismatch —— 也就是说「合规地清理数据」和
+    「有人偷偷删了审计」在旧实现里长得一模一样。这不行。
+
+    锚点表记录**授权删除**：被删区间的最后一行哈希、区间长度、删后
+    剩余首行 id。verify() 只有在缺口处找到匹配锚点才放行；手工 DELETE
+    没有锚点，仍然报 prev_mismatch。两者必须给出不同结果。
+
+    注意：锚点表本身应保存在独立权限域（离线备份 / 只追加日志），
+    否则能改数据库的人可以顺手插一条锚点伪造删除 —— 见
+    docs/enterprise-readiness.md 的已知限制。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS audit_anchors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            after_id INTEGER NOT NULL,
+            anchor_hash TEXT NOT NULL,
+            deleted_rows INTEGER NOT NULL,
+            created_at REAL NOT NULL,
+            tenant_id TEXT,
+            note TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_anchors_after "
+                 "ON audit_anchors(after_id)")
+
+
+MIGRATIONS = [(1, _migrate_1), (2, _migrate_2), (3, _migrate_3),
+              (4, _migrate_4)]
 
 
 def _canonical(ts, tenant, request_id, actor, method, path, status, decision,
@@ -172,7 +203,12 @@ class AuditStore(AuditSink):
                 "decision,detail,latency_ms,prev_hash,row_hash "
                 "FROM audit_events ORDER BY id ASC" + (
                     " LIMIT %d" % int(limit) if limit else "")).fetchall()
-        checked = unhashed = 0
+            anchors = {}
+            for after_id, anchor_hash, n_del in self._conn.execute(
+                    "SELECT after_id, anchor_hash, deleted_rows "
+                    "FROM audit_anchors"):
+                anchors.setdefault(after_id, []).append((anchor_hash, n_del))
+        checked = unhashed = archived = 0
         prev_hash = ""
         for r in rows:
             (rid, ts, tenant, request_id, actor, method, path, status,
@@ -181,18 +217,30 @@ class AuditStore(AuditSink):
                 unhashed += 1
                 prev_hash = ""
                 continue
-            if (stored_prev or "") != prev_hash:
-                return False, {"reason": "prev_mismatch", "first_bad_id": rid,
-                               "checked": checked, "unhashed": unhashed}
+            effective_prev = stored_prev or ""
+            if effective_prev != prev_hash:
+                # 只有「授权归档」留下的锚点能解释这个缺口；
+                # 手工 DELETE / 插入伪造行没有锚点，一律判为断链。
+                hits = anchors.get(rid, [])
+                if not any(h == effective_prev for h, _ in hits):
+                    info = {"reason": "prev_mismatch", "first_bad_id": rid,
+                            "checked": checked, "unhashed": unhashed,
+                            "archived_gaps": archived}
+                    return False, info
+                archived += 1
+            # 用行里存的 prev 重算：正常时它等于链尾，归档缺口时它是锚点。
             want = _canonical(ts, tenant, request_id, actor, method, path,
-                              status, decision, detail, latency_ms, prev_hash)
+                              status, decision, detail, latency_ms,
+                              effective_prev)
             if want != stored_hash:
                 return False, {"reason": "hash_mismatch", "first_bad_id": rid,
-                               "checked": checked, "unhashed": unhashed}
+                               "checked": checked, "unhashed": unhashed,
+                               "archived_gaps": archived}
             prev_hash = stored_hash
             checked += 1
         return True, {"reason": "ok", "first_bad_id": None,
-                      "checked": checked, "unhashed": unhashed}
+                      "checked": checked, "unhashed": unhashed,
+                      "archived_gaps": archived}
 
     # ---------------- 查询 ----------------
     def query(self, tenant_id, since=None, limit=100):
@@ -219,17 +267,67 @@ class AuditStore(AuditSink):
                 "SELECT COUNT(*) FROM audit_events WHERE tenant_id = ?",
                 (tenant_id,)).fetchone()[0]
 
-    def purge_before(self, ts):
-        """保留策略：删除早于 ts 的事件，返回删除条数。"""
-        with self._lock:
-            cur = self._conn.execute("DELETE FROM audit_events WHERE ts < ?",
-                                     (float(ts),))
-            self._conn.commit()
-            return cur.rowcount
+    def purge_before(self, ts, tenant_id=None):
+        """保留策略：删除早于 ts 的事件，并**为每段删除留下归档锚点**。
 
-    def purge_older_than(self, days, now=None):
+        传 tenant_id 就只清该租户（EG-007 要求按租户执行保留政策）。
+        删除按 id 连续区间分组，每组一条锚点；这样乱序时间戳、
+        多租户交错写入、清理边界都不会让剩余链失去可验证性。
+        返回删除条数。
+        """
+        with self._lock:
+            sql = "SELECT id, row_hash FROM audit_events WHERE ts < ?"
+            params = [float(ts)]
+            if tenant_id is not None:
+                sql += " AND tenant_id = ?"
+                params.append(tenant_id)
+            sql += " ORDER BY id ASC"
+            rows = self._conn.execute(sql, params).fetchall()
+            if not rows:
+                return 0
+            ids = [r[0] for r in rows]
+            hashes = {r[0]: (r[1] or "") for r in rows}
+
+            segments = []
+            start = prev = ids[0]
+            for i in ids[1:]:
+                if i == prev + 1:
+                    prev = i
+                else:
+                    segments.append((start, prev))
+                    start = prev = i
+            segments.append((start, prev))
+
+            for lo, hi in segments:
+                nxt = self._conn.execute(
+                    "SELECT MIN(id) FROM audit_events WHERE id > ?",
+                    (hi,)).fetchone()[0]
+                after_id = nxt if nxt is not None else hi + 1
+                self._conn.execute(
+                    "INSERT INTO audit_anchors(after_id, anchor_hash, "
+                    "deleted_rows, created_at, tenant_id, note) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (after_id, hashes[hi], hi - lo + 1, self._clock(),
+                     tenant_id, "retention purge ts<%s" % ts))
+                self._conn.execute(
+                    "DELETE FROM audit_events WHERE id BETWEEN ? AND ?",
+                    (lo, hi))
+            self._conn.commit()
+            return len(ids)
+
+    def purge_older_than(self, days, now=None, tenant_id=None):
         cutoff = (now or self._clock()) - float(days) * 86400
-        return self.purge_before(cutoff)
+        return self.purge_before(cutoff, tenant_id=tenant_id)
+
+    def anchors(self):
+        """列出归档锚点，供外部备份到独立权限域 / 事后对账。"""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id,after_id,anchor_hash,deleted_rows,created_at,"
+                "tenant_id,note FROM audit_anchors ORDER BY id").fetchall()
+        keys = ("id", "after_id", "anchor_hash", "deleted_rows", "created_at",
+                "tenant_id", "note")
+        return [dict(zip(keys, r)) for r in rows]
 
     def close(self):
         with self._lock:

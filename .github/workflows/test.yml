@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+# EG-023：不靠「unittest 绿灯 + 一个自评总分」放行。每个强制检查都有
+# 自己的命令、产物与退出码；关键检查没运行到，release-gate 就过不去。
+# 自评分数只作回归提示，**不单独作为放行条件**。
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -28,12 +31,26 @@ jobs:
         run: evoguard config
       - name: Defence demo (isolated output)
         run: python scripts/defense_demo.py --out ${{ runner.temp }}/demo_smoke
-      - name: Core regression on a clean checkout
-        run: python -m unittest discover -s tests -q
+      - name: Core regression (record counts and skip reasons)
+        run: python -m unittest discover -s tests -v 2>&1 | tee unittest.log
+        shell: bash
       - name: Eval subset without external corpus
         run: evoguard eval
-      - name: Enterprise scorecard (regression guard, 80/100)
-        run: evoguard scorecard --out scorecard.md --min 80
+      - name: Enterprise scorecard (informational, not a release gate)
+        run: evoguard scorecard --out scorecard.md
+      - name: Objective per-finding gates
+        run: python scripts/review_checks.py --gate --out gate_artifacts
+      - name: Docker build-context gate (static)
+        run: python scripts/check_docker_context.py --out gate_artifacts
+      - name: Upload gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gates-${{ matrix.os }}-${{ matrix.python-version }}
+          path: |
+            gate_artifacts/
+            unittest.log
+            scorecard.md
 
   clean-clone:
     # 「我这台能跑」不算可复现。这里把仓库 checkout 到一个全新子目录，
@@ -57,6 +74,7 @@ jobs:
         working-directory: fresh
         run: |
           test ! -d data/external || { echo "data/external 被提交了"; exit 1; }
+          test ! -d data/tenants || { echo "data/tenants 被提交了"; exit 1; }
           test ! -d .venv || { echo ".venv 被提交了"; exit 1; }
       - name: Run suite without installing the package
         working-directory: fresh
@@ -64,6 +82,66 @@ jobs:
       - name: CLI works from a bare checkout
         working-directory: fresh
         run: python evoguard_cli.py config
-      - name: Scorecard on a bare checkout
+      - name: Objective gates on a bare checkout
         working-directory: fresh
-        run: python evoguard_cli.py scorecard --min 70
+        run: python scripts/review_checks.py --gate --out gate_artifacts
+      - name: Scorecard on a bare checkout (informational)
+        working-directory: fresh
+        run: python evoguard_cli.py scorecard
+
+  wheel-artifact:
+    # EG-004 / EG-023：**非 editable**、源码树外、独立 venv、干净 Linux 与
+    # Windows 各一份。以前 wheel 装完 config 直接 ModuleNotFoundError，
+    # 而 CI 只测 editable，所以一直没发现。
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build wheel (no editable install)
+        run: python -m pip wheel . --no-deps -w dist
+      - name: Create an isolated venv
+        shell: bash
+        run: python -m venv wheel_venv
+      - name: Resolve venv paths
+        id: vp
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            echo "py=wheel_venv/Scripts/python.exe" >> "$GITHUB_OUTPUT"
+            echo "cli=wheel_venv/Scripts/evoguard.exe" >> "$GITHUB_OUTPUT"
+          else
+            echo "py=wheel_venv/bin/python" >> "$GITHUB_OUTPUT"
+            echo "cli=wheel_venv/bin/evoguard" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install the wheel into that venv
+        shell: bash
+        run: ${{ steps.vp.outputs.py }} -m pip install --no-deps dist/*.whl
+      - name: Verify wheel manifest (no missing subpackages or assets)
+        shell: bash
+        run: python scripts/check_wheel_manifest.py dist/*.whl
+      - name: Wheel CLI smoke from an empty directory
+        # 传相对路径：Git Bash 的 /d/... 路径 Windows Python 不认，
+        # 交给脚本自己用 os.path.abspath 按进程 cwd 解析。
+        shell: bash
+        run: python scripts/wheel_smoke.py --cli "${{ steps.vp.outputs.cli }}" --workdir wheel_smoke_work --out wheel_gates
+      - name: Upload wheel evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}
+          path: wheel_gates/
+
+  release-gate:
+    # 汇总闸门：任一前置 job 没跑完或失败，这个 job 就不会执行。
+    # 这样「关键检查被跳过」不可能悄悄变成「发布候选通过」。
+    needs: [test, clean-clone, wheel-artifact]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All mandatory checks ran and passed
+        run: echo "unittest / objective gates / clean-clone / wheel(Linux+Windows) all passed"

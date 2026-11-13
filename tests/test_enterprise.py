@@ -238,6 +238,67 @@ class TestAuditTamperEvidence(unittest.TestCase):
         s.close()
 
 
+class TestAuditRetention(unittest.TestCase):
+    """EG-007 验收组合：合法清理与篡改必须给出不同结果。"""
+
+    def _store(self, rows):
+        s = A.AuditStore(":memory:")
+        for i, (tenant, ts) in enumerate(rows):
+            s.emit({"tenant_id": tenant, "request_id": "r%d" % i,
+                    "ts": ts, "status": 200})
+        return s
+
+    def test_retention_leaves_chain_verifiable_with_anchor(self):
+        s = self._store([("t", 1.0), ("t", 2.0), ("t", 3.0)])
+        self.assertEqual(s.purge_before(2.0), 1)
+        ok, info = s.verify()
+        self.assertTrue(ok, info)
+        self.assertEqual(info["archived_gaps"], 1)
+        self.assertEqual(len(s.anchors()), 1)
+        self.assertEqual(s.anchors()[0]["deleted_rows"], 1)
+        s.close()
+
+    def test_retention_is_per_tenant(self):
+        rows = [("a", 1.0), ("b", 1.0), ("a", 3.0), ("b", 3.0)]
+        s = self._store(rows)
+        self.assertEqual(s.purge_before(2.0, tenant_id="a"), 1)
+        self.assertEqual(s.count("a"), 1)
+        self.assertEqual(s.count("b"), 2)
+        ok, info = s.verify()
+        self.assertTrue(ok, info)
+        self.assertEqual(info["archived_gaps"], 1)
+        s.close()
+
+    def test_out_of_order_timestamps_produce_multiple_segments(self):
+        # 时间乱序会让「按 ts 删」变成不连续的 id 区间
+        rows = [("t", 1.0), ("t", 9.0), ("t", 1.5), ("t", 9.5), ("t", 2.0)]
+        s = self._store(rows)
+        self.assertEqual(s.purge_before(3.0), 3)
+        ok, info = s.verify()
+        self.assertTrue(ok, info)
+        self.assertEqual(info["archived_gaps"], 2)
+        s.close()
+
+    def test_forged_anchor_does_not_cover_a_gap(self):
+        """随便插一条锚点不能把手工删除洗白：哈希必须对得上。"""
+        s = self._store([("t", 10.0), ("t", 20.0), ("t", 30.0)])
+        s._conn.execute("DELETE FROM audit_events WHERE id=2")
+        s._conn.execute(
+            "INSERT INTO audit_anchors(after_id,anchor_hash,deleted_rows,"
+            "created_at,tenant_id,note) VALUES (3,'forged',1,1.0,'t','fake')")
+        s._conn.commit()
+        ok, info = s.verify()
+        self.assertFalse(ok)
+        self.assertEqual(info["reason"], "prev_mismatch")
+        s.close()
+
+    def test_retention_boundary_is_exclusive(self):
+        s = self._store([("t", 1.0), ("t", 2.0), ("t", 3.0)])
+        self.assertEqual(s.purge_before(2.0), 1)
+        self.assertEqual(s.count(), 2)
+        s.close()
+
+
 class TestResilience(unittest.TestCase):
     def test_breaker_opens_and_recovers(self):
         now = [1000.0]

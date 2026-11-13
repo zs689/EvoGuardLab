@@ -1,0 +1,99 @@
+{
+  "checks": [
+    {
+      "detail": "构建上下文 5/5 项通过（含敏感标记全部排除）",
+      "evidence": "scripts/check_docker_context.py（标记文件模拟；镜像层未实测）",
+      "id": "EG-003/context",
+      "status": "pass"
+    },
+    {
+      "detail": "Dockerfile 不再整仓 COPY",
+      "evidence": "Dockerfile",
+      "id": "EG-003/COPY",
+      "status": "pass"
+    },
+    {
+      "detail": "合法清理后剩余链仍可验证",
+      "evidence": "AuditStore: emit×3 -> purge_before -> verify()",
+      "id": "EG-007/retention",
+      "status": "pass"
+    },
+    {
+      "detail": "四类状态分类与可用率分母正确",
+      "evidence": "scripts/loadtest.py:classify()/sli() 构造计数验算",
+      "id": "EG-015/SLI",
+      "status": "pass"
+    },
+    {
+      "detail": "请求体有硬上限且超限返回 413",
+      "evidence": "ai-service/api/app.py",
+      "id": "EG-005/body-limit",
+      "status": "pass"
+    },
+    {
+      "detail": "畸形 JSON=400，2MiB body=413（都应是 4xx，不是 500）",
+      "evidence": "真 HTTP: POST /api/run",
+      "id": "EG-005/stable-4xx",
+      "status": "pass"
+    },
+    {
+      "detail": "存活探针不再每次建 Store 执行 schema",
+      "evidence": "ai-service/api/app.py:h_health",
+      "id": "EG-010/health-ddl",
+      "status": "pass"
+    },
+    {
+      "detail": "业务库路径可由环境变量配置",
+      "evidence": "ai-service/api/app.py",
+      "id": "EG-011/db-path",
+      "status": "pass"
+    },
+    {
+      "detail": "列表 limit 有上限",
+      "evidence": "ai-service/api/app.py:h_runs",
+      "id": "EG-012/page-limit",
+      "status": "pass"
+    },
+    {
+      "detail": "存活/就绪/诊断探针已拆分",
+      "evidence": "ai-service/api/app.py:ROUTES",
+      "id": "EG-013/probes",
+      "status": "pass"
+    },
+    {
+      "detail": "6 个指标名全部在 app.py 里有来源",
+      "evidence": "deploy/alerts.yml <-> ai-service/api/app.py",
+      "id": "EG-013/metric-consistency",
+      "status": "pass"
+    },
+    {
+      "detail": "可选面板用 allSettled 解耦且 JS 语法通过",
+      "evidence": "frontend/index.html + node --check（1 个 script 块）",
+      "id": "EG-021/optional-panels",
+      "status": "pass"
+    },
+    {
+      "detail": "8 项 CI 门槛齐全",
+      "evidence": ".github/workflows/test.yml",
+      "id": "EG-023/gate",
+      "status": "pass"
+    },
+    {
+      "detail": "身份绑定/角色/物理隔离/fail-closed 9/9 通过",
+      "evidence": "scripts/enterprise_smoke.py（真进程 + 真 HTTP）",
+      "id": "EG-001+002/enterprise",
+      "status": "pass"
+    }
+  ],
+  "generated_at": "2026-11-13T14:27:17",
+  "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
+  "revision": "793c6d1a4ae7eee961e3e0bfeb259bfb8585a2ba",
+  "seconds": 2.71,
+  "summary": {
+    "fail": 0,
+    "pass": 14,
+    "skip": 0,
+    "total": 14
+  },
+  "version": 1
+}
