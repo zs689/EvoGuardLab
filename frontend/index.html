@@ -252,6 +252,15 @@ select:focus, input.fld:focus { border-color: var(--primary); }
   .g4 { grid-template-columns: 1fr; }
   .content { padding: 14px; }
 }
+/* EG-020：顶栏令牌输入。键盘可聚焦、移动端不撑破布局。 */
+.token-input {
+  width: 132px; max-width: 22vw; padding: 5px 8px;
+  border: 1px solid var(--border, #d0d5dd); border-radius: 6px;
+  background: var(--surface, #fff); color: var(--text, #1f2328);
+  font-size: 12px; font-family: inherit;
+}
+.token-input:focus { outline: 2px solid var(--primary, #2563eb); outline-offset: 1px; }
+@media (max-width: 720px) { .token-input { width: 96px; max-width: 26vw; } }
 </style>
 </head>
 <body>
@@ -294,6 +303,14 @@ select:focus, input.fld:focus { border-color: var(--primary); }
       <div class="topbar-spacer"></div>
       <span class="chip" id="chip-data">数据源：–</span>
       <span class="chip" id="chip-model">模型：mock</span>
+      <!-- EG-020：企业鉴权开启后，浏览器要能带 token 调用 API。
+           令牌只存 sessionStorage（关标签即失效），不写 localStorage、
+           不进 URL、不留在 DOM 明文，也不写进日志。 -->
+      <span class="chip" id="chip-auth">匿名</span>
+      <input type="password" id="token-input" class="token-input"
+             placeholder="企业模式令牌" autocomplete="off"
+             aria-label="企业模式访问令牌" title="留空并点「令牌」即为退出登录">
+      <button class="btn" id="btn-token" title="应用到当前会话">令牌</button>
       <button class="icon-btn" id="btn-theme" title="切换深浅色">◐</button>
       <button class="btn" id="btn-refresh">↻ 刷新</button>
     </header>
@@ -507,10 +524,34 @@ const fmt = (n) => (typeof n === 'number' && !Number.isInteger(n)) ? n.toFixed(1
 let META = null, METRICS = null, SKILLS = [], EXP = [], RUNS = [];
 
 async function api(path, opts) {
-  const r = await fetch(path, opts);
-  const j = await r.json();
+  opts = opts || {};
+  // EG-020：所有请求统一带会话令牌；服务端做授权检查，前端只是传递。
+  const headers = Object.assign({}, opts.headers || {});
+  const tok = sessionToken();
+  if (tok) headers['Authorization'] = 'Bearer ' + tok;
+  const r = await fetch(path, Object.assign({}, opts, {headers: headers}));
+  if (r.status === 401) {
+    setAuthChip(false);
+    throw new Error('未认证或令牌失效：请在顶栏输入企业模式令牌后点「令牌」');
+  }
+  if (r.status === 403) {
+    throw new Error('当前身份没有该操作的权限（角色不足）');
+  }
+  let j;
+  try { j = await r.json(); }
+  catch (e) { throw new Error('响应不是合法 JSON（HTTP ' + r.status + '）'); }
   if (!r.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status));
   return j;
+}
+
+const TOKEN_KEY = 'eg-session-token';
+function sessionToken() {
+  try { return sessionStorage.getItem(TOKEN_KEY) || ''; }
+  catch (e) { return ''; }          // 隐私模式下 storage 可能不可用
+}
+function setAuthChip(on) {
+  const el = $('#chip-auth');
+  if (el) el.textContent = on ? '会话已授权' : '匿名';
 }
 function showErr(msg) { const e = $('#err'); e.textContent = msg; e.style.display = 'block'; }
 function hideErr() { $('#err').style.display = 'none'; }
@@ -952,6 +993,24 @@ $('#btn-theme').onclick = () => {
   localStorage.setItem('eg-theme', next);
 };
 if (localStorage.getItem('eg-theme') === 'dark') document.documentElement.setAttribute('data-theme','dark');
+setAuthChip(!!sessionToken());
+$('#btn-token').onclick = () => {
+  const v = $('#token-input').value.trim();
+  try {
+    if (v) sessionStorage.setItem(TOKEN_KEY, v);
+    else sessionStorage.removeItem(TOKEN_KEY);   // 留空即退出登录
+  } catch (e) {
+    showErr('浏览器不允许会话存储，无法保存令牌：' + e.message);
+    return;
+  }
+  $('#token-input').value = '';                  // 不在 DOM 里留明文
+  setAuthChip(!!v);
+  hideErr();
+  loadAll();
+};
+$('#token-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('#btn-token').click();
+});
 $('#btn-refresh').onclick = async () => {
   $('#btn-refresh').disabled = true;
   await loadAll(); await loadRuns();

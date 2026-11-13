@@ -67,6 +67,8 @@
       {"code": "E_NOT_FOUND", "http": 404, "meaning": "路由或资源不存在"},
       {"code": "E_UNAVAILABLE", "http": 503, "meaning": "依赖未启用"},
       {"code": "E_NOT_READY", "http": 503, "meaning": "企业模式缺审批后端，写工具禁用"},
+      {"code": "E_OVERLOADED", "http": 503, "meaning": "作业队列已满"},
+      {"code": "E_CONFLICT", "http": 409, "meaning": "作业状态不允许该操作（如重放 succeeded）"},
       {"code": "E_INTERNAL", "http": 500, "meaning": "内部错误；**不含堆栈**，只给 request_id"},
       {"code": "identity_not_bound", "http": 401, "meaning": "token 不在身份映射表"},
       {"code": "rate_limited", "http": 429, "meaning": "限流；带 retry_after"},
@@ -102,13 +104,27 @@
     {"method": "GET", "path": "/api/experiences", "kind": "business", "auth_in_enterprise": true, "description": "经验库列表"},
     {"method": "GET", "path": "/api/runs", "kind": "business", "auth_in_enterprise": true, "description": "运行历史（游标分页）", "pagination": true},
     {"method": "GET", "path": "/api/runs/{rid}", "kind": "business", "auth_in_enterprise": true, "description": "单次运行详情：steps/diagnoses/recoveries/faults"},
-    {"method": "POST", "path": "/api/run", "kind": "business", "auth_in_enterprise": true, "roles_required": ["executor"], "description": "触发一次实验运行；企业模式还需审批后端", "request": {"agent_type": "string", "task_id": "string", "fault_type": "string", "mode": "baseline|A|B|C|D|R", "fault_chain": "optional array"}, "errors": ["E_BAD_REQUEST", "E_FORBIDDEN", "E_NOT_READY"]}
+    {"method": "POST", "path": "/api/run", "kind": "business", "auth_in_enterprise": true, "roles_required": ["executor"], "description": "触发一次实验运行（同步，兼容期保留）；企业模式还需审批后端", "request": {"agent_type": "string", "task_id": "string", "fault_type": "string", "mode": "baseline|A|B|C|D|R", "fault_chain": "optional array"}, "errors": ["E_BAD_REQUEST", "E_FORBIDDEN", "E_NOT_READY"]},
+    {"method": "POST", "path": "/api/jobs", "kind": "job", "auth_in_enterprise": true, "roles_required": ["executor"], "description": "提交持久作业；只写一行即返回，单 worker 顺序执行", "idempotency": "Idempotency-Key 头或 idempotency_key 字段；同租户同键返回原作业（200），不重复产生副作用", "request": {"payload": "与 /api/run 相同的对象", "idempotency_key": "optional string"}, "response": {"job": "作业对象", "created": "bool"}, "status_codes": {"202": "新作业", "200": "幂等命中已有作业"}, "errors": ["E_BAD_REQUEST", "E_OVERLOADED"]},
+    {"method": "GET", "path": "/api/jobs", "kind": "job", "auth_in_enterprise": true, "description": "按租户列出作业（limit 上限 200）"},
+    {"method": "GET", "path": "/api/jobs/{job_id}", "kind": "job", "auth_in_enterprise": true, "description": "轮询单个作业状态", "states": ["queued", "running", "succeeded", "failed", "canceled", "unknown"], "errors": ["E_NOT_FOUND"]},
+    {"method": "POST", "path": "/api/jobs/{job_id}/cancel", "kind": "job", "auth_in_enterprise": true, "description": "取消仍在排队的作业；已运行的不能假装没跑过", "response": {"canceled": "bool", "job_id": "string"}},
+    {"method": "POST", "path": "/api/jobs/{job_id}/retry", "kind": "job", "auth_in_enterprise": true, "description": "人工对账后显式重放 unknown/failed/canceled；succeeded 不可重放", "errors": ["E_CONFLICT"]}
   ],
   "static_routes": [
     {"method": "GET", "path": "/", "description": "前端首页"},
     {"method": "GET", "path": "/index.html", "description": "前端首页"},
     {"method": "GET", "path": "/static/{path}", "description": "静态资源；路径穿越一律 404"}
   ],
+  "jobs": {
+    "store": "每租户独立 jobs.db（与业务库分开，避免抢同一把 sqlite 写锁）",
+    "queue_capacity": 256,
+    "worker": "单后台线程、懒启动；BEGIN IMMEDIATE 原子领取",
+    "lease_seconds": 120,
+    "recovery": "进程重启时过期租约标 unknown，**不自动重放**（副作用可能已发生）；需人工对账后调用 retry",
+    "idempotency": "UNIQUE(tenant_id, idempotency_key)",
+    "known_limits": ["单进程单 worker；多副本需共享队列与分布式租约", "runtime.FORCED_SKILL 是进程级全局，用执行锁串行化但未改 runtime 本身"]
+  },
   "audit": {
     "store": "AGENTLAB_AUDIT_DB（sqlite）",
     "required_field": "tenant_id",
@@ -126,9 +142,10 @@
     {"field": "reason", "meaning": "判定原因"}
   ],
   "known_gaps": [
-    "POST /api/run 仍同步阻塞，没有持久作业 ID / 轮询 / 取消 / 幂等键（EG-009）。",
-    "浏览器看板没有与企业鉴权兼容的会话方案（EG-020）。",
-    "没有跨副本共享限流层（EG-014）。",
+    "持久作业已提供（/api/jobs），但同步 /api/run 仍在兼容期；单进程单 worker，多副本需共享队列与分布式租约（EG-009 部分完成）。",
+    "前端已有会话令牌传递（sessionStorage + Bearer），但真实反代认证、失效/登出流程与服务端会话未在部署拓扑中实测（EG-020）。",
+    "熔断与超时工具未进入实际模型/下游调用路径；限流仍只在进程内生效（EG-014）。",
+    "run ID 与显式进度计数未做，仍按文件 mtime 推断评测状态（EG-019）。",
     "SDK 与自动化兼容性测试尚未交付。"
   ]
 }

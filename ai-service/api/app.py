@@ -45,9 +45,10 @@ try:                                    # 企业形态模块：缺失也不能�
     from enterprise import audit as ent_audit          # noqa: E402
     from enterprise import observability as ent_obs    # noqa: E402
     from enterprise import tenancy as ent_tenancy      # noqa: E402
+    from enterprise import jobs as ent_jobs            # noqa: E402
     _ENT_OK = True
 except Exception:                       # noqa: BLE001
-    ent_audit = ent_obs = ent_tenancy = None
+    ent_audit = ent_obs = ent_tenancy = ent_jobs = None
     _ENT_OK = False
 
 
@@ -142,6 +143,8 @@ FRONTEND = os.path.join(ASSET_ROOT, "frontend")
 # ---- 硬上限（EG-005 / EG-012）-------------------------------------------
 MAX_BODY_BYTES = int(os.environ.get("AGENTLAB_MAX_BODY_BYTES", 65536))
 MAX_PAGE_SIZE = int(os.environ.get("AGENTLAB_MAX_PAGE_SIZE", 200))
+# 单次运行详情的每类轨迹上限（EG-012）：不传 limit 的内部诊断调用不受影响。
+MAX_DETAIL_ITEMS = int(os.environ.get("AGENTLAB_MAX_DETAIL_ITEMS", 500))
 # 探针路由：不进业务 SLI，也不该触发「无业务流量」告警（EG-013）。
 PROBE_PATHS = frozenset(("/metrics", "/api/metrics/prometheus",
                          "/api/live", "/healthz", "/api/ready"))
@@ -230,6 +233,12 @@ ROUTES = [
     ("GET", r"^/api/runs$", "h_runs"),
     ("GET", r"^/api/runs/([\w\-]+)$", "h_run"),
     ("POST", r"^/api/run$", "h_run_once"),
+    # EG-009 持久作业：提交返回 job_id，轮询/取消/重试各有独立入口。
+    ("POST", r"^/api/jobs$", "h_job_submit"),
+    ("GET", r"^/api/jobs$", "h_job_list"),
+    ("GET", r"^/api/jobs/([\w\-]+)$", "h_job_get"),
+    ("POST", r"^/api/jobs/([\w\-]+)/cancel$", "h_job_cancel"),
+    ("POST", r"^/api/jobs/([\w\-]+)/retry$", "h_job_retry"),
 ]
 
 
@@ -279,6 +288,8 @@ def get_store(tenant_id="default"):
             with store.conn() as c:
                 c.execute("CREATE INDEX IF NOT EXISTS idx_runs_started_at "
                           "ON runs(started_at DESC)")
+            # 初始化时读一次，别让每次 /api/health 都多开一条连接
+            store._eg_journal = store.journal_mode()
             store._eg_ready = True
             _STORES[path] = store
     return store
@@ -286,9 +297,92 @@ def get_store(tenant_id="default"):
 
 def store_health(tenant_id="default"):
     try:
-        return get_store(tenant_id).health()
+        store = get_store(tenant_id)
+        d = store.health()
+        # EG-010：连接次数与日志模式可观测，便于核对「热路径是否真的
+        # 没有重复开连接」以及 WAL 是否生效。
+        d["journal_mode"] = getattr(store, "_eg_journal", "unknown")
+        d["conn_opened"] = store.conn_opened
+        return d
     except Exception as exc:                    # noqa: BLE001
         return {"ok": False, "error": type(exc).__name__}
+
+
+# ---- 实验执行（同步 /api/run 与持久作业共用同一份逻辑）-------------------
+def validate_run_payload(body):
+    """参数校验集中一处，避免同步与异步两条路径口径漂移。"""
+    at = body.get("agent_type", "order")
+    ft = body.get("fault_type", "silent_corruption")
+    mode = body.get("mode", "D")
+    if at not in sim.AGENT_TYPES or mode not in ("baseline", "A", "B", "C", "D", "R"):
+        raise ValueError("agent_type 或 mode 不合法")
+    has_chain = bool(body.get("fault_chain"))
+    if ft not in sim.FAULT_TYPES and ft != "none" and not has_chain:
+        raise ValueError("未知故障类型：%s" % ft)
+    if has_chain:
+        for f in body["fault_chain"]:
+            if not isinstance(f, dict) or f.get("type") not in sim.FAULT_TYPES:
+                raise ValueError("fault_chain 里有未知故障类型")
+
+
+def run_experiment(tenant_id, body):
+    """真正跑一次实验。同步接口与 worker 都调它 —— 不复制第二份实现。"""
+    validate_run_payload(body)
+    at = body.get("agent_type", "order")
+    tid = body.get("task_id", "A1001")
+    ft = body.get("fault_type", "silent_corruption")
+    mode = body.get("mode", "D")
+    store = get_store(tenant_id)
+    exp = store.create_experiment("web/%s/%s/%s/%s" % (at, tid, ft, mode),
+                                  at, tid, ft, 0, 7, mode)
+    if body.get("fault_chain"):
+        exp["fault_chain"] = body["fault_chain"]
+    runtime.FORCED_SKILL = None
+    run = runtime.run_once(store, exp, mode)
+    return {
+        "run": run,
+        "steps": store.list_steps(run["id"]),
+        "diagnoses": store.list_diagnoses(run["id"]),
+        "recoveries": store.list_recoveries(run["id"]),
+    }
+
+
+# ---- 持久作业（EG-009）--------------------------------------------------
+_JOB_STORES = {}
+_JOB_WORKERS = {}
+_JOB_LOCK = threading.Lock()
+
+
+def job_store(tenant_id="default"):
+    """按租户分库放作业表；与业务库分开，避免抢同一把 sqlite 写锁。"""
+    if ent_jobs is None:
+        return None
+    tid = tenant_id or "default"
+    if tid == "default":
+        path = os.path.join(DATA_ROOT, "jobs.db")
+    else:
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", tid):
+            raise ValueError("非法租户 ID")
+        path = os.path.join(TENANT_DB_ROOT, tid, "jobs.db")
+    with _JOB_LOCK:
+        s = _JOB_STORES.get(path)
+        if s is None:
+            s = ent_jobs.JobStore(path)
+            _JOB_STORES[path] = s
+        return s
+
+
+def job_worker(tenant_id="default"):
+    """懒启动：第一次提交任务时才起 worker，测试导入模块不会凭空起线程。"""
+    store = job_store(tenant_id)
+    if store is None:
+        return None
+    with _JOB_LOCK:
+        w = _JOB_WORKERS.get(store.path)
+        if w is None:
+            w = ent_jobs.JobWorker(store, run_experiment).start()
+            _JOB_WORKERS[store.path] = w
+        return w
 
 
 def _read_text(path, default=""):
@@ -707,13 +801,23 @@ class Handler(BaseHTTPRequestHandler):
                          "limit": limit, "next_cursor": next_cursor})
 
     def h_run(self, rid):
+        # EG-012：详情聚合读取有预算。以前四类轨迹全部 SELECT * 无上限，
+        # 一条长链就能把内存和响应体撑到跟历史总量线性相关。
         store = get_store(self._tenant_id)
+        cap = MAX_DETAIL_ITEMS
         run = store.get_run(rid)
+        steps = store.list_steps(rid, limit=cap + 1)
+        diagnoses = store.list_diagnoses(rid, limit=cap + 1)
+        recoveries = store.list_recoveries(rid, limit=cap + 1)
+        faults = store.get_faults(rid, limit=cap + 1)
+        groups = {"steps": steps, "diagnoses": diagnoses,
+                  "recoveries": recoveries, "faults": faults}
+        truncated = {k: len(v) > cap for k, v in groups.items()}
         out = {"run": run,
-               "steps": store.list_steps(rid),
-               "diagnoses": store.list_diagnoses(rid),
-               "recoveries": store.list_recoveries(rid),
-               "faults": store.get_faults(rid)}
+               "truncated": truncated,
+               "detail_limit": cap}
+        for k, v in groups.items():
+            out[k] = v[:cap]
         self._send(200, out)
 
     def h_run_once(self):
@@ -734,32 +838,69 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
         except Exception:
             return self._err("E_BAD_REQUEST", "请求体不是合法 JSON")
-        at = body.get("agent_type", "order")
-        tid = body.get("task_id", "A1001")
-        ft = body.get("fault_type", "silent_corruption")
-        mode = body.get("mode", "D")
-        if at not in sim.AGENT_TYPES or mode not in ("baseline", "A", "B", "C", "D", "R"):
-            return self._err("E_BAD_REQUEST", "agent_type 或 mode 不合法")
-        has_chain = bool(body.get("fault_chain"))
-        if ft not in sim.FAULT_TYPES and ft != "none" and not has_chain:
-            return self._err("E_BAD_REQUEST", "未知故障类型：%s" % ft)
-        if has_chain:
-            for f in body["fault_chain"]:
-                if not isinstance(f, dict) or f.get("type") not in sim.FAULT_TYPES:
-                    return self._err("E_BAD_REQUEST", "fault_chain 里有未知故障类型")
-        store = get_store(self._tenant_id)
-        exp = store.create_experiment("web/%s/%s/%s/%s" % (at, tid, ft, mode),
-                                      at, tid, ft, 0, 7, mode)
-        if body.get("fault_chain"):
-            exp["fault_chain"] = body["fault_chain"]
-        runtime.FORCED_SKILL = None
-        run = runtime.run_once(store, exp, mode)
-        return self._send(200, {
-            "run": run,
-            "steps": store.list_steps(run["id"]),
-            "diagnoses": store.list_diagnoses(run["id"]),
-            "recoveries": store.list_recoveries(run["id"]),
-        })
+        try:
+            out = run_experiment(self._tenant_id, body)
+        except ValueError as exc:
+            return self._err("E_BAD_REQUEST", str(exc))
+        return self._send(200, out)
+
+    # ---------------- 持久作业接口（EG-009）------------------------------
+    def h_job_submit(self):
+        if ent_jobs is None:
+            return self._err("E_UNAVAILABLE", "作业模块未启用", 503)
+        # 企业模式同样要过执行角色与审批后端（复制 h_run_once 的门禁语义）
+        if MODE == "enterprise":
+            if "executor" not in self._roles:
+                return self._err("E_FORBIDDEN", "该身份没有执行角色", 403)
+            if not APPROVAL_BACKEND:
+                return self._err("E_NOT_READY", "未配置审批后端", 503)
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+        except Exception:
+            return self._err("E_BAD_REQUEST", "请求体不是合法 JSON")
+        payload = body.get("payload", body)
+        if not isinstance(payload, dict):
+            return self._err("E_BAD_REQUEST", "payload 必须是对象")
+        try:
+            validate_run_payload(payload)
+        except ValueError as exc:
+            return self._err("E_BAD_REQUEST", str(exc))
+        key = (self.headers.get("Idempotency-Key")
+               or body.get("idempotency_key"))
+        store = job_store(self._tenant_id)
+        try:
+            job, created = store.submit(self._tenant_id, payload, key)
+        except OverflowError as exc:
+            return self._err("E_OVERLOADED", str(exc), 503)
+        job_worker(self._tenant_id)
+        # 同幂等键的重试返回原作业（200），新提交返回 202
+        return self._send(202 if created else 200,
+                          {"job": job, "created": created})
+
+    def h_job_list(self):
+        if ent_jobs is None:
+            return self._err("E_UNAVAILABLE", "作业模块未启用", 503)
+        m = re.search(r"[?&]limit=(\d+)", self.path)
+        limit = min(MAX_PAGE_SIZE, max(1, int(m.group(1)) if m else 50))
+        items = job_store(self._tenant_id).list(self._tenant_id, limit)
+        self._send(200, {"n": len(items), "items": items, "limit": limit})
+
+    def h_job_get(self, jid):
+        job = job_store(self._tenant_id).get(self._tenant_id, jid)
+        if job is None:
+            return self._err("E_NOT_FOUND", "作业不存在", 404)
+        self._send(200, {"job": job})
+
+    def h_job_cancel(self, jid):
+        ok = job_store(self._tenant_id).cancel(self._tenant_id, jid)
+        self._send(200 if ok else 409, {"canceled": ok, "job_id": jid})
+
+    def h_job_retry(self, jid):
+        ok = job_store(self._tenant_id).retry(self._tenant_id, jid)
+        if not ok:
+            return self._err("E_CONFLICT", "只有 unknown/failed/canceled 可重放", 409)
+        self._send(200, {"requeued": True, "job_id": jid})
 
 
 def _parse_port(argv):

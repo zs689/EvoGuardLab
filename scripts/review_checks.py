@@ -216,6 +216,27 @@ def c_metric_consistency():
                    "deploy/alerts.yml <-> ai-service/api/app.py")
 
 
+def c_frontend_session():
+    """EG-020：企业鉴权开启后浏览器要能带 token，且令牌不残留。"""
+    txt = _read("frontend/index.html")
+    checks = {
+        "统一带 Authorization": "headers['Authorization']" in txt,
+        "会话级存储": "sessionStorage.getItem(TOKEN_KEY)" in txt,
+        "支持退出": "removeItem(TOKEN_KEY)" in txt,
+        "401 有反馈": "未认证或令牌失效" in txt,
+        "403 有反馈": "当前身份没有该操作的权限" in txt,
+        "不写入持久存储": "localStorage.setItem(TOKEN_KEY" not in txt,
+        "不写进 URL": not any(x in txt for x in ("?token=", "#token=")),
+        "输入框不回显明文": "$('#token-input').value = ''" in txt,
+        "键盘可操作": "e.key === 'Enter'" in txt,
+    }
+    missing = [k for k, v in checks.items() if not v]
+    return _result("EG-020/session", not missing,
+                   "令牌传递/失效反馈/会话隔离/键盘操作 9 项齐全" if not missing
+                   else "缺：%s" % "、".join(missing),
+                   "frontend/index.html（静态；真实浏览器登录未实测）")
+
+
 def c_enterprise_e2e():
     """EG-001/EG-002：跑真服务、真 token、真跨租户查询，读产物判定。"""
     import subprocess
@@ -238,6 +259,84 @@ def c_enterprise_e2e():
                    % (s.get("pass", 0), s.get("total", 0)) if ok else
                    "未通过项：%s" % (failed or p.stderr[-160:]),
                    "scripts/enterprise_smoke.py（真进程 + 真 HTTP）")
+
+
+def c_audit_multiprocess():
+    """EG-008：真起两个进程并发写同一个审计库。"""
+    import subprocess
+    cmd = [sys.executable, "-m", "unittest",
+           "tests.test_audit_multiprocess", "-q"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                           cwd=ROOT, timeout=180)
+    except subprocess.TimeoutExpired:
+        return _result("EG-008/audit-mp", False, "跨进程验收超时",
+                       "tests/test_audit_multiprocess.py")
+    ok = p.returncode == 0
+    err = " ".join(p.stderr.strip().splitlines())[-600:]
+    return _result("EG-008/audit-mp", ok,
+                   "两进程并发迁移/写入：版本一致、无分叉链、事件完整"
+                   if ok else ("跨进程验收失败：" + err),
+                   "tests/test_audit_multiprocess.py（真两进程）")
+
+
+def c_data_governance():
+    """EG-022：合成敏感标记真的从每个出口都找不到。"""
+    import subprocess
+    cmd = [sys.executable, "-m", "unittest",
+           "tests.test_data_governance", "-q"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                           cwd=ROOT, timeout=180)
+    except subprocess.TimeoutExpired:
+        return _result("EG-022/governance", False, "数据治理验收超时",
+                       "tests/test_data_governance.py")
+    ok = p.returncode == 0
+    return _result("EG-022/governance", ok,
+                   "日志/指标/响应/列表/详情均不暴露合成敏感标记" if ok
+                   else p.stderr.strip()[-180:],
+                   "tests/test_data_governance.py + docs/data-governance.md")
+
+
+def c_v3_prereg():
+    """EG-017：判定线先写死、v2 负结果不许被改。"""
+    import subprocess
+    cmd = [sys.executable, "-m", "unittest",
+           "tests.test_v3_prereg", "-q"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                           cwd=ROOT, timeout=90)
+    except subprocess.TimeoutExpired:
+        return _result("EG-017/v3-prereg", False, "预注册守门超时",
+                       "tests/test_v3_prereg.py")
+    ok = p.returncode == 0
+    return _result("EG-017/v3-prereg", ok,
+                   "8 条判定线指纹冻结、文档与代码一致、v2 归档未动"
+                   if ok else p.stderr.strip()[-180:],
+                   "docs/semantic-injection-v3-plan.md + v3_gate.py")
+
+
+def c_jobs_e2e():
+    """EG-009：真服务里的作业生命周期、幂等、隔离、重启与提交/完成分离。"""
+    import subprocess
+    tmp = tempfile.mkdtemp(prefix="evo-jobgate-")
+    cmd = [sys.executable,
+           os.path.join(ROOT, "scripts", "jobs_smoke.py"), "--out", tmp]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                           cwd=ROOT, timeout=300)
+    except subprocess.TimeoutExpired:
+        return _result("EG-009/jobs", False, "作业验收超时（300s）",
+                       "scripts/jobs_smoke.py")
+    rep = _json(os.path.join(tmp, "jobs_smoke.json")) or {}
+    s = rep.get("summary", {})
+    failed = [c["id"] for c in rep.get("checks", []) if not c.get("pass")]
+    ok = p.returncode == 0 and rep.get("passed") is True and not failed
+    return _result("EG-009/jobs", ok,
+                   "幂等/轮询/取消/隔离/重启/提交-完成分离 %d/%d 通过"
+                   % (s.get("pass", 0), s.get("total", 0)) if ok else
+                   "未通过项：%s" % (failed or p.stderr[-160:]),
+                   "scripts/jobs_smoke.py（真进程 + 真 HTTP）")
 
 
 def c_page_limit():
@@ -325,8 +424,13 @@ CHECKS = [
     ("EG-013", c_liveness_split),
     ("EG-013", c_metric_consistency),
     ("EG-021", c_frontend_optional),
+    ("EG-020", c_frontend_session),
     ("EG-023", c_gate_in_ci),
     ("EG-001", c_enterprise_e2e),
+    ("EG-009", c_jobs_e2e),
+    ("EG-008", c_audit_multiprocess),
+    ("EG-017", c_v3_prereg),
+    ("EG-022", c_data_governance),
 ]
 
 

@@ -1,0 +1,91 @@
+{
+  "benchmark": {
+    "completion_p50_ms": 1177.3804999975255,
+    "completion_p95_ms": 1785.2966999998898,
+    "concurrency": 8,
+    "note": "提交响应与完成时间分离；worker 单线程顺序执行，完成时间仍包含真实实验耗时。",
+    "statuses": [
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded"
+    ],
+    "submit_p50_ms": 4.5959999988554046,
+    "submit_p95_ms": 14.147400004731026,
+    "wall_s": 1.787
+  },
+  "boundaries": [
+    "单进程单 worker；多副本共享队列与分布式租约未做。",
+    "崩溃恢复在单元测里验（租约过期 -> unknown -> 人工 retry），本脚本验的是重启后记录仍在。",
+    "runtime.FORCED_SKILL 仍是进程级全局，用执行锁串行化。"
+  ],
+  "checks": [
+    {
+      "detail": "status=202 created=True id=33364bc1b9404637839f21673cf887a8",
+      "id": "submit-returns-job-id",
+      "pass": true
+    },
+    {
+      "detail": "status=200 created=False same_id=True",
+      "id": "idempotent-retry",
+      "pass": true
+    },
+    {
+      "detail": "status=succeeded error=None",
+      "id": "poll-to-terminal",
+      "pass": true
+    },
+    {
+      "detail": "幂等提交 2 次后 runs=1（应为 1）",
+      "id": "no-duplicate-side-effect",
+      "pass": true
+    },
+    {
+      "detail": "retry succeeded -> 409（期望 409）",
+      "id": "no-replay-of-succeeded",
+      "pass": true
+    },
+    {
+      "detail": "limit=200（clamp 到 200）",
+      "id": "job-list-bounded",
+      "pass": true
+    },
+    {
+      "detail": "beta 查 default 作业 -> E_NOT_FOUND",
+      "id": "tenant-isolation",
+      "pass": true
+    },
+    {
+      "detail": "beta 作业数=0",
+      "id": "tenant-job-list-empty",
+      "pass": true
+    },
+    {
+      "detail": "4 个提交 id 互异=True",
+      "id": "concurrent-submits",
+      "pass": true
+    },
+    {
+      "detail": "8 并发：提交 P95=14.1 ms，完成 P95=1785.3 ms，墙钟 1.79 s",
+      "id": "submit-vs-completion",
+      "pass": true
+    },
+    {
+      "detail": "重启后 status=succeeded",
+      "id": "survives-restart",
+      "pass": true
+    }
+  ],
+  "generated_at": "2026-11-13T14:38:59",
+  "passed": true,
+  "summary": {
+    "fail": 0,
+    "pass": 11,
+    "total": 11
+  },
+  "version": 1
+}

@@ -27,6 +27,7 @@ import platform
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -163,8 +164,15 @@ def main():
     ]
 
     rounds, samples = [], []
+    # 审查 handoff_rules：重跑实验写入**独立输出目录**。
+    # 以前压测直接用仓库内 data/evoguard.db，历史数据量、日志模式、
+    # 甚至别的测试残留都会混进结果，改前改后根本不可比。
+    work = tempfile.mkdtemp(prefix="evo-loadtest-")
+    data_root = os.path.join(work, "data")
     with L.Service({"AGENTLAB_API_TOKEN": TOKEN,
-                    "AGENTLAB_RATE_LIMIT": "1000000"}) as svc:
+                    "AGENTLAB_RATE_LIMIT": "1000000",
+                    "AGENTLAB_DATA_ROOT": data_root,
+                    "AGENTLAB_DB": os.path.join(data_root, "evoguard.db")}) as svc:
         for rnd in range(1, a.rounds + 1):
             items = []
             for name, method, path, headers, body in scenarios:
@@ -208,6 +216,8 @@ def main():
             "rate_limit": "1000000", "audit": "off",
             "transport": "loopback HTTP, no TLS, no proxy",
             "arrival": "fixed concurrency (not fixed rate)",
+            "data_dir": "<isolated temp dir, freshly created per run>",
+            "journal_mode": "<fresh database, default>",
         },
         "sli_definition": {
             "success": "2xx",

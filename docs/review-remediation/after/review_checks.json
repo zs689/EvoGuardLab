@@ -73,6 +73,12 @@
       "status": "pass"
     },
     {
+      "detail": "令牌传递/失效反馈/会话隔离/键盘操作 9 项齐全",
+      "evidence": "frontend/index.html（静态；真实浏览器登录未实测）",
+      "id": "EG-020/session",
+      "status": "pass"
+    },
+    {
       "detail": "8 项 CI 门槛齐全",
       "evidence": ".github/workflows/test.yml",
       "id": "EG-023/gate",
@@ -83,17 +89,41 @@
       "evidence": "scripts/enterprise_smoke.py（真进程 + 真 HTTP）",
       "id": "EG-001+002/enterprise",
       "status": "pass"
+    },
+    {
+      "detail": "幂等/轮询/取消/隔离/重启/提交-完成分离 11/11 通过",
+      "evidence": "scripts/jobs_smoke.py（真进程 + 真 HTTP）",
+      "id": "EG-009/jobs",
+      "status": "pass"
+    },
+    {
+      "detail": "两进程并发迁移/写入：版本一致、无分叉链、事件完整",
+      "evidence": "tests/test_audit_multiprocess.py（真两进程）",
+      "id": "EG-008/audit-mp",
+      "status": "pass"
+    },
+    {
+      "detail": "8 条判定线指纹冻结、文档与代码一致、v2 归档未动",
+      "evidence": "docs/semantic-injection-v3-plan.md + v3_gate.py",
+      "id": "EG-017/v3-prereg",
+      "status": "pass"
+    },
+    {
+      "detail": "日志/指标/响应/列表/详情均不暴露合成敏感标记",
+      "evidence": "tests/test_data_governance.py + docs/data-governance.md",
+      "id": "EG-022/governance",
+      "status": "pass"
     }
   ],
-  "generated_at": "2026-11-13T14:27:17",
+  "generated_at": "2026-11-13T15:23:57",
   "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
-  "revision": "793c6d1a4ae7eee961e3e0bfeb259bfb8585a2ba",
-  "seconds": 2.71,
+  "revision": "b39e4626bed996e753c2002ed98692c5417f14a9",
+  "seconds": 22.59,
   "summary": {
     "fail": 0,
-    "pass": 14,
+    "pass": 19,
     "skip": 0,
-    "total": 14
+    "total": 19
   },
   "version": 1
 }

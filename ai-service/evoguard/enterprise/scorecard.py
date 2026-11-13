@@ -405,18 +405,20 @@ def probe_audit(root):
                        % (chain_info.get("checked"),
                           chain_info.get("checked", 0)
                           + chain_info.get("unhashed", 0))))
-        # WAL 只能在文件库上验：`:memory:` 报的 journal_mode 是 memory。
-        # 用临时文件库重开一次，别让探针自己的选型掩盖结论。
-        tmpdb = os.path.join(tempfile.mkdtemp(prefix="evo-wal-"), "a.db")
-        try:
-            fs = A.AuditStore(tmpdb)
-            mode = fs._conn.execute("PRAGMA journal_mode").fetchone()[0]
-            fs.close()
-        except Exception:                  # noqa: BLE001
-            mode = "error"
-        checks.append((str(mode).lower() == "wal",
-                       "SQLite 开启 WAL（并发读不被写锁死）",
-                       "journal_mode=%s" % mode))
+        # EG-008 的真能力是「跨进程事务边界」，不是「开了 WAL」。
+        # 2026-11-13 实测多进程共享 WAL 审计库时 3/10 报
+        # `attempt to write a readonly database`，按证据撤回 WAL，
+        # 改由 BEGIN IMMEDIATE + busy_timeout 提供跨进程串行化（0/10 失败）。
+        # 探针跟着改成验能力，别继续给一个会引发故障的配置发满分。
+        src = _read(_p(root, "ai-service", "evoguard", "enterprise",
+                       "audit.py"))
+        checks.append(("BEGIN IMMEDIATE" in src
+                       and "busy_timeout=30000" in src,
+                       "审计写入有跨进程事务边界",
+                       "BEGIN IMMEDIATE + busy_timeout=30s"))
+        checks.append(("PRAGMA journal_mode=WAL" not in src,
+                       "未启用会引发 readonly 的 WAL",
+                       "按验收证据撤回，见 perf-before-after.md"))
         s.close()
     except Exception as exc:               # noqa: BLE001
         checks.append((False, "审计模块可导入并工作", repr(exc)))

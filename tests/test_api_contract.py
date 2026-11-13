@@ -30,7 +30,8 @@ def _routes_from_source():
 
 def _to_path(pattern):
     p = pattern.strip("^$")
-    p = re.sub(r"\(\[.*?\]\+\)", "{rid}", p)
+    name = "{job_id}" if p.startswith("/api/jobs/") else "{rid}"
+    p = re.sub(r"\(\[.*?\]\+\)", name, p)
     return p
 
 

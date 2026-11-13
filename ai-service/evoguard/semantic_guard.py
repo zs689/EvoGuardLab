@@ -24,10 +24,16 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections import OrderedDict
 
 MODEL = os.environ.get("AGENTLAB_SEMANTIC_MODEL") or "qwen3:4b"
 BASE = os.environ.get("AGENTLAB_OLLAMA_BASE") or "http://127.0.0.1:11434"
 TIMEOUT = float(os.environ.get("AGENTLAB_SEMANTIC_TIMEOUT") or "30")
+# EG-027：缓存必须**有界**。以前是无限增长的进程内字典 + 只追加的 jsonl，
+# 高基数请求会把内存/磁盘吃满；更糟的是模型临时不可用的结果也永久缓存，
+# 下游恢复后仍然一直返回 unavailable。
+CACHE_MAX_ENTRIES = int(os.environ.get("AGENTLAB_SEMANTIC_CACHE_MAX") or 4096)
+CACHE_TTL_S = float(os.environ.get("AGENTLAB_SEMANTIC_CACHE_TTL") or 3600)
 
 VERSION = "semantic-guard-v1"
 
@@ -76,27 +82,46 @@ def prompt_hash(mode):
     return _sha(PROMPTS[mode])
 
 
-def canonical(mode, text):
-    """缓存键：模式 + prompt 版本 + 文本。"""
-    return _sha("%s|%s|%s" % (VERSION, prompt_hash(mode), text))
+def canonical(mode, text, scope=""):
+    """缓存键：模式 + prompt 版本 + 文本（可选授权作用域）。
+
+    `scope` 默认空，键与历史完全一致 —— 离线零依赖的既有多组复现证据
+    不能被这次改动弄脏。企业模式可传 tenant/策略作用域，避免跨租户复用
+    同一条判定结果（EG-001 / EG-027）。
+    """
+    base = "%s|%s|%s" % (VERSION, prompt_hash(mode), text)
+    return _sha(base if not scope else "scope:%s|%s" % (scope, base))
 
 
 class SemanticGuard:
     """带 jsonl 缓存的语义判定器。"""
 
-    def __init__(self, cache_path=None, model=MODEL, base=BASE, timeout=TIMEOUT):
+    def __init__(self, cache_path=None, model=MODEL, base=BASE, timeout=TIMEOUT,
+                 max_entries=CACHE_MAX_ENTRIES, ttl_s=CACHE_TTL_S, clock=None):
         self.model, self.base, self.timeout = model, base.rstrip("/"), timeout
         self.cache_path = cache_path
-        self.cache = {}
+        self.max_entries = max(1, int(max_entries))
+        self.ttl_s = float(ttl_s)
+        self._clock = clock or time.time
+        self.cache = OrderedDict()          # 有界 LRU
         self.calls = 0
+        self.expired = 0
+        self.not_cached_failures = 0
         if cache_path and os.path.isfile(cache_path):
             with open(cache_path, encoding="utf-8") as f:
                 for line in f:
                     try:
                         row = json.loads(line)
-                        self.cache[row["key"]] = row["result"]
+                        result = row["result"]
+                        # 历史缓存里可能存过临时失败，加载时直接丢掉
+                        if result.get("status") != "observed":
+                            continue
+                        result.setdefault("ts", self._clock())
+                        self.cache[row["key"]] = result
                     except Exception:                 # noqa: BLE001
                         continue
+            while len(self.cache) > self.max_entries:
+                self.cache.popitem(last=False)
         self._opener = urllib.request.build_opener(
             urllib.request.ProxyHandler({}))       # 本地回环不走代理
 
@@ -128,17 +153,27 @@ class SemanticGuard:
             raise ValueError("模型没给出布尔 is_attack")
         return parsed
 
-    def judge(self, mode, text):
-        """返回 {is_attack, status, reason, cached, ms, key}。"""
+    def judge(self, mode, text, scope=""):
+        """返回 {is_attack, status, reason, cached, ms, key}。
+
+        EG-027：命中前检查 TTL；只缓存 `observed`（模型临时失败绝不长期
+        复用）；LRU 容量有界；`scope` 可隔离不同租户/策略的判定结果。
+        """
         if mode not in PROMPTS:
             raise ValueError("未知落点：%s" % mode)
-        key = canonical(mode, text)
+        key = canonical(mode, text, scope)
+        now = self._clock()
         if key in self.cache:
-            r = dict(self.cache[key])
-            r["cached"] = True
-            # 保留首次实测耗时，报告里的延迟才有意义（重跑不重复付这份开销）
-            r["ms"] = float(self.cache[key].get("ms") or 0.0)
-            return r
+            entry = self.cache[key]
+            if now - float(entry.get("ts", 0)) <= self.ttl_s:
+                self.cache.move_to_end(key)
+                r = {k: v for k, v in entry.items() if k not in ("ts",)}
+                r["cached"] = True
+                # 保留首次实测耗时，报告里的延迟才有意义（重跑不重复付这份开销）
+                r["ms"] = float(entry.get("ms") or 0.0)
+                return r
+            self.cache.pop(key, None)
+            self.expired += 1
         t0 = time.perf_counter()
         try:
             parsed = self._call(mode, text)
@@ -155,14 +190,22 @@ class SemanticGuard:
         result["ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
         result["cached"] = False
         self.calls += 1
-        self.cache[key] = {k: v for k, v in result.items()
-                           if k != "cached"}
-        if self.cache_path:
-            os.makedirs(os.path.dirname(os.path.abspath(self.cache_path)),
-                        exist_ok=True)
-            with open(self.cache_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps({"key": key, "result": self.cache[key]},
-                                   ensure_ascii=False, sort_keys=True) + "\n")
+        # 临时失败不入缓存：下游恢复后下一次调用必须真的重试
+        if result["status"] == "observed":
+            stored = {k: v for k, v in result.items() if k != "cached"}
+            stored["ts"] = now
+            self.cache[key] = stored
+            self.cache.move_to_end(key)
+            while len(self.cache) > self.max_entries:
+                self.cache.popitem(last=False)
+            if self.cache_path:
+                os.makedirs(os.path.dirname(os.path.abspath(self.cache_path)),
+                            exist_ok=True)
+                with open(self.cache_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({"key": key, "result": stored},
+                                       ensure_ascii=False, sort_keys=True) + "\n")
+        else:
+            self.not_cached_failures += 1
         return result
 
 

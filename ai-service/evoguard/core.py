@@ -10,6 +10,7 @@ import contextlib
 import json
 import os
 import sqlite3
+import threading
 import time
 import uuid
 
@@ -167,6 +168,9 @@ class Store:
         # 生产库必须保持默认（崩溃不丢事务），这个开关不能默认打开。
         self.fast = fast
         self._fast_conn = None
+        # EG-010：连接次数可观测（get_store 是单例，这就是进程累计值）。
+        self.conn_opened = 0
+        self._conn_lock = threading.Lock()
         self.init()
 
     @contextlib.contextmanager
@@ -180,10 +184,15 @@ class Store:
         上千次 run × 每 run 十几次写，开/关连接本身就是主要开销。
         """
         if self.fast and self._fast_conn is not None:
+            with self._conn_lock:
+                self.conn_opened += 1
             yield self._fast_conn
             self._fast_conn.commit()
             return
-        c = sqlite3.connect(self.path, timeout=10)
+        with self._conn_lock:
+            self.conn_opened += 1
+        c = sqlite3.connect(self.path, timeout=30)
+        c.execute("PRAGMA busy_timeout=30000")
         c.row_factory = sqlite3.Row
         if self.fast:
             c.execute("PRAGMA synchronous=OFF")
@@ -209,8 +218,22 @@ class Store:
                 self._fast_conn.close()
                 self._fast_conn = None
 
+    def journal_mode(self):
+        with self.conn() as c:
+            return c.execute("PRAGMA journal_mode").fetchone()[0]
+
     def init(self):
         with self.conn() as c:
+            # **刻意不启用 WAL**（EG-010，按验收证据决定，见下）。
+            # 2026-11-13 实测：本架构每个方法都开关一条独立连接，
+            # 切 WAL 后 24 并发写有 3/24 报
+            # `sqlite3.OperationalError: attempt to write a readonly database`，
+            # 保持一条常开连接仍剩 1/24。原因是最后一个连接关闭时会
+            # checkpoint 并删除 -wal/-shm，与并发打开的连接竞争。
+            # 修好它需要真正的连接池（EG-010 未完成），在没做之前
+            # 保留 delete 日志 + 30s busy_timeout 才是正确默认值。
+            # 复现：core.Store(path) 后 24 线程并发 create_experiment。
+            # 详见 docs/review-remediation/perf-before-after.md。
             c.executescript(SCHEMA)
 
     # ---------- 实验 ----------
@@ -311,12 +334,19 @@ class Store:
                  error_type, duration_ms, model_id, tokens, checkpoint_id, now()))
         return sid
 
-    def list_steps(self, run_id):
-        """诊断模块**只能**通过这个函数拿到轨迹。它拿不到 faults 表。"""
+    def list_steps(self, run_id, limit=None):
+        """诊断模块**只能**通过这个函数拿到轨迹。它拿不到 faults 表。
+
+        `limit` 只给 HTTP 详情接口用（EG-012）；内部诊断调用不传，
+        仍取整条链，避免影响经验索引的「首轮根因」语义。
+        """
+        sql = "SELECT * FROM steps WHERE run_id=? ORDER BY seq"
+        args = [run_id]
+        if limit:
+            sql += " LIMIT ?"
+            args.append(int(limit))
         with self.conn() as c:
-            rows = c.execute(
-                "SELECT * FROM steps WHERE run_id=? ORDER BY seq", (run_id,)
-            ).fetchall()
+            rows = c.execute(sql, args).fetchall()
         out = []
         for r in rows:
             d = dict(r)
@@ -351,10 +381,15 @@ class Store:
                       (new_id("flt"), run_id, fault_type, target_seq, dumps(payload),
                        1 if injected else 0))
 
-    def get_faults(self, run_id):
+    def get_faults(self, run_id, limit=None):
         """只有评测模块该调用它。诊断模块不 import 这个函数。"""
+        sql = "SELECT * FROM faults WHERE run_id=?"
+        args = [run_id]
+        if limit:
+            sql += " LIMIT ?"
+            args.append(int(limit))
         with self.conn() as c:
-            rows = c.execute("SELECT * FROM faults WHERE run_id=?", (run_id,)).fetchall()
+            rows = c.execute(sql, args).fetchall()
         out = []
         for r in rows:
             d = dict(r)
@@ -382,16 +417,20 @@ class Store:
         d["evidence"] = loads(d["evidence"], {})
         return d
 
-    def list_diagnoses(self, run_id):
+    def list_diagnoses(self, run_id, limit=None):
         """策略链每轮会写一条诊断，按时间顺序全取出来。
 
         经验索引必须用**第一条**：复合故障运行时第一次查技能用的就是首轮根因，
         若拿最后一轮根因当键，学到的组合技能永远匹配不上。
         """
+        sql = ("SELECT * FROM diagnoses WHERE run_id=? "
+               "ORDER BY created_at, rowid")
+        args = [run_id]
+        if limit:
+            sql += " LIMIT ?"
+            args.append(int(limit))
         with self.conn() as c:
-            rows = c.execute(
-                "SELECT * FROM diagnoses WHERE run_id=? ORDER BY created_at, rowid", (run_id,)
-            ).fetchall()
+            rows = c.execute(sql, args).fetchall()
         out = []
         for r in rows:
             d = dict(r)
@@ -416,12 +455,16 @@ class Store:
             ).fetchone()
         return dict(r) if r else None
 
-    def list_recoveries(self, run_id):
+    def list_recoveries(self, run_id, limit=None):
         """策略链会写多条恢复记录，经验提炼要能读到**整条链**，不能只看最后一条。"""
+        sql = ("SELECT * FROM recoveries WHERE run_id=? "
+               "ORDER BY created_at, rowid")
+        args = [run_id]
+        if limit:
+            sql += " LIMIT ?"
+            args.append(int(limit))
         with self.conn() as c:
-            rows = c.execute(
-                "SELECT * FROM recoveries WHERE run_id=? ORDER BY created_at, rowid", (run_id,)
-            ).fetchall()
+            rows = c.execute(sql, args).fetchall()
         out = []
         for r in rows:
             d = dict(r)

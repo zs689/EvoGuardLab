@@ -123,31 +123,52 @@ class AuditStore(AuditSink):
         self._lock = threading.Lock()
         if path not in (":memory:", ""):
             os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
-        self._conn = sqlite3.connect(path, check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn = sqlite3.connect(path, check_same_thread=False,
+                                     timeout=30.0)
+        # **刻意不启用 WAL**（EG-008，按验收证据决定）。
+        # 2026-11-13 实测：多进程共享这个 WAL 库时，10 次跨进程并发测试
+        # 有 3 次报 `attempt to write a readonly database` —— 一个进程关闭
+        # 连接时 checkpoint 并删除 -wal/-shm，与另一个进程正在打开的
+        # 连接竞争。EG-008 要的是「跨进程事务边界」，由下面的
+        # BEGIN IMMEDIATE（emit/migrate）+ busy_timeout 提供，不需要 WAL。
+        # 复现与数据见 docs/review-remediation/perf-before-after.md。
+        self._conn.execute("PRAGMA busy_timeout=30000")
         self.version = self.migrate()
 
     # ---------------- 迁移 ----------------
     def migrate(self):
-        """按版本顺序应用未执行的迁移；已是最新则无操作。幂等。"""
+        """按版本顺序应用未执行的迁移；已是最新则无操作。幂等。
+
+        EG-008：整个迁移在一个 `BEGIN IMMEDIATE` 事务里做，跨进程串行化。
+        以前只用进程内锁，两个实例同时启动会各自读 schema_migrations
+        然后同时 DDL / 插入同一版本号。
+        """
         with self._lock:
-            self._conn.execute("""
-                CREATE TABLE IF NOT EXISTS schema_migrations (
-                    version INTEGER PRIMARY KEY,
-                    applied_at REAL NOT NULL
-                )
-            """)
-            done = {r[0] for r in
-                    self._conn.execute("SELECT version FROM schema_migrations")}
-            for version, fn in MIGRATIONS:
-                if version in done:
-                    continue
-                fn(self._conn)
-                self._conn.execute(
-                    "INSERT INTO schema_migrations(version, applied_at) "
-                    "VALUES (?, ?)", (version, self._clock()))
-            self._conn.commit()
-            return max([0] + [v for v, _ in MIGRATIONS])
+            conn = self._conn
+            if conn.in_transaction:
+                conn.commit()
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS schema_migrations (
+                        version INTEGER PRIMARY KEY,
+                        applied_at REAL NOT NULL
+                    )
+                """)
+                done = {r[0] for r in
+                        conn.execute("SELECT version FROM schema_migrations")}
+                for version, fn in MIGRATIONS:
+                    if version in done:
+                        continue
+                    fn(conn)
+                    conn.execute(
+                        "INSERT INTO schema_migrations(version, applied_at) "
+                        "VALUES (?, ?)", (version, self._clock()))
+                conn.commit()
+                return max([0] + [v for v, _ in MIGRATIONS])
+            except Exception:
+                conn.rollback()
+                raise
 
     # ---------------- 写入 ----------------
     def emit(self, event):
@@ -168,22 +189,32 @@ class AuditStore(AuditSink):
                   if event.get("detail") is not None else None)
         latency_ms = event.get("latency_ms")
         with self._lock:
-            # 取链尾：serialize 写入，避免并发 emit 生成分叉链。
-            prev = self._conn.execute(
-                "SELECT row_hash FROM audit_events ORDER BY id DESC LIMIT 1"
-            ).fetchone()
-            prev_hash = prev[0] if prev and prev[0] else ""
-            row_hash = _canonical(ts, tenant, request_id, actor, method, path,
-                                  status, decision, detail, latency_ms,
-                                  prev_hash)
-            cur = self._conn.execute(
-                "INSERT INTO audit_events(ts,tenant_id,request_id,actor,method,"
-                "path,status,decision,detail,latency_ms,prev_hash,row_hash) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (ts, tenant, request_id, actor, method, path, status, decision,
-                 detail, latency_ms, prev_hash, row_hash))
-            self._conn.commit()
-            return cur.lastrowid
+            conn = self._conn
+            if conn.in_transaction:
+                conn.commit()
+            # EG-008：读链尾 + 插入必须在**同一个跨进程事务**里，
+            # 否则两个实例会读到同一个 prev_hash，写出分叉链。
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                prev = conn.execute(
+                    "SELECT row_hash FROM audit_events ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+                prev_hash = prev[0] if prev and prev[0] else ""
+                row_hash = _canonical(ts, tenant, request_id, actor, method,
+                                      path, status, decision, detail,
+                                      latency_ms, prev_hash)
+                cur = conn.execute(
+                    "INSERT INTO audit_events(ts,tenant_id,request_id,actor,"
+                    "method,path,status,decision,detail,latency_ms,"
+                    "prev_hash,row_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (ts, tenant, request_id, actor, method, path, status,
+                     decision, detail, latency_ms, prev_hash, row_hash))
+                rid = cur.lastrowid
+                conn.commit()
+                return rid
+            except Exception:
+                conn.rollback()
+                raise
 
     record = emit
 
@@ -197,47 +228,55 @@ class AuditStore(AuditSink):
         断链原因分三种：`hash_mismatch`（行被改）、`prev_mismatch`（被删/插）、
         `unhashed`（旧行）。
         """
+        checked = unhashed = archived = 0
+        prev_hash = ""
+        # EG-008：流式分批，大表校验的峰值内存不随总行数线性增长。
+        # 以前一次性 fetchall()，几百万行会直接把内存吃满。
+        sql = ("SELECT id,ts,tenant_id,request_id,actor,method,path,status,"
+               "decision,detail,latency_ms,prev_hash,row_hash "
+               "FROM audit_events ORDER BY id ASC" + (
+                   " LIMIT %d" % int(limit) if limit else ""))
         with self._lock:
-            rows = self._conn.execute(
-                "SELECT id,ts,tenant_id,request_id,actor,method,path,status,"
-                "decision,detail,latency_ms,prev_hash,row_hash "
-                "FROM audit_events ORDER BY id ASC" + (
-                    " LIMIT %d" % int(limit) if limit else "")).fetchall()
             anchors = {}
             for after_id, anchor_hash, n_del in self._conn.execute(
                     "SELECT after_id, anchor_hash, deleted_rows "
                     "FROM audit_anchors"):
                 anchors.setdefault(after_id, []).append((anchor_hash, n_del))
-        checked = unhashed = archived = 0
-        prev_hash = ""
-        for r in rows:
-            (rid, ts, tenant, request_id, actor, method, path, status,
-             decision, detail, latency_ms, stored_prev, stored_hash) = r
-            if not stored_hash:
-                unhashed += 1
-                prev_hash = ""
-                continue
-            effective_prev = stored_prev or ""
-            if effective_prev != prev_hash:
-                # 只有「授权归档」留下的锚点能解释这个缺口；
-                # 手工 DELETE / 插入伪造行没有锚点，一律判为断链。
-                hits = anchors.get(rid, [])
-                if not any(h == effective_prev for h, _ in hits):
-                    info = {"reason": "prev_mismatch", "first_bad_id": rid,
+            cur = self._conn.execute(sql)
+            while True:
+                batch = cur.fetchmany(1000)
+                if not batch:
+                    break
+                for r in batch:
+                    (rid, ts, tenant, request_id, actor, method, path, status,
+                     decision, detail, latency_ms, stored_prev, stored_hash) = r
+                    if not stored_hash:
+                        unhashed += 1
+                        prev_hash = ""
+                        continue
+                    effective_prev = stored_prev or ""
+                    if effective_prev != prev_hash:
+                        # 只有「授权归档」留下的锚点能解释这个缺口；
+                        # 手工 DELETE / 插入伪造行没有锚点，一律判为断链。
+                        hits = anchors.get(rid, [])
+                        if not any(h == effective_prev for h, _ in hits):
+                            return False, {
+                                "reason": "prev_mismatch",
+                                "first_bad_id": rid, "checked": checked,
+                                "unhashed": unhashed,
+                                "archived_gaps": archived}
+                        archived += 1
+                    # 用行里存的 prev 重算：正常时等于链尾，归档缺口时是锚点。
+                    want = _canonical(ts, tenant, request_id, actor, method,
+                                      path, status, decision, detail,
+                                      latency_ms, effective_prev)
+                    if want != stored_hash:
+                        return False, {
+                            "reason": "hash_mismatch", "first_bad_id": rid,
                             "checked": checked, "unhashed": unhashed,
                             "archived_gaps": archived}
-                    return False, info
-                archived += 1
-            # 用行里存的 prev 重算：正常时它等于链尾，归档缺口时它是锚点。
-            want = _canonical(ts, tenant, request_id, actor, method, path,
-                              status, decision, detail, latency_ms,
-                              effective_prev)
-            if want != stored_hash:
-                return False, {"reason": "hash_mismatch", "first_bad_id": rid,
-                               "checked": checked, "unhashed": unhashed,
-                               "archived_gaps": archived}
-            prev_hash = stored_hash
-            checked += 1
+                    prev_hash = stored_hash
+                    checked += 1
         return True, {"reason": "ok", "first_bad_id": None,
                       "checked": checked, "unhashed": unhashed,
                       "archived_gaps": archived}
