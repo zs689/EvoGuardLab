@@ -106,3 +106,16 @@
 
 验收：929 tests OK。仍未解决：上游 commit 未锁、审批没有真实外部审批人、
 超时无强制预算、评测进度无跨进程锁、写路径性能、单进程、多副本。
+
+### 第四轮（2026-11-14）：连接池与同负载 A/B
+
+- `core.py` 新增有界连接池 `_ConnPool`（复用、异常丢弃、`check_same_thread=False`、
+  默认关闭）；`AGENTLAB_STORE_POOL=1` / `AGENTLAB_STORE_POOL_SIZE` /
+  `AGENTLAB_STORE_WAL=1`（WAL 必须和池一起开）。
+- `loadtest.py` 加 `--store-pool` / `--store-wal` 开关，同一脚本同参数做 A/B。
+- 6 次独立运行：默认 2969/3627 ms → 开池 2103 ms → 池+WAL 565/693/791 ms，
+  吞吐 5 → 25~31 rps，全部 200。报告 `docs/review-remediation/store-pool-ab.md`。
+- `tests/test_store_pool.py` 6/6，含「WAL + 常开连接 24 并发 0 失败」——
+  证实第二轮撤回 WAL 的根因确实是没有常开连接。
+- 默认**仍关闭**：长时稳定性、WAL 备份恢复、多进程、SIGKILL 恢复、
+  开池下全量回归未验。935 tests OK。

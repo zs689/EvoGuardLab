@@ -48,7 +48,10 @@
 - **静态**：应用不做数据库加密。需要时由部署侧提供加密卷 / SQLite 加密层，
   并把密钥放进独立 KMS —— **不要**写进 `.env` 或镜像。
 - **备份**：`AGENTLAB_DB` / `AGENTLAB_AUDIT_DB` / `data/tenants/` 都要一起备份，
-  且审计锚点要与审计库分开保存。RPO/RTO 与恢复演练**本轮未做**
+  且审计锚点要与审计库分开保存。若开启 `AGENTLAB_STORE_WAL=1`（必须与
+  `AGENTLAB_STORE_POOL=1` 同开），**还要把未 checkpoint 的 `-wal` 文件一起
+  备份**，否则恢复时可能丢最近事务；这一条目前只在
+  `SECURITY.md` 写了警告，**没有做过恢复演练**。RPO/RTO 与恢复流程本轮未做
   （EG-016 未完成）。恢复后必须 `AuditStore.verify()` 重算链。
 
 ## 五、已知限制（如实）

@@ -52,3 +52,9 @@
 
 任何安全判定都必须保留 `detected / decision / attempted / executed / effect / reason`。
 把「检测到」写成「已拦截」在这里算数据造假，不是措辞问题。
+
+- **WAL 必须和连接池一起开**（`AGENTLAB_STORE_WAL=1` + `AGENTLAB_STORE_POOL=1`）。
+  没有常开连接时，最后一个连接关闭会删 `-wal/-shm`，并发写入报
+  `attempt to write a readonly database`（实测 3/24）。`journal_mode` 是
+  **数据库文件头的持久设置**，撤掉环境变量不会还原已跑过的库，需要显式
+  `PRAGMA journal_mode=DELETE`。WAL 模式下备份必须连 `-wal` 一起做。

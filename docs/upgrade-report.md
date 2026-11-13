@@ -335,3 +335,22 @@ Docker 镜像层、GitHub CI、真实浏览器与 Linux wheel 未实测。
 Ran 929 tests ... OK
 verify_corpus.py: PASS（9 条告警）；--strict: 1（预期）
 ```
+
+## 十二、第四轮：连接池 + WAL 的同负载 A/B（2026-11-14）
+
+第二轮撤回 WAL 时写「修好它需要真正的连接池」。这一轮把连接池做出来并验证。
+
+同脚本、同参数（`--requests 24 --workers 8 --rounds 3`）、每次新建隔离库，
+6 次独立运行：
+
+| 配置 | write_run P95 中位 | 吞吐 | availability |
+|---|---|---|---|
+| A 默认 ×2 | 2969 / 3627 ms | 5.1–5.4 rps | 1.0 |
+| B 连接池 | 2103 ms | 7.4–8.0 rps | 1.0 |
+| C 连接池+WAL ×3 | 565 / 693 / 791 ms | 25–31 rps | 1.0 |
+
+每轮 24×200，无 5xx —— 吞吐同步增长，不是失败请求拉低分布。
+开池+WAL 下 enterprise 9/9、jobs 11/11、drill 5/5、935 tests OK。
+
+**默认仍关闭**（语义级变更需点头）；长时稳定性、WAL 备份/恢复、多进程、
+SIGKILL 恢复、开池全量回归未验。证据 `review-remediation/store-pool-ab.md`。

@@ -194,3 +194,25 @@ python -m unittest discover -s tests -q   Ran 929 tests ... OK
 python scripts/verify_corpus.py            PASS（9 条告警）
 python scripts/verify_corpus.py --strict   1（预期：上游未锁定）
 ```
+
+## 九、第四轮（2026-11-14）：连接池 + WAL 的同负载 A/B
+
+第二轮把 WAL 撤回时写过「修好它需要真正的连接池（EG-010 未完成）」。
+这一轮把连接池做出来，并用数据验证这个判断。完整报告在
+`store-pool-ab.md`，机器可读在 `perf/pool_ab_*.json`（6 次运行）。
+
+| 配置 | write_run P95（三轮） | 中位 | 吞吐 | availability |
+|---|---|---|---|---|
+| A 默认（每操作开关连接） | 2341/2969/3411 ms | 2969（重复 3627） | 5.1–5.4 rps | 1.0 |
+| B 连接池 | 1948/2277/2103 ms | 2103 | 7.4–8.0 rps | 1.0 |
+| C 连接池 + WAL | 678/490/565 ms | 565（重复 693/791） | 25–31 rps | 1.0 |
+
+**每轮都是 24×200，没有 5xx** —— 和上轮「P95 变好但 availability 0.875」
+的假象不同，这次吞吐同步涨了约 5 倍。`tests/test_store_pool.py` 专门验了
+上轮 `readonly` 的根因：常开连接保住 `-wal/-shm`，24 并发写 0 失败。
+
+开池 + WAL 下的端到端：enterprise 9/9、jobs 11/11（完成 P95 1785→324 ms）、
+drill 5/5；全量回归 935 OK。
+
+**默认仍关闭。** 这是语义级默认变更，长时稳定性、WAL 备份/恢复、多进程、
+SIGKILL 恢复、开池下的全量回归都没验；按 USER 规矩不替张硕决定。
