@@ -9,6 +9,7 @@
 import contextlib
 import json
 import os
+import queue
 import sqlite3
 import threading
 import time
@@ -156,6 +157,83 @@ CREATE INDEX IF NOT EXISTS idx_faults_run ON faults(run_id);
 """
 
 
+class _ConnPool:
+    """有界连接复用（EG-010）。
+
+    为什么需要：原来的 `conn()` 每个方法都 `sqlite3.connect` 再 `close`，
+    一次实验十几步就是十几次开/关连接；更糟的是**最后一个连接关闭时
+    SQLite 会 checkpoint 并删除 -wal/-shm**，这也是之前 WAL 尝试在多进程
+    下报 `readonly` 的根因。常开连接能把这两件事一起解决。
+
+    设计取舍：池空时**新建而不阻塞**。core.Store 的方法之间存在嵌套调用，
+    用 Semaphore 限流会在嵌套时死锁；这里宁可短暂多开几条，`put` 时超出的
+    直接关掉，最大活跃数受并发数约束而不会无限增长。
+    """
+
+    def __init__(self, path, size=8):
+        self.path = path
+        self.size = max(1, int(size))
+        self._q = queue.Queue(maxsize=self.size)
+        self._lock = threading.Lock()
+        self.created = 0
+        self.discarded = 0
+        self._closed = False
+        self._all = []
+
+    def _new(self):
+        # 连接会被不同线程轮流借用；Queue 保证同一时刻只有一个借用者，
+        # 所以跨线程复用是安全的（真正危险的是同时持有同一条连接）。
+        c = sqlite3.connect(self.path, timeout=30,
+                            check_same_thread=False)
+        c.execute("PRAGMA busy_timeout=30000")
+        c.row_factory = sqlite3.Row
+        with self._lock:
+            self.created += 1
+            self._all.append(c)
+        return c
+
+    def get(self):
+        try:
+            return self._q.get_nowait()
+        except queue.Empty:
+            return self._new()
+
+    def put(self, c, broken=False):
+        if broken or self._closed:
+            with self._lock:
+                self.discarded += 1
+            try:
+                c.close()
+            except Exception:                 # noqa: BLE001
+                pass
+            return
+        try:
+            self._q.put_nowait(c)
+        except queue.Full:
+            try:
+                c.close()
+            except Exception:                 # noqa: BLE001
+                pass
+
+    def stats(self):
+        with self._lock:
+            return {"size": self.size, "created": self.created,
+                    "discarded": self.discarded,
+                    "idle": self._q.qsize(), "closed": self._closed}
+
+    def close(self):
+        self._closed = True
+        while True:
+            try:
+                c = self._q.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                c.close()
+            except Exception:                 # noqa: BLE001
+                pass
+
+
 class Store:
     """所有持久化入口。每个方法自己开连接，避免多线程共享连接的问题。"""
 
@@ -171,7 +249,21 @@ class Store:
         # EG-010：连接次数可观测（get_store 是单例，这就是进程累计值）。
         self.conn_opened = 0
         self._conn_lock = threading.Lock()
+        # 连接池默认**关闭**：929 项既有测试按「每次独立连接」写，
+        # 默认改语义风险太大。先做成可开关，用同负载 A/B 决定默认值。
+        self._pool = None
+        pool_flag = (os.environ.get("AGENTLAB_STORE_POOL") or "").strip().lower()
+        if not fast and pool_flag in ("1", "true", "on"):
+            self._pool = _ConnPool(
+                self.path,
+                int(os.environ.get("AGENTLAB_STORE_POOL_SIZE") or 8))
         self.init()
+        # WAL 只在「连接池开启」时允许：常开连接保住 -wal/-shm，
+        # 否则最后一个连接关闭会与并发打开的连接竞争（上轮 3/24 readonly）。
+        wal_flag = (os.environ.get("AGENTLAB_STORE_WAL") or "").strip().lower()
+        if self._pool is not None and wal_flag in ("1", "true", "on"):
+            with self.conn() as c:
+                c.execute("PRAGMA journal_mode=WAL")
 
     @contextlib.contextmanager
     def conn(self):
@@ -191,6 +283,23 @@ class Store:
             return
         with self._conn_lock:
             self.conn_opened += 1
+        if self._pool is not None:
+            # 复用常开连接；异常时丢弃而不是把坏连接放回池里。
+            c = self._pool.get()
+            broken = False
+            try:
+                yield c
+                c.commit()
+            except Exception:                 # noqa: BLE001
+                broken = True
+                try:
+                    c.rollback()
+                except Exception:             # noqa: BLE001
+                    pass
+                raise
+            finally:
+                self._pool.put(c, broken=broken)
+            return
         c = sqlite3.connect(self.path, timeout=30)
         c.execute("PRAGMA busy_timeout=30000")
         c.row_factory = sqlite3.Row
@@ -210,7 +319,12 @@ class Store:
         finally:
             c.close()
 
+    def pool_stats(self):
+        return self._pool.stats() if self._pool is not None else None
+
     def close(self):
+        if self._pool is not None:
+            self._pool.close()
         if self._fast_conn is not None:
             try:
                 self._fast_conn.commit()

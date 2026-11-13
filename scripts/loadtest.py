@@ -151,7 +151,14 @@ def main():
     ap.add_argument("--baseline", default="", help="对比用基线 result.json")
     ap.add_argument("--max-regression", type=float, default=0.0,
                     help="允许的 P95 回归比例；0 表示只报告不守门")
+    # EG-010 A/B：同一份脚本、同一参数，只切存储配置。
+    ap.add_argument("--store-pool", action="store_true",
+                    help="开启有界连接池（AGENTLAB_STORE_POOL=1）")
+    ap.add_argument("--store-wal", action="store_true",
+                    help="连接池 + WAL；必须和 --store-pool 一起用")
     a = ap.parse_args()
+    if a.store_wal and not a.store_pool:
+        ap.error("--store-wal 必须和 --store-pool 一起用（无常开连接会 readonly）")
 
     auth = {"Authorization": "Bearer " + TOKEN}
     post = dict(auth)
@@ -169,10 +176,15 @@ def main():
     # 甚至别的测试残留都会混进结果，改前改后根本不可比。
     work = tempfile.mkdtemp(prefix="evo-loadtest-")
     data_root = os.path.join(work, "data")
-    with L.Service({"AGENTLAB_API_TOKEN": TOKEN,
-                    "AGENTLAB_RATE_LIMIT": "1000000",
-                    "AGENTLAB_DATA_ROOT": data_root,
-                    "AGENTLAB_DB": os.path.join(data_root, "evoguard.db")}) as svc:
+    svc_env = {"AGENTLAB_API_TOKEN": TOKEN,
+               "AGENTLAB_RATE_LIMIT": "1000000",
+               "AGENTLAB_DATA_ROOT": data_root,
+               "AGENTLAB_DB": os.path.join(data_root, "evoguard.db")}
+    if a.store_pool:
+        svc_env["AGENTLAB_STORE_POOL"] = "1"
+    if a.store_wal:
+        svc_env["AGENTLAB_STORE_WAL"] = "1"
+    with L.Service(svc_env) as svc:
         for rnd in range(1, a.rounds + 1):
             items = []
             for name, method, path, headers, body in scenarios:
@@ -217,7 +229,8 @@ def main():
             "transport": "loopback HTTP, no TLS, no proxy",
             "arrival": "fixed concurrency (not fixed rate)",
             "data_dir": "<isolated temp dir, freshly created per run>",
-            "journal_mode": "<fresh database, default>",
+            "store_pool": bool(a.store_pool),
+            "store_wal": bool(a.store_wal),
         },
         "sli_definition": {
             "success": "2xx",

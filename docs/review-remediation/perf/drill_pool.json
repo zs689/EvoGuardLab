@@ -1,0 +1,123 @@
+{
+  "boundaries": [
+    "在本地回环上用独立进程演练，不含真实网络分区 / 磁盘满 / 依赖超时。",
+    "故障注入通过环境变量完成，属于「已知可控故障」，不是混沌工程的随机注入。",
+    "没有验证长时间（小时级）稳定性与内存增长。"
+  ],
+  "generated_at": "2026-11-14T00:11:59",
+  "results": [
+    {
+      "drill": "auth",
+      "note": "403/401 的取舍：这里用 401（未认证），不是 403（已认证无权限），因为请求根本没有可识别的主体。",
+      "passed": true,
+      "seconds": 0.56,
+      "steps": [
+        {
+          "expect": 401,
+          "name": "无 token 请求",
+          "status": 401
+        },
+        {
+          "expect": 200,
+          "name": "带 token 请求",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "drill": "kill_switch",
+      "note": "开关刻意只拦 WRITE_METHODS，GET 保持可读 —— 否则事故中运维连健康检查都用不了，等于把自己关在门外。",
+      "passed": true,
+      "seconds": 1.12,
+      "steps": [
+        {
+          "expect": 200,
+          "name": "开关打开时读",
+          "status": 200
+        },
+        {
+          "expect": 503,
+          "name": "开关打开时写",
+          "status": 503
+        },
+        {
+          "expect": "非 503（本例 404，因为路由不存在；说明已过闸门）",
+          "name": "关掉后写回到正常路径",
+          "status": 404
+        }
+      ]
+    },
+    {
+      "drill": "rate_limit",
+      "note": "限流按 actor 分桶，不是全局限流 —— 一个客户端刷爆不该拖累别的租户。",
+      "passed": true,
+      "retry_after": "",
+      "seconds": 0.62,
+      "steps": [
+        {
+          "expect": "前 3 次 200，其后 429",
+          "name": "连打 6 次（限额 3）",
+          "statuses": [
+            200,
+            200,
+            200,
+            429,
+            429,
+            429
+          ]
+        }
+      ]
+    },
+    {
+      "drill": "restart",
+      "note": "重启不改语义：没有「重启后变成默认放开」这种降级。",
+      "passed": true,
+      "seconds": 1.12,
+      "steps": [
+        {
+          "expect": 200,
+          "name": "第一次启动",
+          "status": 200
+        },
+        {
+          "expect": 200,
+          "name": "第二次启动",
+          "status": 200
+        },
+        {
+          "expect": 401,
+          "name": "重启后鉴权仍生效",
+          "status": 401
+        }
+      ]
+    },
+    {
+      "drill": "audit_degraded",
+      "note": "降级不静默：审计掉了会在 /api/health 的 audit_error 里写明原因，监控据此告警，而不是等审计查不出东西才发现。",
+      "passed": true,
+      "seconds": 0.54,
+      "steps": [
+        {
+          "expect": 200,
+          "name": "审计库路径非法时仍能访问",
+          "status": 200
+        },
+        {
+          "expect": false,
+          "name": "健康检查报告审计已关",
+          "value": false
+        },
+        {
+          "expect": "非空",
+          "name": "健康检查给出降级原因",
+          "value": "FileExistsError: [WinError 183] 当文件已存在时，无法创建该文件。: '<repo>\\\\READM"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "total": 5
+  },
+  "version": 1
+}
