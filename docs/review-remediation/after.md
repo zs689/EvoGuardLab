@@ -24,7 +24,7 @@ python scripts/review_checks.py --gate --out docs/review-remediation/after
 | EG-001+002/enterprise | 真起服务、真 token、真跨租户查询 |
 | EG-023/gate | CI 8 项门槛齐全 |
 
-## 二、三个独立验收脚本
+## 二、独立验收脚本
 
 ```bash
 python scripts/enterprise_smoke.py --out docs/review-remediation/probes   # 9/9
@@ -92,3 +92,21 @@ EG-009 / EG-010 指的地方 —— 这两项在台账里仍然标 ⬜ / 🟡，
 
 `docs/enterprise-scorecard.md` 已重生成，stdout 与 `--out` 逐字节一致
 （`tests/test_enterprise.py::test_stdout_matches_out_file` 守着）。
+
+## 六、最终复验（提交后，干净 clone）
+
+```
+主仓库         : Ran 874 tests ... OK                       / 14/14 gate
+干净 clone     : Ran 874 tests ... OK (skipped=41)         / 14/14 gate
+干净 clone CLI : evoguard config PASS / scorecard --min 80 PASS
+干净 clone 制品 : pip wheel . -> 独立 venv 安装 -> check_wheel_manifest PASS
+               -> wheel_smoke 10/10（含 serve 六个路由全 200）
+```
+
+`skipped=41` 全部是依赖 `data/external/` 语料的用例（该目录按许可与体积
+不入库），不是失败。干净 clone 能独立构建可用制品，说明打包配置不依赖
+主工作树里的任何未跟踪文件。
+
+**仍然没有验的**：Docker 镜像层（daemon 不可达）、GitHub CI 真实运行
+（本轮全部本地，未创建远程仓库/推送）、Linux 平台的 wheel 冒烟
+（本机 Windows；CI 矩阵里配了但没跑）。

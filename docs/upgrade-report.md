@@ -248,9 +248,18 @@ python scripts/drill.py                  5/5
 python -m unittest discover -s tests -q Ran 874 tests ... OK
 ```
 
-### 最终复验（干净 clone）
+### 最终复验（干净 clone，提交 `db57159` + `6b214b4` 之后）
 
-见 `docs/review-remediation/after.md` 与本节末尾的提交记录。
+```
+干净 clone : Ran 874 tests ... OK (skipped=41)
+           : scripts/review_checks.py --gate -> 14/14 pass
+           : evoguard config / scorecard --min 80 -> PASS
+           : pip wheel . -> 独立 venv 安装 -> check_wheel_manifest PASS
+           : wheel_smoke 10/10（serve 六个路由全 200）
+主仓库     : 工作树干净，874 tests OK
+```
+
+详见 `docs/review-remediation/after.md` §六。
 
 ### 明确没验的
 
