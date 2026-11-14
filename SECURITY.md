@@ -60,5 +60,7 @@
   `journal_mode` 是**数据库文件头的持久设置**，撤掉环境变量不会还原
   已跑过的库，需要显式 `PRAGMA journal_mode=DELETE`。
   WAL 模式下备份必须连 `-wal` 一起做：实测只复制 `.db` 恢复 **0/200 行**，
-  连 `-wal` 恢复 200/200（见 `docs/review-remediation/store-pool-stability.md`）。
+  连 `-wal` 恢复 200/200。另有约 70 倍磁盘写放大
+  （8610 B/写 vs 只开池 122.9 B/写）。
+  见 `docs/review-remediation/store-pool-stability.md` §四。
   推荐配置只有 `AGENTLAB_STORE_POOL=1`，默认仍关闭。

@@ -248,3 +248,32 @@ SIGKILL 恢复、开池下的全量回归都没验；按 USER 规矩不替张硕
 
 **更正后的推荐：只开 `AGENTLAB_STORE_POOL=1`，不要开 WAL，默认仍关闭。**
 详见 `store-pool-stability.md` 与 `store-pool-ab.md` 顶部的更正版。
+
+## 十一、第六轮（2026-11-14）：把剩下能在本机验的都补掉
+
+`scripts/store_remaining_checks.py`，产物 `probes/store_remaining_checks.json`，
+**4/4 全过**：
+
+| 项 | 结果 |
+|---|---|
+| 真实 `taskkill /F /T` 强杀进程树（不是 `os._exit` 模拟） | 只开池、池+WAL 两种都恢复 120/120 行，`integrity_check=ok` |
+| 60 秒 soak / 8 线程 | 19622 次写，`created` 恒为 8、堆峰值 0.15 MiB、0 错误、0 丢弃 |
+| 磁盘写入量（200 次写 × 三配置） | 默认 / 只开池 **122.9 B/写**；池+WAL **8610 B/写（约 70 倍）** |
+
+磁盘量给「不要开 WAL」补了第三个独立理由：除了并发 `readonly` 与
+备份丢数据，写放大也是数量级的。
+
+复查 Docker daemon：仍报
+`npipe:////./pipe/dockerDesktopLinuxEngine ... 系统找不到指定的文件`，
+**EG-003 镜像层依旧未实测**，不写成通过。
+
+`review_checks.py` 加 `EG-010/remaining` 门槛（读产物、不重跑 60 秒），
+gate 20 → 21 项。
+
+### 到此为止：本机范围内能验的都验过了
+
+剩下没做的不是「还没轮到」，而是**本机做不了或需要张硕决定**：
+小时级 soak（要挂着跑数小时）、多主机共享存储、Docker 镜像层、
+GitHub CI 真实运行、真实浏览器与 Linux wheel、v3 检测实验（要上游语料
+与第二位调参者）、语料上游 commit/license、真实外部审批人、
+以及「把只开池设成默认」这个语义级变更。

@@ -139,3 +139,18 @@
   enterprise-readiness / 台账 EG-010 / store-pool-ab.md 顶部醒目更正。
 
 **推荐：只开 `AGENTLAB_STORE_POOL=1`，不要开 WAL，默认仍关闭。**
+
+### 第六轮（2026-11-14）：补完本机可验的剩余项
+
+- 新增 `scripts/store_remaining_checks.py`（`--soak-seconds`），
+  产物 `probes/store_remaining_checks.json`，**4/4**：
+  - 真实 Windows `taskkill /F /T` 强杀进程树（只开池 / 池+WAL 都恢复
+    120/120 行，integrity ok），不再只是 `os._exit` 模拟。
+  - 60 秒 soak / 8 线程共 19622 次写，`created` 恒为 8、
+    堆峰值 0.15 MiB、0 错误、0 丢弃。
+  - 磁盘写入量：默认与只开池 122.9 B/写，**池+WAL 8610 B/写（约 70 倍）**
+    —— 「不要开 WAL」的第三个独立理由。
+- 复查 Docker daemon 仍不可达，EG-003 镜像层如实保持未实测。
+- `review_checks.py` 加 `EG-010/remaining`（读产物不重跑），gate 20→21。
+- 文档同步：store-pool-stability.md §四、台账 EG-010、.env.example、
+  SECURITY、enterprise-readiness、after.md §十一。

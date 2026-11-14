@@ -1673,3 +1673,10 @@ EG-014/018/019/026 四项从 ⬜ 推进到 🟡：熔断接进真实调用路径
 是运气，已在 store-pool-ab.md 顶部醒目更正。
 新增 store-pool-stability.md、双配置稳定性 JSON、EG-010/store-defaults 门槛。
 **推荐改为：只开 AGENTLAB_STORE_POOL=1，不要开 WAL，默认仍关闭。**
+
+### 11-14 第七轮：本机可验项收束
+
+真实 taskkill /F 强杀两种配置都恢复 120/120 行；60 秒 soak 约 2 万次写
+连接数恒定、堆 0.15 MiB；磁盘量发现 WAL 写放大约 70 倍。
+`store_remaining_checks.json` 4/4，gate 20→21。Docker daemon 复查仍不可达。
+剩下没做的都需要别的环境或张硕点头，不是「还没轮到」。
