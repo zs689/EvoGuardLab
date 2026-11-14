@@ -131,17 +131,23 @@
       "evidence": "core.py / app.py / tests/test_single_writer.py",
       "id": "EG-010/single-writer",
       "status": "pass"
+    },
+    {
+      "detail": "新默认 [1093.2, 1067.85] ms vs 全关 [2815.78, 3247.42] ms，均无 5xx",
+      "evidence": "probes/http_ab_*.json",
+      "id": "EG-010/e2e",
+      "status": "pass"
     }
   ],
-  "generated_at": "2026-11-14T18:10:38",
+  "generated_at": "2026-11-14T19:14:58",
   "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
-  "revision": "6ab4f9ed919c118875a72d8e728158a4775f24b9",
-  "seconds": 21.14,
+  "revision": "64f371fec0a5e1ccb82e3fe0a70da8cf386745d8",
+  "seconds": 20.78,
   "summary": {
     "fail": 0,
-    "pass": 22,
+    "pass": 23,
     "skip": 0,
-    "total": 22
+    "total": 23
   },
   "version": 1
 }

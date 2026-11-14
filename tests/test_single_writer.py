@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """创新点：SQL 感知的写串行化（读写分离，默认开、可关）。"""
+import gc
 import os
 import sqlite3
 import sys
@@ -143,6 +144,39 @@ class TestSerializedWrites(unittest.TestCase):
                     self.assertIsInstance(c2, core._WriteGuardConn)
         finally:
             s.close()
+
+    def test_gates_are_shared_per_path_and_reclaimed(self):
+        """弱引用表：同路径共享一把锁，Store 回收后 gate 自动消失。"""
+        os.environ["AGENTLAB_STORE_SERIALIZE_WRITES"] = "1"
+        before = core.active_write_gates()
+        a = core.Store(self.path)
+        b = core.Store(self.path)          # 同一个库文件
+        try:
+            self.assertIs(a._write_gate_obj, b._write_gate_obj,
+                          "同路径的两个 Store 必须共用一把锁")
+            self.assertGreaterEqual(core.active_write_gates(), before + 1)
+        finally:
+            a.close()
+            b.close()
+        del a, b
+        gc.collect()
+        self.assertLessEqual(core.active_write_gates(), before + 1,
+                             "Store 回收后 gate 不该残留")
+
+    def test_many_temporary_stores_do_not_leak_gates(self):
+        os.environ["AGENTLAB_STORE_SERIALIZE_WRITES"] = "1"
+        before = core.active_write_gates()
+        stores = []
+        for i in range(30):
+            stores.append(core.Store(self.path + ".tmp%d" % i))
+        peak = core.active_write_gates()
+        for s in stores:
+            s.close()
+        del stores
+        gc.collect()
+        self.assertGreaterEqual(peak, before + 30)
+        self.assertLessEqual(core.active_write_gates(), before + 1,
+                             "临时 Store 回收后闸门数必须回落")
 
     def test_fast_mode_skips_serialization(self):
         s = core.Store(self.path, fast=True)

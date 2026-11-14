@@ -14,6 +14,7 @@ import sqlite3
 import threading
 import time
 import uuid
+import weakref
 
 DB_PATH = os.environ.get("AGENTLAB_DB", "")
 
@@ -255,7 +256,13 @@ class _WriteGuardConn:
             setattr(object.__getattribute__(self, "_raw"), name, value)
 
 
-_GATES = {}
+# 弱引用表：gate 的生命周期跟随持有它的 Store 实例。
+# 用普通 dict 会无限增长（测试里每个临时库一个路径、长时服务按租户/作业
+# 动态建库也会累积）；又不能随便 LRU 淘汰 —— 淘汰一把**正在被持有**的锁
+# 会让新来的 Store 建一把新锁，同一路径两把锁，串行化直接失效。
+# WeakValueDictionary 让最后一个 Store 被回收时 gate 自动消失，且只要有
+# 任一 Store 活着，同路径的所有 Store 都拿到同一把锁。
+_GATES = weakref.WeakValueDictionary()
 _GATES_LOCK = threading.Lock()
 
 
@@ -267,6 +274,12 @@ def _write_gate(path):
             gate = _WriteGate()
             _GATES[key] = gate
         return gate
+
+
+def active_write_gates():
+    """可观测：当前存活的写闸门数量。"""
+    with _GATES_LOCK:
+        return len(_GATES)
 
 
 def _interprocess_lock(path, timeout=15.0):
@@ -422,6 +435,9 @@ class Store:
         _sw = (os.environ.get("AGENTLAB_STORE_SERIALIZE_WRITES") or "1")
         self._serialize_writes = (not fast and
                                   _sw.strip().lower() not in ("0", "false", "off"))
+        # 强引用：只要本 Store 活着，同路径的写闸门就存在
+        self._write_gate_obj = (_write_gate(self.path)
+                                if self._serialize_writes else None)
         # 连接池默认**开启**（2026-11-14 按 A/B 证据决定）。
         # 池 + 写串行化是唯一「错误归零且吞吐不降」的组合：
         # 同负载 90s×24 线程，旧默认 19073 写/5 错，
@@ -477,7 +493,7 @@ class Store:
         if self._pool is not None:
             # 复用常开连接；异常时丢弃而不是把坏连接放回池里。
             raw = self._pool.get()
-            c = (_WriteGuardConn(raw, _write_gate(self.path))
+            c = (_WriteGuardConn(raw, self._write_gate_obj)
                  if self._serialize_writes else raw)
             broken = False
             try:
@@ -507,7 +523,7 @@ class Store:
             finally:
                 pass                # 评测结束由 close() 统一关
             return
-        c = (_WriteGuardConn(raw, _write_gate(self.path))
+        c = (_WriteGuardConn(raw, self._write_gate_obj)
              if self._serialize_writes else raw)
         try:
             yield c
@@ -519,7 +535,8 @@ class Store:
         return self._pool.stats() if self._pool is not None else None
 
     def write_gate_stats(self):
-        return _write_gate(self.path).stats() if self._serialize_writes else None
+        return (self._write_gate_obj.stats()
+                if self._write_gate_obj is not None else None)
 
     def close(self):
         if self._pool is not None:

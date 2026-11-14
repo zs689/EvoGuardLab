@@ -1,0 +1,415 @@
+{
+  "aggregated": {
+    "read_health": {
+      "availability_min": 1.0,
+      "p95_all_ms": [
+        58.719,
+        15.859,
+        24.862
+      ],
+      "p95_median_ms": 24.86,
+      "rounds": 3
+    },
+    "read_metrics": {
+      "availability_min": 1.0,
+      "p95_all_ms": [
+        24.369,
+        20.103,
+        26.038
+      ],
+      "p95_median_ms": 24.37,
+      "rounds": 3
+    },
+    "read_runs": {
+      "availability_min": 1.0,
+      "p95_all_ms": [
+        504.082,
+        25.898,
+        20.301
+      ],
+      "p95_median_ms": 25.9,
+      "rounds": 3
+    },
+    "write_run": {
+      "availability_min": 1.0,
+      "p95_all_ms": [
+        3247.416,
+        3512.368,
+        2798.624
+      ],
+      "p95_median_ms": 3247.42,
+      "rounds": 3
+    }
+  },
+  "boundaries": [
+    "固定并发数，不是固定到达率；未做 coordinated omission 控制。",
+    "全程回环、单进程、mock 模型；不含 TLS/反向代理/真实网络抖动。",
+    "CPU 与峰值 RSS 未采集（零第三方依赖边界；Windows 无 resource 模块）。",
+    "绝对性能门槛未冻结：没有业务目标，不擅自编一个数字当 SLA。",
+    "wheel/容器/多副本下的表现未测。"
+  ],
+  "config": {
+    "arrival": "fixed concurrency (not fixed rate)",
+    "audit": "off",
+    "auth": "enabled (fixed local test token)",
+    "data_dir": "<isolated temp dir, freshly created per run>",
+    "rate_limit": "1000000",
+    "requests_per_scenario": 24,
+    "rounds": 3,
+    "store_default": false,
+    "store_off": true,
+    "store_pool": false,
+    "store_wal": false,
+    "transport": "loopback HTTP, no TLS, no proxy",
+    "workers": 8
+  },
+  "environment": {
+    "implementation": "CPython",
+    "machine": "AMD64",
+    "os": "Windows-11-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "python": "3.13.14",
+    "sqlite": "3.53.1"
+  },
+  "generated_at": "2026-11-14T19:00:40",
+  "revision": "64f371fec0a5e1ccb82e3fe0a70da8cf386745d8",
+  "rounds": [
+    {
+      "round": 1,
+      "scenarios": [
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 58.912,
+            "p50": 3.916,
+            "p95": 58.719,
+            "p99": 58.912
+          },
+          "method": "GET",
+          "name": "read_health",
+          "path": "/api/health",
+          "requests": 24,
+          "rps": 252.89,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 0.095,
+          "workers": 8
+        },
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 504.469,
+            "p50": 2.93,
+            "p95": 504.082,
+            "p99": 504.469
+          },
+          "method": "GET",
+          "name": "read_runs",
+          "path": "/api/runs?limit=60",
+          "requests": 24,
+          "rps": 46.1,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 0.521,
+          "workers": 8
+        },
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 4126.144,
+            "p50": 600.05,
+            "p95": 3247.416,
+            "p99": 4126.144
+          },
+          "method": "POST",
+          "name": "write_run",
+          "path": "/api/run",
+          "requests": 24,
+          "rps": 5.25,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 4.568,
+          "workers": 8
+        },
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 26.852,
+            "p50": 5.305,
+            "p95": 24.369,
+            "p99": 26.852
+          },
+          "method": "GET",
+          "name": "read_metrics",
+          "path": "/api/metrics",
+          "requests": 24,
+          "rps": 485.51,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 0.049,
+          "workers": 8
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "scenarios": [
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 26.795,
+            "p50": 2.711,
+            "p95": 15.859,
+            "p99": 26.795
+          },
+          "method": "GET",
+          "name": "read_health",
+          "path": "/api/health",
+          "requests": 24,
+          "rps": 515.17,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 0.047,
+          "workers": 8
+        },
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 26.756,
+            "p50": 4.699,
+            "p95": 25.898,
+            "p99": 26.756
+          },
+          "method": "GET",
+          "name": "read_runs",
+          "path": "/api/runs?limit=60",
+          "requests": 24,
+          "rps": 509.65,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 0.047,
+          "workers": 8
+        },
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 3633.512,
+            "p50": 671.932,
+            "p95": 3512.368,
+            "p99": 3633.512
+          },
+          "method": "POST",
+          "name": "write_run",
+          "path": "/api/run",
+          "requests": 24,
+          "rps": 5.15,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 4.664,
+          "workers": 8
+        },
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 27.184,
+            "p50": 6.484,
+            "p95": 20.103,
+            "p99": 27.184
+          },
+          "method": "GET",
+          "name": "read_metrics",
+          "path": "/api/metrics",
+          "requests": 24,
+          "rps": 674.11,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 0.036,
+          "workers": 8
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "scenarios": [
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 28.052,
+            "p50": 3.348,
+            "p95": 24.862,
+            "p99": 28.052
+          },
+          "method": "GET",
+          "name": "read_health",
+          "path": "/api/health",
+          "requests": 24,
+          "rps": 522.63,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 0.046,
+          "workers": 8
+        },
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 25.794,
+            "p50": 4.988,
+            "p95": 20.301,
+            "p99": 25.794
+          },
+          "method": "GET",
+          "name": "read_runs",
+          "path": "/api/runs?limit=60",
+          "requests": 24,
+          "rps": 507.39,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 0.047,
+          "workers": 8
+        },
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 3518.876,
+            "p50": 716.528,
+            "p95": 2798.624,
+            "p99": 3518.876
+          },
+          "method": "POST",
+          "name": "write_run",
+          "path": "/api/run",
+          "requests": 24,
+          "rps": 5.34,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 4.492,
+          "workers": 8
+        },
+        {
+          "availability": 1.0,
+          "counts": {
+            "client_error": 0,
+            "connect_failure": 0,
+            "controlled_reject": 0,
+            "server_failure": 0,
+            "success": 24
+          },
+          "latency_ms": {
+            "max": 521.234,
+            "p50": 6.079,
+            "p95": 26.038,
+            "p99": 521.234
+          },
+          "method": "GET",
+          "name": "read_metrics",
+          "path": "/api/metrics",
+          "requests": 24,
+          "rps": 44.02,
+          "status_counts": {
+            "200": 24
+          },
+          "wall_s": 0.545,
+          "workers": 8
+        }
+      ]
+    }
+  ],
+  "sli_definition": {
+    "availability": "success / (success + server_failure + connect_failure)",
+    "client_error": "其它 4xx（含 404）",
+    "connect_failure": "连接失败/超时（status=0）",
+    "controlled_reject": "401/403/429/503 — 单列，不计入成功率也不计失败",
+    "server_failure": "5xx（受控 503 除外）",
+    "success": "2xx"
+  },
+  "verdict": "未设 --baseline，本轮只报告不判定回归",
+  "version": 2
+}

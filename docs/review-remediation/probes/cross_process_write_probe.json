@@ -1,0 +1,89 @@
+{
+  "config": {
+    "out": "<workspace>/_crossproc",
+    "procs": 4,
+    "seconds": 45,
+    "threads": 8
+  },
+  "rows": [
+    {
+      "errors": 0,
+      "mode": "default",
+      "procs": 4,
+      "rows": [
+        {
+          "detail": [],
+          "errors": 0,
+          "pid": "p0",
+          "writes": 2583
+        },
+        {
+          "detail": [],
+          "errors": 0,
+          "pid": "p1",
+          "writes": 1901
+        },
+        {
+          "detail": [],
+          "errors": 0,
+          "pid": "p2",
+          "writes": 5743
+        },
+        {
+          "detail": [],
+          "errors": 0,
+          "pid": "p3",
+          "writes": 4464
+        }
+      ],
+      "seconds": 45,
+      "threads": 8,
+      "writes": 14691
+    },
+    {
+      "errors": 8,
+      "mode": "off",
+      "procs": 4,
+      "rows": [
+        {
+          "detail": [
+            "OperationalError: database is locked",
+            "OperationalError: database is locked"
+          ],
+          "errors": 2,
+          "pid": "p0",
+          "writes": 2853
+        },
+        {
+          "detail": [
+            "OperationalError: database is locked"
+          ],
+          "errors": 1,
+          "pid": "p1",
+          "writes": 2570
+        },
+        {
+          "detail": [
+            "OperationalError: database is locked",
+            "OperationalError: database is locked"
+          ],
+          "errors": 2,
+          "pid": "p2",
+          "writes": 2050
+        },
+        {
+          "detail": [
+            "OperationalError: database is locked",
+            "OperationalError: database is locked"
+          ],
+          "errors": 3,
+          "pid": "p3",
+          "writes": 2091
+        }
+      ],
+      "seconds": 45,
+      "threads": 8,
+      "writes": 9564
+    }
+  ]
+}

@@ -291,6 +291,33 @@ def c_single_writer():
                    "core.py / app.py / tests/test_single_writer.py")
 
 
+def _p95_of(rep):
+    a = (rep or {}).get("aggregated", {}).get("write_run", {})
+    return a.get("p95_median_ms")
+
+
+def c_e2e_speedup():
+    """新默认在真实 HTTP 写路径上必须明显快于全关，且两边都无 5xx。"""
+    d = os.path.join(ROOT, "docs", "review-remediation", "probes")
+    on = _json(os.path.join(d, "http_ab_on.json")) or {}
+    on2 = _json(os.path.join(d, "http_ab_on2.json")) or {}
+    off = _json(os.path.join(d, "http_ab_off.json")) or {}
+    off2 = _json(os.path.join(d, "http_ab_off2.json")) or {}
+    vals_on = [_p95_of(x) for x in (on, on2)]
+    vals_off = [_p95_of(x) for x in (off, off2)]
+    ok = (all(v for v in vals_on + vals_off)
+          and max(vals_on) < min(vals_off)
+          and all((x.get("aggregated") or {}).get("write_run", {})
+                  .get("availability_min") == 1.0
+                  for x in (on, on2, off, off2)))
+    return _result("EG-010/e2e", ok,
+                   ("新默认 %s ms vs 全关 %s ms，均无 5xx"
+                    % (vals_on, vals_off)) if ok
+                   else "产物缺失或端到端收益不成立：%s / %s"
+                   % (vals_on, vals_off),
+                   "probes/http_ab_*.json")
+
+
 def c_enterprise_e2e():
     """EG-001/EG-002：跑真服务、真 token、真跨租户查询，读产物判定。"""
     import subprocess
@@ -501,6 +528,7 @@ CHECKS = [
     ("EG-010", c_store_defaults),
     ("EG-010", c_remaining_checks),
     ("EG-010", c_single_writer),
+    ("EG-010", c_e2e_speedup),
 ]
 
 

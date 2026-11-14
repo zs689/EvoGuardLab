@@ -156,6 +156,8 @@ def main():
                     help="开启有界连接池（AGENTLAB_STORE_POOL=1）")
     ap.add_argument("--store-wal", action="store_true",
                     help="连接池 + WAL；必须和 --store-pool 一起用")
+    ap.add_argument("--store-off", action="store_true",
+                    help="关闭连接池与写串行化，作为旧行为对照")
     a = ap.parse_args()
     if a.store_wal and not a.store_pool:
         ap.error("--store-wal 必须和 --store-pool 一起用（无常开连接会 readonly）")
@@ -184,6 +186,9 @@ def main():
         svc_env["AGENTLAB_STORE_POOL"] = "1"
     if a.store_wal:
         svc_env["AGENTLAB_STORE_WAL"] = "1"
+    if a.store_off:
+        svc_env["AGENTLAB_STORE_POOL"] = "0"
+        svc_env["AGENTLAB_STORE_SERIALIZE_WRITES"] = "0"
     with L.Service(svc_env) as svc:
         for rnd in range(1, a.rounds + 1):
             items = []
@@ -231,6 +236,8 @@ def main():
             "data_dir": "<isolated temp dir, freshly created per run>",
             "store_pool": bool(a.store_pool),
             "store_wal": bool(a.store_wal),
+            "store_off": bool(a.store_off),
+            "store_default": not (a.store_pool or a.store_off or a.store_wal),
         },
         "sli_definition": {
             "success": "2xx",

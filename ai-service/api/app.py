@@ -308,6 +308,8 @@ def store_health(tenant_id="default"):
         # 写串行化闸门：acquired 是累计写事务数，waiters 是正在排队的线程数
         d["write_gate"] = store.write_gate_stats()
         d["serialize_writes"] = store._serialize_writes
+        # 存活的写闸门数：弱引用表跟随 Store 生命周期，长时运行不该无限增长
+        d["active_write_gates"] = core.active_write_gates()
         return d
     except Exception as exc:                    # noqa: BLE001
         return {"ok": False, "error": type(exc).__name__}
