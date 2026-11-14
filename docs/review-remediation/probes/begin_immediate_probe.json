@@ -1,0 +1,29 @@
+{
+  "config": {
+    "out": "<workspace>/_beginprobe",
+    "seconds": 60,
+    "workers": 24
+  },
+  "rows": [
+    {
+      "detail": {
+        "OperationalError: database is locked": 21
+      },
+      "errors": 21,
+      "mode": "implicit",
+      "seconds": 60,
+      "workers": 24,
+      "writes": 10905
+    },
+    {
+      "detail": {
+        "OperationalError: database is locked": 18
+      },
+      "errors": 18,
+      "mode": "begin_immediate",
+      "seconds": 60,
+      "workers": 24,
+      "writes": 20587
+    }
+  ]
+}

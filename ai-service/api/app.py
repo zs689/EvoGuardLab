@@ -303,6 +303,8 @@ def store_health(tenant_id="default"):
         # 没有重复开连接」以及 WAL 是否生效。
         d["journal_mode"] = getattr(store, "_eg_journal", "unknown")
         d["conn_opened"] = store.conn_opened
+        # 连接池状态（未开池时为 None），便于核对连接复用是否有界。
+        d["pool_stats"] = store.pool_stats()
         return d
     except Exception as exc:                    # noqa: BLE001
         return {"ok": False, "error": type(exc).__name__}

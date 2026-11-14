@@ -1,0 +1,88 @@
+{
+  "config": {
+    "seconds_per_mode": 60,
+    "workers": 24
+  },
+  "generated_at": "2026-11-14T16:58:57",
+  "note": "相同负载下比较两种连接语义；错误率极低，短跑可能为 0，不能据此宣称「无锁冲突」。",
+  "rows": [
+    {
+      "error_count": 2,
+      "error_traces": [
+        "Traceback (most recent call last):\n  File \"<repo>/scripts\\lock_contention_probe.py\", line 50, in worker\n    s.create_experiment(\"p%d_%d\" % (k, i), \"order\", \"A1001\",\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        \"none\", 0, 7, \"D\")\n                        ^^^^^^^^^^^^^^^^^^\n  File \"<repo>/ai-service\\evoguard\\core.py\", line 454, in create_experiment\n    c.execute(\n    ~~~~~~~~~^\n        \"INSERT INTO experiments(id,name,agent_type,task_id,fault_type,\"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        (eid, name, agent_type, task_id, fault_type, fault_target,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n         seed, recovery_mode, now(), READY))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nsqlite3.OperationalError: database is locked\n",
+        "Traceback (most recent call last):\n  File \"<repo>/scripts\\lock_contention_probe.py\", line 50, in worker\n    s.create_experiment(\"p%d_%d\" % (k, i), \"order\", \"A1001\",\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        \"none\", 0, 7, \"D\")\n                        ^^^^^^^^^^^^^^^^^^\n  File \"<repo>/ai-service\\evoguard\\core.py\", line 454, in create_experiment\n    c.execute(\n    ~~~~~~~~~^\n        \"INSERT INTO experiments(id,name,agent_type,task_id,fault_type,\"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        (eid, name, agent_type, task_id, fault_type, fault_target,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n         seed, recovery_mode, now(), READY))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nsqlite3.OperationalError: database is locked\n"
+      ],
+      "errors": {
+        "OperationalError: database is locked": 2
+      },
+      "final_pool": null,
+      "mode": "default",
+      "seconds": 60,
+      "timeline": [
+        {
+          "errors": 0,
+          "pool": null,
+          "t_s": 30.0,
+          "writes": 6508
+        },
+        {
+          "errors": 2,
+          "pool": null,
+          "t_s": 60.0,
+          "writes": 12862
+        }
+      ],
+      "workers": 24,
+      "writes": 12886
+    },
+    {
+      "error_count": 6,
+      "error_traces": [
+        "Traceback (most recent call last):\n  File \"<repo>/scripts\\lock_contention_probe.py\", line 50, in worker\n    s.create_experiment(\"p%d_%d\" % (k, i), \"order\", \"A1001\",\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        \"none\", 0, 7, \"D\")\n                        ^^^^^^^^^^^^^^^^^^\n  File \"<repo>/ai-service\\evoguard\\core.py\", line 454, in create_experiment\n    c.execute(\n    ~~~~~~~~~^\n        \"INSERT INTO experiments(id,name,agent_type,task_id,fault_type,\"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        (eid, name, agent_type, task_id, fault_type, fault_target,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n         seed, recovery_mode, now(), READY))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nsqlite3.OperationalError: database is locked\n",
+        "Traceback (most recent call last):\n  File \"<repo>/scripts\\lock_contention_probe.py\", line 50, in worker\n    s.create_experiment(\"p%d_%d\" % (k, i), \"order\", \"A1001\",\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        \"none\", 0, 7, \"D\")\n                        ^^^^^^^^^^^^^^^^^^\n  File \"<repo>/ai-service\\evoguard\\core.py\", line 454, in create_experiment\n    c.execute(\n    ~~~~~~~~~^\n        \"INSERT INTO experiments(id,name,agent_type,task_id,fault_type,\"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        (eid, name, agent_type, task_id, fault_type, fault_target,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n         seed, recovery_mode, now(), READY))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nsqlite3.OperationalError: database is locked\n",
+        "Traceback (most recent call last):\n  File \"<repo>/scripts\\lock_contention_probe.py\", line 50, in worker\n    s.create_experiment(\"p%d_%d\" % (k, i), \"order\", \"A1001\",\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        \"none\", 0, 7, \"D\")\n                        ^^^^^^^^^^^^^^^^^^\n  File \"<repo>/ai-service\\evoguard\\core.py\", line 454, in create_experiment\n    c.execute(\n    ~~~~~~~~~^\n        \"INSERT INTO experiments(id,name,agent_type,task_id,fault_type,\"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        (eid, name, agent_type, task_id, fault_type, fault_target,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n         seed, recovery_mode, now(), READY))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nsqlite3.OperationalError: database is locked\n"
+      ],
+      "errors": {
+        "OperationalError: database is locked": 6
+      },
+      "final_pool": {
+        "closed": false,
+        "created": 30,
+        "discarded": 6,
+        "idle": 8,
+        "size": 8
+      },
+      "mode": "pool",
+      "seconds": 60,
+      "timeline": [
+        {
+          "errors": 0,
+          "pool": {
+            "closed": false,
+            "created": 24,
+            "discarded": 0,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 30.0,
+          "writes": 9113
+        },
+        {
+          "errors": 6,
+          "pool": {
+            "closed": false,
+            "created": 30,
+            "discarded": 6,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 60.0,
+          "writes": 18021
+        }
+      ],
+      "workers": 24,
+      "writes": 18045
+    }
+  ],
+  "version": 1
+}

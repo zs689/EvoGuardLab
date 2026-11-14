@@ -1,0 +1,151 @@
+{
+  "config": {
+    "seconds_per_mode": 180,
+    "workers": 16
+  },
+  "generated_at": "2026-11-14T16:56:24",
+  "note": "相同负载下比较两种连接语义；错误率极低，短跑可能为 0，不能据此宣称「无锁冲突」。",
+  "rows": [
+    {
+      "error_count": 5,
+      "errors": {
+        "OperationalError: database is locked": 5
+      },
+      "final_pool": null,
+      "mode": "default",
+      "seconds": 180,
+      "timeline": [
+        {
+          "errors": 0,
+          "pool": null,
+          "t_s": 30.0,
+          "writes": 5087
+        },
+        {
+          "errors": 1,
+          "pool": null,
+          "t_s": 60.0,
+          "writes": 10594
+        },
+        {
+          "errors": 1,
+          "pool": null,
+          "t_s": 90.0,
+          "writes": 16688
+        },
+        {
+          "errors": 2,
+          "pool": null,
+          "t_s": 120.0,
+          "writes": 21241
+        },
+        {
+          "errors": 3,
+          "pool": null,
+          "t_s": 150.0,
+          "writes": 23633
+        },
+        {
+          "errors": 5,
+          "pool": null,
+          "t_s": 180.0,
+          "writes": 28637
+        }
+      ],
+      "workers": 16,
+      "writes": 28653
+    },
+    {
+      "error_count": 23,
+      "errors": {
+        "OperationalError: database is locked": 23
+      },
+      "final_pool": {
+        "closed": false,
+        "created": 39,
+        "discarded": 23,
+        "idle": 8,
+        "size": 8
+      },
+      "mode": "pool",
+      "seconds": 180,
+      "timeline": [
+        {
+          "errors": 0,
+          "pool": {
+            "closed": false,
+            "created": 16,
+            "discarded": 0,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 30.0,
+          "writes": 9169
+        },
+        {
+          "errors": 3,
+          "pool": {
+            "closed": false,
+            "created": 19,
+            "discarded": 3,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 60.0,
+          "writes": 18585
+        },
+        {
+          "errors": 6,
+          "pool": {
+            "closed": false,
+            "created": 22,
+            "discarded": 6,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 90.0,
+          "writes": 28573
+        },
+        {
+          "errors": 11,
+          "pool": {
+            "closed": false,
+            "created": 27,
+            "discarded": 11,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 120.0,
+          "writes": 37756
+        },
+        {
+          "errors": 16,
+          "pool": {
+            "closed": false,
+            "created": 32,
+            "discarded": 16,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 150.0,
+          "writes": 41967
+        },
+        {
+          "errors": 23,
+          "pool": {
+            "closed": false,
+            "created": 39,
+            "discarded": 23,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 180.0,
+          "writes": 49984
+        }
+      ],
+      "workers": 16,
+      "writes": 50000
+    }
+  ],
+  "version": 1
+}
