@@ -51,7 +51,10 @@
   且审计锚点要与审计库分开保存。若开启 `AGENTLAB_STORE_WAL=1`（必须与
   `AGENTLAB_STORE_POOL=1` 同开），**还要把未 checkpoint 的 `-wal` 文件一起
   备份**，否则恢复时可能丢最近事务；这一条目前只在
-  `SECURITY.md` 写了警告，**没有做过恢复演练**。RPO/RTO 与恢复流程本轮未做
+  `SECURITY.md` 写了警告。**实测证据**：只复制 `.db` 恢复 0/200 行，
+  连 `-wal` 一起复制恢复 200/200（`store-pool-stability.md` §二）。
+  但 WAL 已被判定不可用（24 并发约 1/8 `readonly`），所以这条主要针对
+  误开启后的应急；**没有做过完整恢复演练**。RPO/RTO 与恢复流程本轮未做
   （EG-016 未完成）。恢复后必须 `AuditStore.verify()` 重算链。
 
 ## 五、已知限制（如实）

@@ -53,8 +53,12 @@
 任何安全判定都必须保留 `detected / decision / attempted / executed / effect / reason`。
 把「检测到」写成「已拦截」在这里算数据造假，不是措辞问题。
 
-- **WAL 必须和连接池一起开**（`AGENTLAB_STORE_WAL=1` + `AGENTLAB_STORE_POOL=1`）。
-  没有常开连接时，最后一个连接关闭会删 `-wal/-shm`，并发写入报
-  `attempt to write a readonly database`（实测 3/24）。`journal_mode` 是
-  **数据库文件头的持久设置**，撤掉环境变量不会还原已跑过的库，需要显式
-  `PRAGMA journal_mode=DELETE`。WAL 模式下备份必须连 `-wal` 一起做。
+- **不要启用 WAL**（`AGENTLAB_STORE_WAL=1` 仅作实验）。稳定性验收实测：
+  即使连接池常开连接、加了跨进程初始化锁，**单进程 24 线程并发写仍有
+  约 1/8 概率报 `attempt to write a readonly database`**，开池+WAL 跑
+  935 项全量回归会偶发挂 1 项。顺利时的性能数字不代表可靠。
+  `journal_mode` 是**数据库文件头的持久设置**，撤掉环境变量不会还原
+  已跑过的库，需要显式 `PRAGMA journal_mode=DELETE`。
+  WAL 模式下备份必须连 `-wal` 一起做：实测只复制 `.db` 恢复 **0/200 行**，
+  连 `-wal` 恢复 200/200（见 `docs/review-remediation/store-pool-stability.md`）。
+  推荐配置只有 `AGENTLAB_STORE_POOL=1`，默认仍关闭。

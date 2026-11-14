@@ -216,3 +216,35 @@ drill 5/5；全量回归 935 OK。
 
 **默认仍关闭。** 这是语义级默认变更，长时稳定性、WAL 备份/恢复、多进程、
 SIGKILL 恢复、开池下的全量回归都没验；按 USER 规矩不替张硕决定。
+
+## 十、第五轮（2026-11-14）：补验五条，并更正上轮推荐
+
+上轮把连接池做完、列出「默认开启前五条没验」。这一轮逐条补验，
+结果**推翻了上轮推荐**：原本推荐「池 + WAL」（C 组 565~791 ms），
+但 WAL 在补验里暴露了真问题。
+
+| 配置 | 稳定性 | 结论 |
+|---|---|---|
+| B 只开池 | `probes/store_pool_stability_poolonly.json` **3/3** | ✅ 推荐 |
+| C 池+WAL | `probes/store_pool_stability_wal.json` **4/5**，`wal-concurrency` 判红 | ❌ 不要用于生产 |
+
+- **WAL 单进程 24 线程并发写，8 轮里 1 轮 `readonly`**；开池+WAL 跑
+  935 项全量回归也会偶发挂 1 项。上轮「6 次压测全程无 5xx」是运气，
+  只能说明顺利时能跑多快，不能说明可靠。
+- **只开池两次 935 OK、0 ResourceWarning**；10 轮 × 2 进程各写 100 条
+  全部 200/200；`os._exit` 强杀后 50/50 行恢复、integrity ok；
+  2048 次并发写 `created=8`、堆增量 0.15 MiB。
+- **WAL 备份硬证据**：连 `-wal` 一起复制恢复 200/200，只复制 `.db`
+  恢复 **0/200**。
+
+补验中修了两个真 bug：`_ConnPool.__del__` 只关空闲队列（原来会击穿
+正在借用的连接、造成 readonly）；`__init__` 用跨进程原子锁包住整个
+初始化（原来两个进程同时建表/切 WAL 会互相踩）。`test_store_pool.py`
+的 flaky WAL 断言改成「只开池稳定」，WAL 失败率移到诊断脚本**故意判红**，
+不删测试、不标 expectedFailure。
+
+`review_checks.py` 新增 `EG-010/store-defaults` 门槛：防止以后有人把 WAL
+悄悄设成默认，或把「判红」改掉。
+
+**更正后的推荐：只开 `AGENTLAB_STORE_POOL=1`，不要开 WAL，默认仍关闭。**
+详见 `store-pool-stability.md` 与 `store-pool-ab.md` 顶部的更正版。

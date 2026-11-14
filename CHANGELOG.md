@@ -119,3 +119,23 @@
   证实第二轮撤回 WAL 的根因确实是没有常开连接。
 - 默认**仍关闭**：长时稳定性、WAL 备份恢复、多进程、SIGKILL 恢复、
   开池下全量回归未验。935 tests OK。
+
+### 第五轮（2026-11-14）：补验稳定性并更正第四轮推荐
+
+**更正**：第四轮推荐「连接池 + WAL」是错的。稳定性验收发现 WAL 单进程
+24 并发约 1/8 概率 `readonly`，开池+WAL 跑 935 项全量回归偶发挂 1 项。
+初版 6 次压测「全程无 5xx」是运气，不能当稳定性证据。
+
+- 新增 `scripts/store_pool_stability.py`（`--no-wal` 双配置）；
+  产物 `probes/store_pool_stability_{poolonly,wal}.json`。
+- B 只开池 3/3 全过（2048 次并发写有界、10 轮多进程、强杀恢复、
+  两次 935 OK、0 泄漏）；C 4/5，`wal-concurrency` 故意判红。
+- WAL 备份实测：连 `-wal` 恢复 200/200，只复制 `.db` 恢复 0/200。
+- 修 `_ConnPool.__del__`（只关空闲队列，避免击穿借用中的连接）与
+  `__init__` 跨进程原子初始化锁。
+- `test_store_pool.py` 的 WAL flaky 断言改为「只开池稳定」；
+  `review_checks.py` 加 `EG-010/store-defaults` 门槛。
+- 文档更正：`.env.example` / SECURITY / data-governance /
+  enterprise-readiness / 台账 EG-010 / store-pool-ab.md 顶部醒目更正。
+
+**推荐：只开 `AGENTLAB_STORE_POOL=1`，不要开 WAL，默认仍关闭。**
