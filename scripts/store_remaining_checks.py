@@ -28,7 +28,9 @@ import core          # noqa: E402
 
 
 def _set_env(mode):
-    os.environ.pop("AGENTLAB_STORE_POOL", None)
+    # 显式设值：池默认开之后，"default" 组要显式关才是旧行为
+    os.environ["AGENTLAB_STORE_POOL"] = (
+        "1" if mode in ("pool", "pool_wal") else "0")
     os.environ.pop("AGENTLAB_STORE_WAL", None)
     if mode in ("pool", "pool_wal"):
         os.environ["AGENTLAB_STORE_POOL"] = "1"

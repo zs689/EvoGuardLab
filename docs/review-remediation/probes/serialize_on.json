@@ -1,0 +1,97 @@
+{
+  "config": {
+    "seconds_per_mode": 90,
+    "workers": 24
+  },
+  "generated_at": "2026-11-14T17:47:01",
+  "note": "相同负载下比较两种连接语义；错误率极低，短跑可能为 0，不能据此宣称「无锁冲突」。",
+  "rows": [
+    {
+      "error_count": 0,
+      "error_traces": [],
+      "errors": {},
+      "final_pool": null,
+      "mode": "default",
+      "seconds": 90,
+      "serialize_writes": "1",
+      "timeline": [
+        {
+          "errors": 0,
+          "pool": null,
+          "t_s": 30.0,
+          "writes": 2219
+        },
+        {
+          "errors": 0,
+          "pool": null,
+          "t_s": 60.0,
+          "writes": 4533
+        },
+        {
+          "errors": 0,
+          "pool": null,
+          "t_s": 90.0,
+          "writes": 7386
+        }
+      ],
+      "workers": 24,
+      "writes": 7410
+    },
+    {
+      "error_count": 0,
+      "error_traces": [],
+      "errors": {},
+      "final_pool": {
+        "closed": false,
+        "created": 24,
+        "discarded": 0,
+        "idle": 8,
+        "size": 8
+      },
+      "mode": "pool",
+      "seconds": 90,
+      "serialize_writes": "1",
+      "timeline": [
+        {
+          "errors": 0,
+          "pool": {
+            "closed": false,
+            "created": 24,
+            "discarded": 0,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 30.0,
+          "writes": 10882
+        },
+        {
+          "errors": 0,
+          "pool": {
+            "closed": false,
+            "created": 24,
+            "discarded": 0,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 60.0,
+          "writes": 21689
+        },
+        {
+          "errors": 0,
+          "pool": {
+            "closed": false,
+            "created": 24,
+            "discarded": 0,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 90.0,
+          "writes": 32263
+        }
+      ],
+      "workers": 24,
+      "writes": 32287
+    }
+  ],
+  "version": 1
+}

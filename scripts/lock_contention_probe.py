@@ -25,10 +25,11 @@ import core          # noqa: E402
 
 
 def _set_env(mode):
-    os.environ.pop("AGENTLAB_STORE_POOL", None)
+    # 池默认已改为开，"default" 组必须显式关掉才是旧行为对照。
+    # 不碰 SERIALIZE_WRITES：让外部 A/B 能控制它。
+    os.environ["AGENTLAB_STORE_POOL"] = "1" if mode == "pool" else "0"
     os.environ.pop("AGENTLAB_STORE_WAL", None)
     if mode == "pool":
-        os.environ["AGENTLAB_STORE_POOL"] = "1"
         os.environ["AGENTLAB_STORE_POOL_SIZE"] = "8"
 
 
@@ -79,6 +80,8 @@ def run(mode, seconds, workers, root):
     s.close()
     return {
         "mode": mode, "seconds": seconds, "workers": workers,
+        "serialize_writes": os.environ.get(
+            "AGENTLAB_STORE_SERIALIZE_WRITES", "1"),
         "writes": written[0], "error_count": sum(errs.values()),
         "errors": dict(errs), "error_traces": traces,
         "timeline": timeline, "final_pool": st,

@@ -1,0 +1,29 @@
+{
+  "config": {
+    "out": "<workspace>/_swprobe",
+    "seconds": 60,
+    "workers": 24
+  },
+  "rows": [
+    {
+      "detail": {
+        "OperationalError: database is locked": 18
+      },
+      "errors": 18,
+      "mode": "baseline",
+      "rps": 342.0,
+      "seconds": 62.2,
+      "workers": 24,
+      "writes": 21279
+    },
+    {
+      "detail": {},
+      "errors": 0,
+      "mode": "serialized",
+      "rps": 368.1,
+      "seconds": 60.1,
+      "workers": 24,
+      "writes": 22113
+    }
+  ]
+}

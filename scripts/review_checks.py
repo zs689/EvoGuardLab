@@ -241,23 +241,54 @@ def c_store_defaults():
     """EG-010：WAL 已判不可用，别让默认值或文档悄悄漂回去。"""
     core = _read("ai-service/evoguard/core.py")
     env = _read(".env.example")
-    wal_rep = _json(os.path.join(ROOT, "docs", "review-remediation",
-                                 "probes", "store_pool_stability_wal.json")) or {}
+    disk_rep = _json(os.path.join(ROOT, "docs", "review-remediation",
+                                  "probes", "store_remaining_checks.json")) or {}
+    # WAL 并发 readonly 在写串行化后变成 0/8，那条「判红」证据不再成立。
+    # 仍成立、且不受串行化影响的两个理由是：备份只复制 db 丢数据、
+    # 磁盘写放大大约 70 倍。门槛改守写放大，别靠一个会变的结果。
+    wal_bytes, pool_bytes = 0, 1
+    for c in disk_rep.get("checks", []):
+        if c.get("id") != "disk-bytes":
+            continue
+        for r in c.get("evidence", {}).get("rows", []):
+            if r["mode"] == "pool_wal":
+                wal_bytes = r["per_write"]
+            elif r["mode"] == "pool":
+                pool_bytes = r["per_write"] or 1
     checks = {
-        "池默认关闭": "setdefault(\"AGENTLAB_STORE_POOL\"" not in core
+        "池默认开启": 'or "1").strip().lower()' in core
                   and "pool_flag" in core,
         "WAL 不默认开": "setdefault(\"AGENTLAB_STORE_WAL\"" not in core,
         "env 里 WAL 是注释": "\nAGENTLAB_STORE_WAL=1" not in env,
         "env 明确不要开 WAL": "不要开 WAL" in env,
-        "稳定性报告记着 WAL 判红": any(
-            c.get("id") == "wal-concurrency" and c.get("pass") is False
-            for c in wal_rep.get("checks", [])),
+        "WAL 写放大有证据": wal_bytes > pool_bytes * 10,
     }
     missing = [k for k, v in checks.items() if not v]
     return _result("EG-010/store-defaults", not missing,
-                   "池默认关、WAL 不默认开且判红有证据" if not missing
+                   "池默认开、WAL 不默认开且写放大有证据" if not missing
                    else "缺：%s" % "、".join(missing),
                    "core.py / .env.example / probes")
+
+
+def c_single_writer():
+    """EG-010：SQL 感知的写串行化不能被悄悄关掉或删掉。"""
+    src = _read("ai-service/evoguard/core.py")
+    app = _read("ai-service/api/app.py")
+    checks = {
+        "代理存在": "_WriteGuardConn" in src,
+        "按路径共享写锁": "_write_gate" in src and "_GATES" in src,
+        "读不加锁": "读完全不加锁" in src or "读路径必须完全不加锁" in src,
+        "默认开": 'or "1")' in src and "AGENTLAB_STORE_SERIALIZE_WRITES" in src,
+        "可关闭": '"0", "false", "off"' in src,
+        "health 可观测": '"write_gate"' in app,
+        "有回归测试": os.path.isfile(
+            os.path.join(ROOT, "tests", "test_single_writer.py")),
+    }
+    missing = [k for k, v in checks.items() if not v]
+    return _result("EG-010/single-writer", not missing,
+                   "写串行化默认开、可关、可观测、有测试" if not missing
+                   else "缺：%s" % "、".join(missing),
+                   "core.py / app.py / tests/test_single_writer.py")
 
 
 def c_enterprise_e2e():
@@ -469,6 +500,7 @@ CHECKS = [
     ("EG-022", c_data_governance),
     ("EG-010", c_store_defaults),
     ("EG-010", c_remaining_checks),
+    ("EG-010", c_single_writer),
 ]
 
 

@@ -115,7 +115,7 @@
       "status": "pass"
     },
     {
-      "detail": "池默认关、WAL 不默认开且判红有证据",
+      "detail": "池默认开、WAL 不默认开且写放大有证据",
       "evidence": "core.py / .env.example / probes",
       "id": "EG-010/store-defaults",
       "status": "pass"
@@ -125,17 +125,23 @@
       "evidence": "probes/store_remaining_checks.json",
       "id": "EG-010/remaining",
       "status": "pass"
+    },
+    {
+      "detail": "写串行化默认开、可关、可观测、有测试",
+      "evidence": "core.py / app.py / tests/test_single_writer.py",
+      "id": "EG-010/single-writer",
+      "status": "pass"
     }
   ],
-  "generated_at": "2026-11-14T17:09:41",
+  "generated_at": "2026-11-14T18:10:38",
   "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
-  "revision": "acc3e1bab8e037d8c35dec17a9476f73f4939842",
-  "seconds": 22.0,
+  "revision": "6ab4f9ed919c118875a72d8e728158a4775f24b9",
+  "seconds": 21.14,
   "summary": {
     "fail": 0,
-    "pass": 21,
+    "pass": 22,
     "skip": 0,
-    "total": 21
+    "total": 22
   },
   "version": 1
 }

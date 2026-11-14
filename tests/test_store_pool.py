@@ -25,13 +25,22 @@ class PooledStore(unittest.TestCase):
         os.environ.clear()
         os.environ.update(self._old)
 
-    def test_pool_off_by_default(self):
+    def test_pool_on_by_default_and_can_be_disabled(self):
         os.environ.pop("AGENTLAB_STORE_POOL", None)
+        os.environ.pop("AGENTLAB_STORE_SERIALIZE_WRITES", None)
         s = core.Store(self.path)
         try:
-            self.assertIsNone(s.pool_stats(), "默认不能改既有连接语义")
+            self.assertIsNotNone(s.pool_stats(),
+                                 "A/B 证据支持，连接池默认开启")
+            self.assertTrue(s._serialize_writes, "写串行化默认开启")
         finally:
             s.close()
+        os.environ["AGENTLAB_STORE_POOL"] = "0"
+        s2 = core.Store(self.path + ".off")
+        try:
+            self.assertIsNone(s2.pool_stats(), "设 0 必须能关掉")
+        finally:
+            s2.close()
 
     def test_connections_are_reused(self):
         s = core.Store(self.path)

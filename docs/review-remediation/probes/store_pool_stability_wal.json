@@ -7,10 +7,10 @@
   ],
   "checks": [
     {
-      "detail": "2048 次并发写：created=8 discarded=0 idle=8，Python 堆峰值增量 0.14 MiB",
+      "detail": "2048 次并发写：created=8 discarded=0 idle=8，Python 堆峰值增量 0.18 MiB",
       "evidence": {
-        "heap_after_first_phase": 92880,
-        "heap_growth_bytes": 145558,
+        "heap_after_first_phase": 128480,
+        "heap_growth_bytes": 187768,
         "pool": {
           "closed": false,
           "created": 8,
@@ -62,9 +62,9 @@
       "pass": true
     },
     {
-      "detail": "8 轮 × 24 并发 WAL 写：1 轮出现 readonly/缺行",
+      "detail": "8 轮 × 24 并发 WAL 写：0 轮出现 readonly/缺行",
       "evidence": {
-        "failed_rounds": 1,
+        "failed_rounds": 0,
         "note": "故意判红：WAL 在当前连接语义下不可靠",
         "rounds": 8,
         "samples": [
@@ -111,17 +111,15 @@
             "rows": 24
           },
           {
-            "errors": 6,
-            "first": [
-              "OperationalError: attempt to write a readonly database"
-            ],
+            "errors": 0,
+            "first": [],
             "round": 7,
-            "rows": 18
+            "rows": 24
           }
         ]
       },
       "id": "wal-concurrency",
-      "pass": false
+      "pass": true
     }
   ],
   "env": {
@@ -129,11 +127,11 @@
     "AGENTLAB_STORE_WAL": "1",
     "pool_size": 8
   },
-  "generated_at": "2026-11-14T11:14:31",
-  "passed": false,
+  "generated_at": "2026-11-14T17:50:57",
+  "passed": true,
   "summary": {
-    "fail": 1,
-    "pass": 4,
+    "fail": 0,
+    "pass": 5,
     "skipped": 0,
     "total": 5
   },

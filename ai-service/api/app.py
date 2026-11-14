@@ -305,6 +305,9 @@ def store_health(tenant_id="default"):
         d["conn_opened"] = store.conn_opened
         # 连接池状态（未开池时为 None），便于核对连接复用是否有界。
         d["pool_stats"] = store.pool_stats()
+        # 写串行化闸门：acquired 是累计写事务数，waiters 是正在排队的线程数
+        d["write_gate"] = store.write_gate_stats()
+        d["serialize_writes"] = store._serialize_writes
         return d
     except Exception as exc:                    # noqa: BLE001
         return {"ok": False, "error": type(exc).__name__}

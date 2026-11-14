@@ -1,0 +1,109 @@
+{
+  "config": {
+    "seconds_per_mode": 90,
+    "workers": 24
+  },
+  "generated_at": "2026-11-14T17:44:01",
+  "note": "相同负载下比较两种连接语义；错误率极低，短跑可能为 0，不能据此宣称「无锁冲突」。",
+  "rows": [
+    {
+      "error_count": 5,
+      "error_traces": [
+        "Traceback (most recent call last):\n  File \"<repo>/scripts\\lock_contention_probe.py\", line 50, in worker\n    s.create_experiment(\"p%d_%d\" % (k, i), \"order\", \"A1001\",\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        \"none\", 0, 7, \"D\")\n                        ^^^^^^^^^^^^^^^^^^\n  File \"<repo>/ai-service\\evoguard\\core.py\", line 555, in create_experiment\n    c.execute(\n    ~~~~~~~~~^\n        \"INSERT INTO experiments(id,name,agent_type,task_id,fault_type,\"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        (eid, name, agent_type, task_id, fault_type, fault_target,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n         seed, recovery_mode, now(), READY))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nsqlite3.OperationalError: database is locked\n",
+        "Traceback (most recent call last):\n  File \"<repo>/scripts\\lock_contention_probe.py\", line 50, in worker\n    s.create_experiment(\"p%d_%d\" % (k, i), \"order\", \"A1001\",\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        \"none\", 0, 7, \"D\")\n                        ^^^^^^^^^^^^^^^^^^\n  File \"<repo>/ai-service\\evoguard\\core.py\", line 555, in create_experiment\n    c.execute(\n    ~~~~~~~~~^\n        \"INSERT INTO experiments(id,name,agent_type,task_id,fault_type,\"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        (eid, name, agent_type, task_id, fault_type, fault_target,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n         seed, recovery_mode, now(), READY))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nsqlite3.OperationalError: database is locked\n",
+        "Traceback (most recent call last):\n  File \"<repo>/scripts\\lock_contention_probe.py\", line 50, in worker\n    s.create_experiment(\"p%d_%d\" % (k, i), \"order\", \"A1001\",\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        \"none\", 0, 7, \"D\")\n                        ^^^^^^^^^^^^^^^^^^\n  File \"<repo>/ai-service\\evoguard\\core.py\", line 555, in create_experiment\n    c.execute(\n    ~~~~~~~~~^\n        \"INSERT INTO experiments(id,name,agent_type,task_id,fault_type,\"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        (eid, name, agent_type, task_id, fault_type, fault_target,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n         seed, recovery_mode, now(), READY))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nsqlite3.OperationalError: database is locked\n"
+      ],
+      "errors": {
+        "OperationalError: database is locked": 5
+      },
+      "final_pool": null,
+      "mode": "default",
+      "seconds": 90,
+      "serialize_writes": "0",
+      "timeline": [
+        {
+          "errors": 0,
+          "pool": null,
+          "t_s": 30.0,
+          "writes": 6273
+        },
+        {
+          "errors": 4,
+          "pool": null,
+          "t_s": 60.0,
+          "writes": 12515
+        },
+        {
+          "errors": 5,
+          "pool": null,
+          "t_s": 90.0,
+          "writes": 19049
+        }
+      ],
+      "workers": 24,
+      "writes": 19073
+    },
+    {
+      "error_count": 15,
+      "error_traces": [
+        "Traceback (most recent call last):\n  File \"<repo>/scripts\\lock_contention_probe.py\", line 50, in worker\n    s.create_experiment(\"p%d_%d\" % (k, i), \"order\", \"A1001\",\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        \"none\", 0, 7, \"D\")\n                        ^^^^^^^^^^^^^^^^^^\n  File \"<repo>/ai-service\\evoguard\\core.py\", line 555, in create_experiment\n    c.execute(\n    ~~~~~~~~~^\n        \"INSERT INTO experiments(id,name,agent_type,task_id,fault_type,\"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        (eid, name, agent_type, task_id, fault_type, fault_target,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n         seed, recovery_mode, now(), READY))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nsqlite3.OperationalError: database is locked\n",
+        "Traceback (most recent call last):\n  File \"<repo>/scripts\\lock_contention_probe.py\", line 50, in worker\n    s.create_experiment(\"p%d_%d\" % (k, i), \"order\", \"A1001\",\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        \"none\", 0, 7, \"D\")\n                        ^^^^^^^^^^^^^^^^^^\n  File \"<repo>/ai-service\\evoguard\\core.py\", line 555, in create_experiment\n    c.execute(\n    ~~~~~~~~~^\n        \"INSERT INTO experiments(id,name,agent_type,task_id,fault_type,\"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        (eid, name, agent_type, task_id, fault_type, fault_target,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n         seed, recovery_mode, now(), READY))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nsqlite3.OperationalError: database is locked\n",
+        "Traceback (most recent call last):\n  File \"<repo>/scripts\\lock_contention_probe.py\", line 50, in worker\n    s.create_experiment(\"p%d_%d\" % (k, i), \"order\", \"A1001\",\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        \"none\", 0, 7, \"D\")\n                        ^^^^^^^^^^^^^^^^^^\n  File \"<repo>/ai-service\\evoguard\\core.py\", line 555, in create_experiment\n    c.execute(\n    ~~~~~~~~~^\n        \"INSERT INTO experiments(id,name,agent_type,task_id,fault_type,\"\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        (eid, name, agent_type, task_id, fault_type, fault_target,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n         seed, recovery_mode, now(), READY))\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nsqlite3.OperationalError: database is locked\n"
+      ],
+      "errors": {
+        "OperationalError: database is locked": 15
+      },
+      "final_pool": {
+        "closed": false,
+        "created": 39,
+        "discarded": 15,
+        "idle": 8,
+        "size": 8
+      },
+      "mode": "pool",
+      "seconds": 90,
+      "serialize_writes": "0",
+      "timeline": [
+        {
+          "errors": 0,
+          "pool": {
+            "closed": false,
+            "created": 24,
+            "discarded": 0,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 30.0,
+          "writes": 10240
+        },
+        {
+          "errors": 10,
+          "pool": {
+            "closed": false,
+            "created": 34,
+            "discarded": 10,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 60.0,
+          "writes": 20437
+        },
+        {
+          "errors": 15,
+          "pool": {
+            "closed": false,
+            "created": 39,
+            "discarded": 15,
+            "idle": 0,
+            "size": 8
+          },
+          "t_s": 90.0,
+          "writes": 30218
+        }
+      ],
+      "workers": 24,
+      "writes": 30242
+    }
+  ],
+  "version": 1
+}

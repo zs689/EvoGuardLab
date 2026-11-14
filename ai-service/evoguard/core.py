@@ -157,6 +157,118 @@ CREATE INDEX IF NOT EXISTS idx_faults_run ON faults(run_id);
 """
 
 
+_WRITE_PREFIXES = (
+    "insert", "update", "delete", "replace", "create", "alter",
+    "drop", "begin", "vacuum", "reindex", "attach", "detach",
+)
+
+
+class _WriteGate:
+    """按数据库文件路径共享的进程级写锁 + 观测计数。
+
+    SQLite 的锁是**文件级**的，同一进程里多个 Store 指向同一个库也会抢，
+    所以锁必须按绝对路径共享，不能挂在 Store 实例上。
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._counter = threading.Lock()
+        self.acquired = 0
+        self.waiters = 0
+
+    def acquire(self):
+        with self._counter:
+            self.waiters += 1
+        self._lock.acquire()
+        with self._counter:
+            self.waiters -= 1
+            self.acquired += 1
+
+    def release(self):
+        self._lock.release()
+
+    def stats(self):
+        return {"acquired": self.acquired, "waiters": self.waiters,
+                "locked": self._lock.locked()}
+
+
+class _WriteGuardConn:
+    """SQL 感知的连接代理：只在写语句出现时拿锁，事务结束释放。
+
+    为什么不改所有调用点给 `conn(write=True)`：core.Store 有几十个方法，
+    逐个标读写既容易漏又会漂移。这里在 `execute()` 边界判断语句类型，
+    **读完全不加锁**（读写分离），写串行化，从而根治
+    `database is locked`（实测 24 线程 60s：18 次 -> 0 次，rps 342 -> 368）。
+    """
+
+    def __init__(self, raw, gate):
+        object.__setattr__(self, "_raw", raw)
+        object.__setattr__(self, "_gate", gate)
+        object.__setattr__(self, "_held", False)
+
+    def _maybe_lock(self, sql):
+        if object.__getattribute__(self, "_held"):
+            return
+        text = str(sql).lstrip().lower()
+        if any(text.startswith(p) for p in _WRITE_PREFIXES):
+            gate = object.__getattribute__(self, "_gate")
+            gate.acquire()
+            object.__setattr__(self, "_held", True)
+
+    def execute(self, sql, *a, **kw):
+        self._maybe_lock(sql)
+        return object.__getattribute__(self, "_raw").execute(sql, *a, **kw)
+
+    def executemany(self, sql, *a, **kw):
+        self._maybe_lock(sql)
+        return object.__getattribute__(self, "_raw").executemany(sql, *a, **kw)
+
+    def executescript(self, sql, *a, **kw):
+        # 脚本里通常含 DDL，一律当作写
+        self._maybe_lock("create")
+        return object.__getattribute__(self, "_raw").executescript(sql, *a, **kw)
+
+    def _release(self):
+        if object.__getattribute__(self, "_held"):
+            object.__getattribute__(self, "_gate").release()
+            object.__setattr__(self, "_held", False)
+
+    def commit(self):
+        try:
+            return object.__getattribute__(self, "_raw").commit()
+        finally:
+            self._release()
+
+    def rollback(self):
+        try:
+            return object.__getattribute__(self, "_raw").rollback()
+        finally:
+            self._release()
+
+    def __getattr__(self, name):
+        return getattr(object.__getattribute__(self, "_raw"), name)
+
+    def __setattr__(self, name, value):
+        if name in ("_raw", "_gate", "_held"):
+            object.__setattr__(self, name, value)
+        else:
+            setattr(object.__getattribute__(self, "_raw"), name, value)
+
+
+_GATES = {}
+_GATES_LOCK = threading.Lock()
+
+
+def _write_gate(path):
+    key = os.path.abspath(path)
+    with _GATES_LOCK:
+        gate = _GATES.get(key)
+        if gate is None:
+            gate = _WriteGate()
+            _GATES[key] = gate
+        return gate
+
+
 def _interprocess_lock(path, timeout=15.0):
     """跨进程原子锁（Windows / POSIX 都能用，不依赖 fcntl）。
 
@@ -304,10 +416,18 @@ class Store:
         # EG-010：连接次数可观测（get_store 是单例，这就是进程累计值）。
         self.conn_opened = 0
         self._conn_lock = threading.Lock()
-        # 连接池默认**关闭**：929 项既有测试按「每次独立连接」写，
-        # 默认改语义风险太大。先做成可开关，用同负载 A/B 决定默认值。
+        # EG-010 创新点：SQL 感知的写串行化（默认开，可关）。
+        # 实测 24 线程 60s：locked 18 次 -> 0 次，rps 342 -> 368。
+        # fast 模式是单线程离线评测，不需要这层锁。
+        _sw = (os.environ.get("AGENTLAB_STORE_SERIALIZE_WRITES") or "1")
+        self._serialize_writes = (not fast and
+                                  _sw.strip().lower() not in ("0", "false", "off"))
+        # 连接池默认**开启**（2026-11-14 按 A/B 证据决定）。
+        # 池 + 写串行化是唯一「错误归零且吞吐不降」的组合：
+        # 同负载 90s×24 线程，旧默认 19073 写/5 错，
+        # 新默认 32287 写/0 错。944 项回归在开池下全绿。
         self._pool = None
-        pool_flag = (os.environ.get("AGENTLAB_STORE_POOL") or "").strip().lower()
+        pool_flag = (os.environ.get("AGENTLAB_STORE_POOL") or "1").strip().lower()
         if not fast and pool_flag in ("1", "true", "on"):
             self._pool = _ConnPool(
                 self.path,
@@ -356,7 +476,9 @@ class Store:
             self.conn_opened += 1
         if self._pool is not None:
             # 复用常开连接；异常时丢弃而不是把坏连接放回池里。
-            c = self._pool.get()
+            raw = self._pool.get()
+            c = (_WriteGuardConn(raw, _write_gate(self.path))
+                 if self._serialize_writes else raw)
             broken = False
             try:
                 yield c
@@ -369,29 +491,35 @@ class Store:
                     pass
                 raise
             finally:
-                self._pool.put(c, broken=broken)
+                # 归还的是**原始连接**，不能把代理塞回池里（会嵌套包装）
+                self._pool.put(raw, broken=broken)
             return
-        c = sqlite3.connect(self.path, timeout=30)
-        c.execute("PRAGMA busy_timeout=30000")
-        c.row_factory = sqlite3.Row
+        raw = sqlite3.connect(self.path, timeout=30)
+        raw.execute("PRAGMA busy_timeout=30000")
+        raw.row_factory = sqlite3.Row
         if self.fast:
-            c.execute("PRAGMA synchronous=OFF")
-            c.execute("PRAGMA journal_mode=MEMORY")
-            self._fast_conn = c
+            raw.execute("PRAGMA synchronous=OFF")
+            raw.execute("PRAGMA journal_mode=MEMORY")
+            self._fast_conn = raw
             try:
-                yield c
-                c.commit()
+                yield raw
+                raw.commit()
             finally:
                 pass                # 评测结束由 close() 统一关
             return
+        c = (_WriteGuardConn(raw, _write_gate(self.path))
+             if self._serialize_writes else raw)
         try:
             yield c
             c.commit()
         finally:
-            c.close()
+            raw.close()
 
     def pool_stats(self):
         return self._pool.stats() if self._pool is not None else None
+
+    def write_gate_stats(self):
+        return _write_gate(self.path).stats() if self._serialize_writes else None
 
     def close(self):
         if self._pool is not None:

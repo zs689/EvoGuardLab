@@ -7,10 +7,10 @@
   ],
   "checks": [
     {
-      "detail": "2048 次并发写：created=8 discarded=0 idle=8，Python 堆峰值增量 0.15 MiB",
+      "detail": "2048 次并发写：created=8 discarded=0 idle=8，Python 堆峰值增量 0.18 MiB",
       "evidence": {
-        "heap_after_first_phase": 93232,
-        "heap_growth_bytes": 156214,
+        "heap_after_first_phase": 128512,
+        "heap_growth_bytes": 189144,
         "pool": {
           "closed": false,
           "created": 8,
@@ -65,7 +65,7 @@
     "AGENTLAB_STORE_WAL": "0",
     "pool_size": 8
   },
-  "generated_at": "2026-11-14T11:14:20",
+  "generated_at": "2026-11-14T17:50:51",
   "passed": true,
   "summary": {
     "fail": 0,
