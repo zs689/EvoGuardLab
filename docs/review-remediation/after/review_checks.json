@@ -119,17 +119,23 @@
       "evidence": "core.py / .env.example / probes",
       "id": "EG-010/store-defaults",
       "status": "pass"
+    },
+    {
+      "detail": "真实 taskkill / 60s soak / 磁盘量 4/4 有产物",
+      "evidence": "probes/store_remaining_checks.json",
+      "id": "EG-010/remaining",
+      "status": "pass"
     }
   ],
-  "generated_at": "2026-11-14T11:21:07",
+  "generated_at": "2026-11-14T11:43:48",
   "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
-  "revision": "66704c4aef1d35abe84de36e825180e73884c63c",
-  "seconds": 23.6,
+  "revision": "44abf62df8b39c86b22656de46d19b09e51cde38",
+  "seconds": 21.53,
   "summary": {
     "fail": 0,
-    "pass": 20,
+    "pass": 21,
     "skip": 0,
-    "total": 20
+    "total": 21
   },
   "version": 1
 }

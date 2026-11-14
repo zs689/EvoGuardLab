@@ -1,0 +1,251 @@
+{
+  "boundaries": [
+    "多主机共享存储做不了（本机单主机）；池仍是进程内语义。",
+    "soak 是数十秒级，不是小时级；磁盘量为本地文件系统字节数，不含 fsync/块对齐开销。",
+    "Docker daemon 不可达，EG-003 镜像层仍未实测。"
+  ],
+  "checks": [
+    {
+      "detail": "taskkill /F /T 强杀后重开：120/120 行，integrity=ok",
+      "evidence": {
+        "integrity": "ok",
+        "kill_rc": 0,
+        "kill_stderr": "",
+        "kill_stdout": "�ɹ�: ����ֹ PID 24884 (���� PID 24012 �ӽ���)�Ľ��̡�",
+        "mode": "pool",
+        "rows": 120
+      },
+      "id": "real-kill-pool",
+      "pass": true
+    },
+    {
+      "detail": "taskkill /F /T 强杀后重开：120/120 行，integrity=ok",
+      "evidence": {
+        "integrity": "ok",
+        "kill_rc": 0,
+        "kill_stderr": "",
+        "kill_stdout": "�ɹ�: ����ֹ PID 25420 (���� PID 24012 �ӽ���)�Ľ��̡�",
+        "mode": "pool_wal",
+        "rows": 120
+      },
+      "id": "real-kill-pool_wal",
+      "pass": true
+    },
+    {
+      "detail": "60s / 8 线程共 19622 次写：created 8→8，堆峰值 0.15 MiB，错误 0",
+      "evidence": {
+        "errors": [],
+        "final_pool": {
+          "closed": false,
+          "created": 8,
+          "discarded": 0,
+          "idle": 8,
+          "size": 8
+        },
+        "samples": [
+          {
+            "db_bytes": 250392,
+            "heap_mb": 0.091,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 1569,
+            "t_s": 5.0
+          },
+          {
+            "db_bytes": 397836,
+            "heap_mb": 0.09,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 3270,
+            "t_s": 10.0
+          },
+          {
+            "db_bytes": 552960,
+            "heap_mb": 0.094,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 4900,
+            "t_s": 15.0
+          },
+          {
+            "db_bytes": 705048,
+            "heap_mb": 0.108,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 6387,
+            "t_s": 20.0
+          },
+          {
+            "db_bytes": 848408,
+            "heap_mb": 0.116,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 8038,
+            "t_s": 25.0
+          },
+          {
+            "db_bytes": 987136,
+            "heap_mb": 0.147,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 9625,
+            "t_s": 30.0
+          },
+          {
+            "db_bytes": 1163264,
+            "heap_mb": 0.111,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 11422,
+            "t_s": 35.0
+          },
+          {
+            "db_bytes": 1335832,
+            "heap_mb": 0.111,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 13033,
+            "t_s": 40.0
+          },
+          {
+            "db_bytes": 1487384,
+            "heap_mb": 0.107,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 14716,
+            "t_s": 45.0
+          },
+          {
+            "db_bytes": 1659440,
+            "heap_mb": 0.138,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 16407,
+            "t_s": 50.0
+          },
+          {
+            "db_bytes": 1794048,
+            "heap_mb": 0.12,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 18003,
+            "t_s": 55.0
+          },
+          {
+            "db_bytes": 1954328,
+            "heap_mb": 0.137,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 19614,
+            "t_s": 60.0
+          }
+        ],
+        "seconds": 60,
+        "workers": 8,
+        "writes": 19622
+      },
+      "id": "soak",
+      "pass": true
+    },
+    {
+      "detail": "default 122.9 B/写（close 后 110592 B）; pool 122.9 B/写（close 后 110592 B）; pool_wal 8610.0 B/写（close 后 110592 B）",
+      "evidence": {
+        "note": "pool_wal 的 -wal 在 close 时 checkpoint；只开池不留 WAL 文件",
+        "rows": [
+          {
+            "after": 110592,
+            "before": 86016,
+            "during": 110592,
+            "mode": "default",
+            "per_write": 122.9
+          },
+          {
+            "after": 110592,
+            "before": 86016,
+            "during": 110592,
+            "mode": "pool",
+            "per_write": 122.9
+          },
+          {
+            "after": 110592,
+            "before": 86016,
+            "during": 1808016,
+            "mode": "pool_wal",
+            "per_write": 8610.0
+          }
+        ],
+        "writes_per_mode": 200
+      },
+      "id": "disk-bytes",
+      "pass": true
+    }
+  ],
+  "generated_at": "2026-11-14T11:40:16",
+  "passed": true,
+  "summary": {
+    "fail": 0,
+    "pass": 4,
+    "total": 4
+  },
+  "version": 1
+}

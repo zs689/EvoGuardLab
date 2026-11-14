@@ -303,6 +303,19 @@ def c_audit_multiprocess():
                    "tests/test_audit_multiprocess.py（真两进程）")
 
 
+def c_remaining_checks():
+    """EG-010：真实强杀 / soak / 磁盘写入量的证据留在仓库里。"""
+    rep = _json(os.path.join(ROOT, "docs", "review-remediation",
+                             "probes", "store_remaining_checks.json")) or {}
+    ids = {c.get("id") for c in rep.get("checks", [])}
+    need = {"real-kill-pool", "real-kill-pool_wal", "soak", "disk-bytes"}
+    ok = rep.get("passed") is True and need <= ids
+    return _result("EG-010/remaining", ok,
+                   "真实 taskkill / 60s soak / 磁盘量 4/4 有产物" if ok
+                   else "产物缺失或未全过：%s" % sorted(need - ids),
+                   "probes/store_remaining_checks.json")
+
+
 def c_data_governance():
     """EG-022：合成敏感标记真的从每个出口都找不到。"""
     import subprocess
@@ -455,6 +468,7 @@ CHECKS = [
     ("EG-017", c_v3_prereg),
     ("EG-022", c_data_governance),
     ("EG-010", c_store_defaults),
+    ("EG-010", c_remaining_checks),
 ]
 
 
