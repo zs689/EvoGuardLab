@@ -66,7 +66,10 @@
   （2048 次并发写有界、10 轮多进程、强杀恢复、两次 935 OK、0 泄漏）；
   WAL 备份实测只复制 `.db` 恢复 0/200 行，磁盘写放大约 70 倍
   （8610 vs 122.9 B/写）；真实 `taskkill /F` 强杀两种配置都恢复 120/120 行，
-  60 秒 soak 约 2 万次写连接数恒定。默认仍关闭，EG-010 仍是 🟡。
+  60 秒 soak 约 2 万次写连接数恒定。
+  第八轮用 SQL 感知的写串行化解决了并发 `database is locked`，
+  并把「连接池 + 串行化」按 A/B 证据**改为默认开启**
+  （旧默认 19073 写/5 错 → 新默认 32287 写/0 错）；EG-010 仍是 🟡。
   见 `review-remediation/store-pool-stability.md`。
 - **前端会话**：已有 `sessionStorage` + Bearer 令牌传递与 401/403 反馈，
   但真实反代认证、失效/登出流程与 CSRF 未在部署拓扑实测（EG-020）。
@@ -77,9 +80,9 @@
   要调用方自己填回执；没有 IdP 角色解析与外部效果查询（EG-026 仍是 design_gap）。
 - **熔断只在单进程内**：`ResilientProvider` 的熔断状态与并发信号量都是
   进程级，多副本各算各的；超时仍是 socket 超时，没有强制总预算中断（EG-014）。
-- **并发写偶发 `database is locked`（0.1–0.4‰，未解决）**：默认路径与连接池都有，
-  低概率 500、非数据损坏；两种修复尝试无效已撤回，见
-  `review-remediation/lock-contention-known-issue.md`。
+- ~~并发写偶发 `database is locked`~~ **已解决**：SQL 感知的写串行化
+  默认开启，A/B 错误归零且吞吐 +69%，见
+  `review-remediation/single-writer-innovation.md`。
 - **评测进度无跨进程锁**：两个评测进程写同一目录仍会互相覆盖 `progress.json`；
   完成件没有逐字节摘要校验（EG-019）。
 - **多机 / 多副本一致性**：指标与限流都是**进程内内存**，N 个副本各算各的。

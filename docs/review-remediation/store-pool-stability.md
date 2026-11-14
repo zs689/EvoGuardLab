@@ -79,16 +79,18 @@ AGENTLAB_STORE_POOL=1 python -m unittest discover -s tests -q
 - v3 检测实验、语料上游 commit/license、真实外部审批人：需要上游信息与
   第二位调参者，本机做不了。
 
-## 六、推荐
+## 六、推荐（第八轮已更新默认值）
 
-**只开连接池，不开 WAL，默认仍关闭**：
+**连接池 + 写串行化默认开启，不开 WAL**：
 
 ```bash
-AGENTLAB_STORE_POOL=1
-AGENTLAB_STORE_POOL_SIZE=8
+# 无需设置：AGENTLAB_STORE_POOL 与 AGENTLAB_STORE_SERIALIZE_WRITES 默认都是 1
+# 退回旧行为：AGENTLAB_STORE_POOL=0 AGENTLAB_STORE_SERIALIZE_WRITES=0
 # 不要设 AGENTLAB_STORE_WAL
 ```
 
-B 组同负载写路由 2103 ms / 7.4–8.0 rps（默认 2969–3627 ms / 5.1–5.4 rps），
-没有 WAL 那些 readonly 风险。改默认值是语义级变更，按 USER 规矩不替
-张硕决定。台账 EG-010 保持 🟡。
+A/B（90s × 24 线程）：旧默认 19073 写/5 次 `database is locked`
+→ 新默认 **32287 写/0 次**，吞吐 +69%。写串行化还顺带把 WAL 的
+`wal-concurrency` 从 1/8 压到 0/8，但样本有限且 WAL 另有备份与写放大
+两个硬理由，**结论仍是不推荐 WAL**。台账 EG-010 保持 🟡。
+证据与默认值变更依据见 `single-writer-innovation.md`。

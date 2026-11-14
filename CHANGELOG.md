@@ -170,3 +170,24 @@
   `docs/review-remediation/lock-contention-known-issue.md`。
 - 新增诊断脚本 `lock_contention_probe.py`、`begin_immediate_probe.py`；
   新增 `/api/health` 的 `pool_stats` 字段（连接复用可观测）。
+
+### 第八轮（2026-11-14）：SQL 感知的写串行化（创新 + 默认值变更）
+
+- 新增 `_WriteGuardConn` / `_WriteGate`：在 SQL 边界识别读写，
+  读不加锁、写串行化，零调用点改动、零依赖；`/api/health` 加
+  `write_gate` / `serialize_writes` 可观测。
+- 解决上一轮判定「未解决」的 `database is locked`：
+  raw 实验 18 次 → 0 次、吞吐 +7.6%；产品 A/B 旧默认
+  19073 写/5 错 → 新默认 32287 写/0 错（+69%）。
+- **按 A/B 证据把 `AGENTLAB_STORE_POOL` 与
+  `AGENTLAB_STORE_SERIALIZE_WRITES` 默认值改为开**（`=0` 可退回）；
+  `fast=True` 离线评测自动跳过；WAL 仍默认关且不推荐。
+- 同步修了 A/B 脚本的显式 env（`default` 组必须真无池）、
+  `test_store_pool.py` 默认断言、`EG-010/store-defaults` 门槛。
+- 新增 `tests/test_single_writer.py` 9 项、
+  `scripts/single_writer_probe.py`、`EG-010/single-writer` 门槛；
+  gate 21 → 22 项。
+- 新默认下 10 分钟 soak **173247 次写 0 错误**（旧默认 98314 次/1 错），
+  `probes/store_soak600_final.json` 4/4。
+- 报告 `single-writer-innovation.md`；旧 `lock-contention-known-issue.md`
+  顶部加「已解决」更正块，失败过程保留。

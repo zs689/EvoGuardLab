@@ -394,3 +394,18 @@ wheel 制品在最新提交下复验通过（manifest + 源码符号 + 开池 ve
 traceback 在 INSERT；COMMIT 重试无效已撤回，BEGIN IMMEDIATE 只减半未接入。
 **未解决**，见 `review-remediation/lock-contention-known-issue.md`。
 不改变「只开池、不要开 WAL、默认仍关闭」的推荐。
+
+## 十六、第八轮：写串行化创新与默认值变更（2026-11-14）
+
+用户要求「自己找地方优化整改，要创新」。选了上轮未解决的
+`database is locked`，用 SQL 感知的连接代理做读写分离：
+读不加锁、写串行化、零调用点改动、零依赖。
+
+raw 实验 24 线程 60s：18 次 locked → 0 次，吞吐 342 → 368 rps。
+产品 A/B 90s × 24 线程：旧默认 19073 写/5 错 → 新默认 32287 写/0 错。
+无池 + 串行化会 -61% 吞吐（如实记录），所以**两个默认值一起改开**：
+`AGENTLAB_STORE_POOL=1` 与 `AGENTLAB_STORE_SERIALIZE_WRITES=1`（`=0` 可退回）。
+
+944 项回归在新默认与全关下都全绿；稳定性 3/3、池+WAL 5/5、
+剩余检查 4/4；gate 22 项。WAL 仍不推荐。
+方案见 `review-remediation/single-writer-innovation.md`。
