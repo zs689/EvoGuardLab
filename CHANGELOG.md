@@ -154,3 +154,19 @@
 - `review_checks.py` 加 `EG-010/remaining`（读产物不重跑），gate 20→21。
 - 文档同步：store-pool-stability.md §四、台账 EG-010、.env.example、
   SECURITY、enterprise-readiness、after.md §十一。
+
+### 第七轮（2026-11-14）：10 分钟 soak 与一个未解决的已知问题
+
+- **wheel 制品复验**：最新提交重建 wheel，manifest PASS、
+  独立 venv 开池可用、默认与开池 wheel_smoke 各 10/10。
+  `check_wheel_manifest.py` 加 `SOURCE_SYMBOLS`（防旧源码制品），
+  并用构造的旧 wheel 验证可证伪。
+- 更正上轮「默认开启后回归未验」的错误表述（其实已跑两次 935 OK）。
+- **10 分钟 soak 判红**：98314 次写出现 1 次 `database is locked`。
+  对照证实默认路径与连接池都有（0.1–0.4‰），traceback 定位在 INSERT。
+  COMMIT 重试无效（已撤回全部代码/测试/health 字段）；
+  `BEGIN IMMEDIATE` 只减半错误率（未接入）。
+  如实记为**未解决**的已知边界，见
+  `docs/review-remediation/lock-contention-known-issue.md`。
+- 新增诊断脚本 `lock_contention_probe.py`、`begin_immediate_probe.py`；
+  新增 `/api/health` 的 `pool_stats` 字段（连接复用可观测）。

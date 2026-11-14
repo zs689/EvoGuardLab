@@ -64,3 +64,11 @@
   （8610 B/写 vs 只开池 122.9 B/写）。
   见 `docs/review-remediation/store-pool-stability.md` §四。
   推荐配置只有 `AGENTLAB_STORE_POOL=1`，默认仍关闭。
+
+- **并发写偶发 `database is locked`（未解决）**：本机 Windows、多连接并发写
+  delete 日志时，SQLite 在 `INSERT` 阶段绕过 busy handler 直接返回
+  SQLITE_BUSY。实测默认路径与连接池路径都有（0.1–0.4‰），10 分钟 soak
+  98314 次写出现 1 次。表现是低概率 500、事务 rollback，不是数据损坏。
+  COMMIT 重试与 `BEGIN IMMEDIATE` 两种解法都试过：前者无效（已撤回），
+  后者只把错误率减半（未接入）。详见
+  `docs/review-remediation/lock-contention-known-issue.md`。

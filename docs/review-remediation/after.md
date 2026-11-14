@@ -276,4 +276,36 @@ gate 20 → 21 项。
 小时级 soak（要挂着跑数小时）、多主机共享存储、Docker 镜像层、
 GitHub CI 真实运行、真实浏览器与 Linux wheel、v3 检测实验（要上游语料
 与第二位调参者）、语料上游 commit/license、真实外部审批人、
-以及「把只开池设成默认」这个语义级变更。
+以及「把只开池设成默认」这个语义级变更（开池下的全量回归已验）。
+
+## 十二、第七轮（2026-11-14）：10 分钟 soak 挖出一个未解决问题
+
+### 做了两件确认完成的事
+
+1. **最新提交的 wheel 制品复验**（`wheel-latest-verification.md`）：
+   本轮最终工作树重建 wheel，manifest PASS；
+   `enterprise/jobs.py` / `v3_gate.py` 在制品里；独立 venv 内
+   `from evoguard import core` 开池可用；默认与开池两种环境
+   `wheel_smoke.py` 各 **10/10**。
+   `check_wheel_manifest.py` 加 `SOURCE_SYMBOLS` 防止「文件在、内容旧」，
+   并把旧源码 wheel 构造出来验证**能判红**（exit 1），不是恒真摆设。
+2. **更正上轮一处表述**：「默认开启后的完整回归没验」写错了 ——
+   `AGENTLAB_STORE_POOL=1` 下两次 935 OK 就是开启后的行为，已改为「已验」。
+
+### 10 分钟 soak 判红，追出一个未解决问题
+
+`store_remaining_checks.py --soak-seconds 600`：**98314 次写、
+1 次 `database is locked`**，soak 3/4（`probes/store_soak600.json` 如实保留）。
+
+- 对照实验 `lock_contention_probe.py`（240s × 16 线程）：
+  默认 9/41558、只开池 26/67697 —— **默认路径本来就有，不是连接池引入的**。
+- traceback 定位到 `create_experiment` 的 `INSERT ... execute()`，
+  **不是 COMMIT**，所以 `busy_timeout` 挡不住。
+- 尝试 1「COMMIT 阶段有限重试 + 计数器 + health 字段 + 5 项单测」：
+  180s × 16 线程对照错误率与修复前同量级 → **无效，全部撤回**。
+- 尝试 2「`BEGIN IMMEDIATE`」raw sqlite 对照：错误率 0.193% → 0.087%，
+  **减半但没归零**，改事务模型风险不匹配 → **未接入**。
+
+完整记录见 `lock-contention-known-issue.md`。这是低概率 500、事务
+rollback、非数据损坏；不改变「只开池」的推荐（默认路径同样有）。
+**状态：未解决，不写成已修复。**

@@ -1680,3 +1680,10 @@ EG-014/018/019/026 四项从 ⬜ 推进到 🟡：熔断接进真实调用路径
 连接数恒定、堆 0.15 MiB；磁盘量发现 WAL 写放大约 70 倍。
 `store_remaining_checks.json` 4/4，gate 20→21。Docker daemon 复查仍不可达。
 剩下没做的都需要别的环境或张硕点头，不是「还没轮到」。
+
+### 11-14 第八轮：10 分钟 soak 挖出未解决问题
+
+wheel 制品复验通过并加固清单检查（可证伪）。10 分钟 soak 98314 次写
+出现 1 次 `database is locked`；对照证明默认路径也有，traceback 在 INSERT。
+两次修复尝试（COMMIT 重试、BEGIN IMMEDIATE）都无效，前者已全部撤回，
+如实记为未解决。不改变「只开池」推荐。

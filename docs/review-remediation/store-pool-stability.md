@@ -73,7 +73,9 @@ AGENTLAB_STORE_POOL=1 python -m unittest discover -s tests -q
 - 多主机共享存储；池是进程内的，多副本各自有池。
 - Docker 镜像层（daemon 不可达，本轮复查仍不可达）、GitHub CI 真实运行、
   真实浏览器与 Linux wheel —— 都是环境限制。
-- 默认开启后的完整回归：现在只在「显式开池」下跑过全量，默认路径没变。
+- ~~默认开启后的完整回归~~ **已验，上轮表述有误**：
+  `AGENTLAB_STORE_POOL=1 python -m unittest discover -s tests -q` 两次
+  935 OK、0 泄漏，这就是「开启后」的行为；默认路径本身没动，不构成缺口。
 - v3 检测实验、语料上游 commit/license、真实外部审批人：需要上游信息与
   第二位调参者，本机做不了。
 

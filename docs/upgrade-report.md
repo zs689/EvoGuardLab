@@ -383,3 +383,14 @@ WAL 单进程 24 并发约 1/8 概率 `readonly`，开池+WAL 跑全量回归偶
 复查 Docker daemon 仍不可达，镜像层未实测。gate 20→21。
 本机范围内能验的到此为止；剩余项（小时级 soak、多主机、CI、浏览器、
 Linux wheel、v3 实验、语料上游、外部审批人、改默认值）需要环境或决定。
+
+## 十五、第七轮：10 分钟 soak 与已知问题（2026-11-14）
+
+wheel 制品在最新提交下复验通过（manifest + 源码符号 + 开池 venv + 两次
+10/10 冒烟），`check_wheel_manifest.py` 扩展并验证可证伪。
+
+`--soak-seconds 600` 结果 **3/4**：98314 次写出现 1 次
+`database is locked`。对照实验证明默认路径也有（0.1–0.4‰），
+traceback 在 INSERT；COMMIT 重试无效已撤回，BEGIN IMMEDIATE 只减半未接入。
+**未解决**，见 `review-remediation/lock-contention-known-issue.md`。
+不改变「只开池、不要开 WAL、默认仍关闭」的推荐。
