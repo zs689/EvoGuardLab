@@ -91,8 +91,61 @@ serialize_flag  = os.environ.get("AGENTLAB_STORE_SERIALIZE_WRITES") or "1"
 - 小时级 soak（本轮最长 **10 分钟**）：新默认下 `173247` 次写、**0 错误**、
   `created` 恒为 8、堆峰值 0.23 MiB，`probes/store_soak600_final.json` 4/4。
   旧默认同样时长是 98314 次写 / 1 次错。
-- 多主机共享存储：`_WriteGate` 是**进程内**锁，多副本各锁各的，
-  跨进程仍靠 SQLite 自己的文件锁。
+- 多主机共享存储（NFS/CIFS 上的同一个库文件）没验。
+  **单主机多进程已验**：见 §八，进程内锁已够，不需要跨进程应用层锁。
 - Docker 镜像层、GitHub CI、真实浏览器、Linux wheel —— 环境限制。
 - v3 检测实验、语料上游 commit/license、真实外部审批人 —— 需要上游信息
   与第二位调参者。
+
+
+## 八、后续补验（同日第九轮）
+
+### 1. 端到端 HTTP 压测（此前所有 A/B 都只在 Store 层）
+
+`loadtest.py` 加 `--store-off` 显式对照；同参数
+`--requests 24 --workers 8 --rounds 3`，各跑两次：
+
+| 运行 | 新默认 `write_run` P95 | 全关（旧行为） | 每轮状态 |
+|---|---|---|---|
+| 1 | **1093.2 ms**（8.0–8.7 rps） | 2815.8 ms（5.2–5.6 rps） | 24×200 |
+| 2 | **1067.9 ms**（7.7–8.3 rps） | 3247.4 ms（5.2–5.3 rps） | 24×200 |
+
+真实请求路径约 **2.7–3 倍**改善，两次重复稳定、无 5xx。
+产物 `probes/http_ab_{on,on2,off,off2}.json`；
+`EG-010/e2e` 门槛守着这个收益（gate 22 → 23）。
+
+### 2. 修掉自己方案里的一个真问题：`_GATES` 无上限
+
+审查新代码时发现 `_GATES` 是普通 dict，临时库路径会无限累积
+（944 项测试会创建大量临时 Store；长时服务按租户/作业动态建库同理）。
+
+**没有用 LRU 淘汰**：淘汰一把**正在被持有**的锁，会让后来的 Store
+给同一路径建一把新锁，两把锁并存、串行化直接失效。
+
+改用 `weakref.WeakValueDictionary` + `Store` 持强引用：
+- 只要有任一 Store 活着，同路径所有 Store 拿到**同一把**锁；
+- 最后一个 Store 被 GC 时 gate 自动消失；
+- `/api/health` 加 `active_write_gates` 可观测。
+
+`tests/test_single_writer.py` 加了 2 项（共享性、回收性），共 11 项。
+实测：20 个 Store → 20 个 gate → 全部回收后 **0**。
+
+### 3. 用数据修正上一轮的「进程内锁」缺点
+
+上一轮把「`_WriteGate` 是进程内锁，多副本各锁各的」列为缺点，
+但没量过。`scripts/cross_process_write_probe.py`：
+**4 进程 × 8 线程 × 45 秒**，同一库文件。
+
+| 配置 | 写入 | `database is locked` |
+|---|---|---|
+| 新默认（池 + 进程内串行化） | **14691** | **0** |
+| 全关 | 9564 | 8 |
+
+进程内串行化减少了每个进程内部的连接竞争，间接把跨进程文件锁的
+争用窗口也压下去了；SQLite 的 busy handler 在**跨进程**场景本就生效
+（同进程锁升级才是例外）。结论：**单主机多进程不需要跨进程应用层锁**，
+那条缺点在本机规模下不成立。产物
+`probes/cross_process_write_probe.json`。
+
+仍未验的是**多主机共享存储**（NFS/CIFS 上的同一库文件），那需要
+另一套机器，不能靠本机多进程代替。

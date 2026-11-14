@@ -74,3 +74,7 @@
   COMMIT 重试与 `BEGIN IMMEDIATE` 两种解法都试过：前者无效（已撤回），
   后者只把错误率减半（未接入）。详见
   `docs/review-remediation/lock-contention-known-issue.md`。
+
+- **写串行化的闸门是进程内锁**：单主机多进程已实测（4×8 线程、45 秒、
+  新默认 0 错 vs 全关 8 错），进程内锁已够；但**多主机共享同一库文件**
+  （NFS/CIFS）没验，不能把单主机结论外推到共享存储。

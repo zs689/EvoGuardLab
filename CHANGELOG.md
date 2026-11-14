@@ -191,3 +191,18 @@
   `probes/store_soak600_final.json` 4/4。
 - 报告 `single-writer-innovation.md`；旧 `lock-contention-known-issue.md`
   顶部加「已解决」更正块，失败过程保留。
+
+### 第九轮（2026-11-14）：端到端证据、弱引用闸门、跨进程验证
+
+- `loadtest.py` 加 `--store-off`；真实 HTTP A/B 两次重复：
+  新默认 `write_run` P95 1093/1068 ms vs 全关 2816/3247 ms
+  （约 2.7–3 倍），每轮 24×200 无 5xx。
+  新增 `EG-010/e2e` 门槛，gate 22 → 23。
+- **修真问题**：`_GATES` 由普通 dict 改为 `WeakValueDictionary` +
+  `Store` 持强引用，避免临时库路径无限累积；没用 LRU 是因为淘汰
+  正在持有的锁会让同路径出现两把锁。`/api/health` 加
+  `active_write_gates`；`tests/test_single_writer.py` 9 → 11 项。
+- 新增 `scripts/cross_process_write_probe.py`：4 进程 × 8 线程 × 45s，
+  新默认 14691 写/0 错 vs 全关 9564 写/8 错 → 单主机多进程不需要
+  跨进程应用层锁；上轮那条「缺点」按数据修正，多主机共享存储仍未验。
+- 946 项回归在开与关两种配置下全绿，23/23 gate。

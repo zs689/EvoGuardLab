@@ -49,6 +49,7 @@ python scripts/review_checks.py --gate --out docs/review-remediation/after  # �
 | `probes/store_soak600.json` | **10 分钟 soak 3/4**：98314 次写出现 1 次 `database is locked` | 如实判红 |
 | `docs/review-remediation/lock-contention-known-issue.md` | 锁冲突定位 + 两次无效尝试 | `probes/lock_contention_*.json`、`begin_immediate_probe.json` |
 | `docs/review-remediation/single-writer-innovation.md` | 写串行化方案与默认值变更 | `probes/single_writer_probe.json`、`serialize_{off,on}.json` |
+| `single-writer-innovation.md` §八 | 端到端 HTTP A/B、弱引用闸门、跨进程验证 | `probes/http_ab_*.json`、`cross_process_write_probe.json` |
 
 `before.md` 记录了每一条差距的**我自己复现过**的结果。有一条如实写了修前
 就是 PASS：审查提到「部分格式错误可能落入 500」，我实测畸形 JSON 返回 400，
@@ -85,7 +86,7 @@ python scripts/review_checks.py --gate --out docs/review-remediation/after  # �
 | **EG-007** 审计完整性与保留期 | ✅ | 新增 `audit_anchors` 归档锚点（migration v4）：合法清理按连续区间留锚、`verify()` 只在缺口处匹配锚点才放行；支持按租户清理；手工 `DELETE` 仍报 `prev_mismatch`；伪造锚点哈希对不上也不能洗白 | `tests/test_enterprise.py::TestAuditRetention` 5/5；`review_checks` EG-007 | 锚点表与审计库同库 —— 能改库的人理论上可插锚点。生产需把锚点备份到独立权限域（已写进 `SECURITY.md`） |
 | **EG-008** 审计并发和迁移 | ✅ | `emit()` 与 `migrate()` 都改用 `BEGIN IMMEDIATE` 跨进程事务（读链尾+插入原子化）；`busy_timeout=30s`；`verify()` 改 `fetchmany(1000)` 流式分批；**按证据撤回 WAL**（多进程共享时 3/10 readonly） | `tests/test_audit_multiprocess.py` 2/2：两独立进程并发启动/写入后版本一致、80 条事件完整、无重复链头、链验证通过；5000 行流式校验；撤回 WAL 后单测 12 次 0 失败、gate 连跑 3 次全绿（`perf-before-after.md` 附） | 仍是单文件 sqlite；多主机共享存储/分布式锁未做 |
 | **EG-009** 任务调度与故障恢复 | 🟡 | 新增 `enterprise/jobs.py`：持久作业表（按租户分库）、任务 ID、轮询、取消、重试、**幂等键**、租约；崩溃恢复把过期租约标 `unknown` 且**不自动重放**（副作用可能已发生），人工对账后显式 retry；单 worker 顺序执行；队列容量上限 256；`/api/jobs*` 五条路由，同步 `/api/run` 保留兼容 | `tests/test_jobs.py` 10/10；`scripts/jobs_smoke.py` 11/11（幂等提交 2 次业务库只 1 条 run、租户隔离、重启后记录仍在）；8 并发提交 P95 **14.1 ms** vs 完成 P95 1785 ms | **单进程单 worker**，多副本需共享队列与分布式租约；`runtime.FORCED_SKILL` 仍是进程级全局（用执行锁串行化，未改 runtime）；排队时间未单列报告；同步 `/api/run` 仍在兼容期 |
-| **EG-010** 存储性能 | 🟡 | 热路径零 DDL、索引、可观测；**有界连接池 + SQL 感知的写串行化（读写分离，零调用点改动）**，两者按 A/B 证据**默认开启**；同负载改前改后对比与五条稳定性验收齐全 | `store-pool-ab.md` / `single-writer-innovation.md`：旧默认 19073 写/5 次 `database is locked` → **新默认 32287 写/0 次（+69% 吞吐）**；`probes/serialize_{off,on}.json`。池+串行化下稳定性 3/3、10 轮多进程全 200/200、`taskkill /F` 恢复 120/120、944 项回归在开与关两种配置下全绿 | **WAL 仍默认关且不推荐**（备份只复制 db 丢全部数据、约 70 倍写放大；并发 readonly 被串行化压到 0/8 但样本有限）；小时级 soak、多主机共享存储、Docker/CI/浏览器/Linux wheel 未验；EG-010 仍是 🟡 |
+| **EG-010** 存储性能 | 🟡 | 热路径零 DDL、索引、可观测；**有界连接池 + SQL 感知的写串行化（读写分离，零调用点改动）**，两者按 A/B 证据**默认开启**；同负载改前改后对比与五条稳定性验收齐全 | `store-pool-ab.md` / `single-writer-innovation.md`：旧默认 19073 写/5 次 `database is locked` → **新默认 32287 写/0 次（+69% 吞吐）**；`probes/serialize_{off,on}.json`。池+串行化下稳定性 3/3、10 轮多进程全 200/200、`taskkill /F` 恢复 120/120、946 项回归在开与关两种配置下全绿；**端到端 HTTP A/B 两次重复：新默认 1093/1068 ms vs 全关 2816/3247 ms（约 2.7–3 倍）、无 5xx**；4 进程 × 8 线程跨进程 0 错（全关 8 错） | **WAL 仍默认关且不推荐**（备份只复制 db 丢全部数据、约 70 倍写放大；并发 readonly 被串行化压到 0/8 但样本有限）；小时级 soak、多主机共享存储、Docker/CI/浏览器/Linux wheel 未验；EG-010 仍是 🟡 |
 | **EG-012** 查询与响应体容量 | 🟡 | `limit` clamp 到 200；`started_at` 稳定游标 + `next_cursor`；列表建索引；**详情聚合读取加预算**（四类轨迹各 `LIMIT cap+1`，响应带 `truncated` 与 `detail_limit`） | `review_checks` EG-012；`core.py` 四个 `list_*` 加可选 limit，内部诊断调用不传、语义不变；70 项 core/api 回归全绿 | 技能/经验分页、EXPLAIN 命中索引的大样本验证**未做** |
 | **EG-013** 探针与可观测性 | ✅ | `/api/live`（不碰 DB）、`/api/ready`（依赖不满足 503）、`/api/health`（诊断，保留原字段）拆分；探针流量单列 `evoguard_probe_requests_total`，**不进业务 SLI**；告警规则同步并加指标名一致性检查 | `review_checks` EG-013 两项；`deploy/alerts.yml` 新增 probe-scrape / audit-failure 告警 | 真实部署拓扑里的抓取凭证、错误预算与一条完整追踪**未验** |
 | **EG-014** 下游韧性 | 🟡 | 新增 `gateway.ResilientProvider`：熔断（失败阈值/冷却/半开）+ 有界并发（超出排队超时直接 `E_OVERLOADED`）+ 调用统计；**接入真实模型调用路径**（`runtime.answer` → `gateway.get_provider()`）。服务进程启动时默认开启（`app.py` setdefault），离线评测**不开** —— 否则熔断会把「模型不行」记成「被自己挡住」，污染实验 | `tests/test_resilient_provider.py` 6/6：熔断打开后不再打下游、冷却半开成功后闭合、并发超限拒绝而非无限排队、get_provider 开关生效 | 超时仍是底层 provider 的 socket 超时，没有强制总预算中断；**共享限流层/多副本熔断状态**未做；半开探测数无独立指标 |
@@ -130,7 +131,7 @@ python scripts/review_checks.py --gate --out docs/review-remediation/after  # �
 `database is locked` 并判为未解决、第八轮用 **SQL 感知的写串行化**解决了它，
 并按 A/B 证据把「连接池 + 串行化」**改为默认开启**（旧默认 19073 写/5 错 →
 新默认 32287 写/0 错）。WAL 仍默认关且不推荐。
-所以仍然不说「企业级」：检测 v2、RLS、多副本、真实流量都没解决。
+所以仍然不说「企业级」：检测 v2、RLS、多副本、**多主机共享存储**、真实流量都没解决。
 
 ## 交接规则遵守情况
 
