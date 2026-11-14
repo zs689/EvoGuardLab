@@ -1,0 +1,77 @@
+{
+  "boundaries": [
+    "本机 Windows 单主机；多主机共享存储未验。",
+    "SIGKILL 用 os._exit 模拟，不是真的 taskkill /F，同样不刷 WAL。",
+    "长时验证是 2048 次操作 / 8 线程，不是小时级 soak test。",
+    "wal-concurrency 故意判红：WAL 在这套连接语义下会偶发 readonly。"
+  ],
+  "checks": [
+    {
+      "detail": "2048 次并发写：created=8 discarded=0 idle=8，Python 堆峰值增量 0.15 MiB",
+      "evidence": {
+        "heap_after_first_phase": 93232,
+        "heap_growth_bytes": 156214,
+        "pool": {
+          "closed": false,
+          "created": 8,
+          "discarded": 0,
+          "idle": 8,
+          "size": 8
+        },
+        "rows": 2048
+      },
+      "id": "bounded",
+      "pass": true
+    },
+    {
+      "detail": "只开池（无 WAL），本项不适用",
+      "evidence": {},
+      "id": "wal-backup",
+      "pass": true,
+      "skipped": true
+    },
+    {
+      "detail": "10 轮 × 2 进程各写 100 条：0 轮失败（全部 200/200）",
+      "evidence": {
+        "failed_detail": [],
+        "failed_rounds": 0,
+        "note": "跨进程 WAL 冷启动 flaky；默认不开启的硬理由",
+        "rounds": 10
+      },
+      "id": "multiprocess",
+      "pass": true
+    },
+    {
+      "detail": "子进程 os._exit 强退（不 close）后重开：50/50 行，integrity=ok",
+      "evidence": {
+        "integrity": "ok",
+        "returncode": 0,
+        "rows": 50,
+        "stderr": ""
+      },
+      "id": "sigkill-recovery",
+      "pass": true
+    },
+    {
+      "detail": "只开池（无 WAL），本项不适用",
+      "evidence": {},
+      "id": "wal-concurrency",
+      "pass": true,
+      "skipped": true
+    }
+  ],
+  "env": {
+    "AGENTLAB_STORE_POOL": "1",
+    "AGENTLAB_STORE_WAL": "0",
+    "pool_size": 8
+  },
+  "generated_at": "2026-11-14T11:14:20",
+  "passed": true,
+  "summary": {
+    "fail": 0,
+    "pass": 3,
+    "skipped": 2,
+    "total": 3
+  },
+  "version": 2
+}

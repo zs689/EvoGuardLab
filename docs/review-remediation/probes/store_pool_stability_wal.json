@@ -1,0 +1,141 @@
+{
+  "boundaries": [
+    "本机 Windows 单主机；多主机共享存储未验。",
+    "SIGKILL 用 os._exit 模拟，不是真的 taskkill /F，同样不刷 WAL。",
+    "长时验证是 2048 次操作 / 8 线程，不是小时级 soak test。",
+    "wal-concurrency 故意判红：WAL 在这套连接语义下会偶发 readonly。"
+  ],
+  "checks": [
+    {
+      "detail": "2048 次并发写：created=8 discarded=0 idle=8，Python 堆峰值增量 0.14 MiB",
+      "evidence": {
+        "heap_after_first_phase": 92880,
+        "heap_growth_bytes": 145558,
+        "pool": {
+          "closed": false,
+          "created": 8,
+          "discarded": 0,
+          "idle": 8,
+          "size": 8
+        },
+        "rows": 2048
+      },
+      "id": "bounded",
+      "pass": true
+    },
+    {
+      "detail": "复制 db+wal 恢复 200/200 行；只复制 db 恢复 0/200 行",
+      "evidence": {
+        "conclusion": "WAL 未 checkpoint 的事务只在 -wal 里，备份必须一起复制",
+        "db_only": 0,
+        "files": [
+          "src.db",
+          "src.db-shm",
+          "src.db-wal"
+        ],
+        "wal_file_present": true,
+        "with_wal": 200
+      },
+      "id": "wal-backup",
+      "pass": true
+    },
+    {
+      "detail": "10 轮 × 2 进程各写 100 条：0 轮失败（全部 200/200）",
+      "evidence": {
+        "failed_detail": [],
+        "failed_rounds": 0,
+        "note": "跨进程 WAL 冷启动 flaky；默认不开启的硬理由",
+        "rounds": 10
+      },
+      "id": "multiprocess",
+      "pass": true
+    },
+    {
+      "detail": "子进程 os._exit 强退（不 close）后重开：50/50 行，integrity=ok",
+      "evidence": {
+        "integrity": "ok",
+        "returncode": 0,
+        "rows": 50,
+        "stderr": ""
+      },
+      "id": "sigkill-recovery",
+      "pass": true
+    },
+    {
+      "detail": "8 轮 × 24 并发 WAL 写：1 轮出现 readonly/缺行",
+      "evidence": {
+        "failed_rounds": 1,
+        "note": "故意判红：WAL 在当前连接语义下不可靠",
+        "rounds": 8,
+        "samples": [
+          {
+            "errors": 0,
+            "first": [],
+            "round": 0,
+            "rows": 24
+          },
+          {
+            "errors": 0,
+            "first": [],
+            "round": 1,
+            "rows": 24
+          },
+          {
+            "errors": 0,
+            "first": [],
+            "round": 2,
+            "rows": 24
+          },
+          {
+            "errors": 0,
+            "first": [],
+            "round": 3,
+            "rows": 24
+          },
+          {
+            "errors": 0,
+            "first": [],
+            "round": 4,
+            "rows": 24
+          },
+          {
+            "errors": 0,
+            "first": [],
+            "round": 5,
+            "rows": 24
+          },
+          {
+            "errors": 0,
+            "first": [],
+            "round": 6,
+            "rows": 24
+          },
+          {
+            "errors": 6,
+            "first": [
+              "OperationalError: attempt to write a readonly database"
+            ],
+            "round": 7,
+            "rows": 18
+          }
+        ]
+      },
+      "id": "wal-concurrency",
+      "pass": false
+    }
+  ],
+  "env": {
+    "AGENTLAB_STORE_POOL": "1",
+    "AGENTLAB_STORE_WAL": "1",
+    "pool_size": 8
+  },
+  "generated_at": "2026-11-14T11:14:31",
+  "passed": false,
+  "summary": {
+    "fail": 1,
+    "pass": 4,
+    "skipped": 0,
+    "total": 5
+  },
+  "version": 2
+}

@@ -237,6 +237,29 @@ def c_frontend_session():
                    "frontend/index.html（静态；真实浏览器登录未实测）")
 
 
+def c_store_defaults():
+    """EG-010：WAL 已判不可用，别让默认值或文档悄悄漂回去。"""
+    core = _read("ai-service/evoguard/core.py")
+    env = _read(".env.example")
+    wal_rep = _json(os.path.join(ROOT, "docs", "review-remediation",
+                                 "probes", "store_pool_stability_wal.json")) or {}
+    checks = {
+        "池默认关闭": "setdefault(\"AGENTLAB_STORE_POOL\"" not in core
+                  and "pool_flag" in core,
+        "WAL 不默认开": "setdefault(\"AGENTLAB_STORE_WAL\"" not in core,
+        "env 里 WAL 是注释": "\nAGENTLAB_STORE_WAL=1" not in env,
+        "env 明确不要开 WAL": "不要开 WAL" in env,
+        "稳定性报告记着 WAL 判红": any(
+            c.get("id") == "wal-concurrency" and c.get("pass") is False
+            for c in wal_rep.get("checks", [])),
+    }
+    missing = [k for k, v in checks.items() if not v]
+    return _result("EG-010/store-defaults", not missing,
+                   "池默认关、WAL 不默认开且判红有证据" if not missing
+                   else "缺：%s" % "、".join(missing),
+                   "core.py / .env.example / probes")
+
+
 def c_enterprise_e2e():
     """EG-001/EG-002：跑真服务、真 token、真跨租户查询，读产物判定。"""
     import subprocess
@@ -431,6 +454,7 @@ CHECKS = [
     ("EG-008", c_audit_multiprocess),
     ("EG-017", c_v3_prereg),
     ("EG-022", c_data_governance),
+    ("EG-010", c_store_defaults),
 ]
 
 

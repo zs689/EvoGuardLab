@@ -157,6 +157,33 @@ CREATE INDEX IF NOT EXISTS idx_faults_run ON faults(run_id);
 """
 
 
+def _interprocess_lock(path, timeout=15.0):
+    """跨进程原子锁（Windows / POSIX 都能用，不依赖 fcntl）。
+
+    多进程同时给同一个新建库切 WAL 时会互相踩：实测 2 进程各写 100 条
+    只落了 100 条，另一个报 `readonly`。用 O_CREAT|O_EXCL 原子建锁文件
+    把「首次 WAL 切换」串行化；超过 30s 的陈旧锁自动清掉，避免进程被杀
+    之后所有人永久卡住。
+    """
+    lock = path + ".init.lock"
+    end = time.monotonic() + timeout
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            return lock
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(lock) > 30:
+                    os.remove(lock)
+                    continue
+            except OSError:
+                pass
+            if time.monotonic() >= end:
+                return None
+            time.sleep(0.01)
+
+
 class _ConnPool:
     """有界连接复用（EG-010）。
 
@@ -232,6 +259,34 @@ class _ConnPool:
                 c.close()
             except Exception:                 # noqa: BLE001
                 pass
+        # 兜底：`_all` 记过所有创建出来的连接。被借出时 Store.close() 被调用、
+        # 或者连接因异常被丢弃后，都不在队列里，只关队列会漏文件句柄
+        # （开池跑全量回归时实测到 ResourceWarning: unclosed database）。
+        with self._lock:
+            leftover, self._all = self._all, []
+        for c in leftover:
+            try:
+                c.close()                     # 重复 close 是幂等的
+            except Exception:                 # noqa: BLE001
+                pass
+
+    def __del__(self):
+        # 很多调用点（尤其测试里的临时 Store）不会显式 close()。
+        # 默认模式下连接用完即关所以看不出来；池模式常开连接会漏文件句柄，
+        # 实测开池跑全量回归有 14 条 ResourceWarning。
+        # **只关空闲队列**：不能碰 `_all` 里正在被借用的连接 —— GC 时机
+        # 不可控，多线程下把借出的连接关掉会击穿 WAL 的 -shm（实测 readonly）。
+        # 借出的连接归还时 `put()` 会因 `_closed` 把它关掉。
+        try:
+            self._closed = True
+            while True:
+                try:
+                    c = self._q.get_nowait()
+                except queue.Empty:
+                    break
+                c.close()
+        except Exception:                     # noqa: BLE001
+            pass
 
 
 class Store:
@@ -257,13 +312,29 @@ class Store:
             self._pool = _ConnPool(
                 self.path,
                 int(os.environ.get("AGENTLAB_STORE_POOL_SIZE") or 8))
-        self.init()
         # WAL 只在「连接池开启」时允许：常开连接保住 -wal/-shm，
         # 否则最后一个连接关闭会与并发打开的连接竞争（上轮 3/24 readonly）。
         wal_flag = (os.environ.get("AGENTLAB_STORE_WAL") or "").strip().lower()
-        if self._pool is not None and wal_flag in ("1", "true", "on"):
-            with self.conn() as c:
-                c.execute("PRAGMA journal_mode=WAL")
+        wal_enabled = (self._pool is not None
+                       and wal_flag in ("1", "true", "on"))
+        # 锁要包住**整个初始化**（建表 + WAL 切换），不只是 PRAGMA。
+        # 只锁 PRAGMA 时实测 8 次仍有 1 次 readonly：两个进程同时
+        # 执行 init() 里的 DDL / 同时创建 -shm，照样打架。
+        lock = _interprocess_lock(self.path) if wal_enabled else None
+        try:
+            self.init()
+            if wal_enabled:
+                with self.conn() as c:
+                    # 库一旦是 WAL 就写在文件头里，后续进程不要再切一次。
+                    cur = c.execute("PRAGMA journal_mode").fetchone()
+                    if cur and str(cur[0]).lower() != "wal":
+                        c.execute("PRAGMA journal_mode=WAL")
+        finally:
+            if lock:
+                try:
+                    os.remove(lock)
+                except OSError:
+                    pass
 
     @contextlib.contextmanager
     def conn(self):

@@ -113,17 +113,23 @@
       "evidence": "tests/test_data_governance.py + docs/data-governance.md",
       "id": "EG-022/governance",
       "status": "pass"
+    },
+    {
+      "detail": "池默认关、WAL 不默认开且判红有证据",
+      "evidence": "core.py / .env.example / probes",
+      "id": "EG-010/store-defaults",
+      "status": "pass"
     }
   ],
-  "generated_at": "2026-11-14T00:15:21",
+  "generated_at": "2026-11-14T11:21:07",
   "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
-  "revision": "cbfed017d3b64b6a04c24925522902002fd028af",
-  "seconds": 21.37,
+  "revision": "66704c4aef1d35abe84de36e825180e73884c63c",
+  "seconds": 23.6,
   "summary": {
     "fail": 0,
-    "pass": 19,
+    "pass": 20,
     "skip": 0,
-    "total": 19
+    "total": 20
   },
   "version": 1
 }
