@@ -16,17 +16,21 @@
 >   （用户目录安装，不在 Program Files），版本 29.7.2 / Desktop 4.87.0；
 > - 我启动了 `Docker Desktop.exe`（pid 28528），等 96 秒 daemon 仍不可达，
 >   进程随后退出；
-> - 日志 `com.docker.backend.exe.log` 停在
->   `fetching manifest from https://desktop.docker.com/modules/4.87/modules.json`
->   之后再无输出 —— 卡在拉外网 modules manifest。
+> - **真正根因（后来用 `docker desktop start` 查到）**：该命令触发
+>   `wsl.exe`，被 `PROGRAM BLOCKED BY SECURITY POLICY` 直接拒绝。
+>   Docker Desktop 依赖 WSL2，所以 A1 和 A2 是**同一个阻塞**，不是两件事。
+>   早先看 backend 日志停在拉 `desktop.docker.com/modules/4.87/modules.json`
+>   只是表象，那个推断已更正。
 > - **不需要 daemon 的部分已做**：`scripts/check_build_context.py`
 >   静态模拟 `.dockerignore`，PASS（180 文件 / 2.2 MiB，`.git`/`.env`/
 >   `*.db`/语料/租户数据/缓存全挡，Dockerfile 的 8 个 COPY 源齐全）。
 >   产物 `probes/build_context.json`。**这不等于镜像层实测**。
-> - 要继续只需要你：让 Docker Desktop 能连上 `desktop.docker.com`
->   （挂代理 / 配置离线），或手动启动后托盘变绿告诉我。
+> - **要继续只需要你做一个动作**：安全中心 → 命令安全 → 程序黑名单，
+>   移除 `C://WINDOWS//System32//wsl.exe`（路径已脱敏写作
+>   `%WINDIR%\System32\wsl.exe`）。放行后告诉我，我立刻做镜像层实测
+>   与 Linux wheel 冒烟。
 >
-> **A2 WSL —— 被安全策略硬拦，我不会绕**：
+> **A2 WSL —— 与 A1 同一个根因，被安全策略硬拦，我不会绕**：
 > - `wsl.exe` 调用直接被 `PROGRAM BLOCKED BY SECURITY POLICY` 拒绝
 >   （程序黑名单），规则明确禁止换壳重试；
 > - 只读探测：`vmms` 与 `WSLService` 都在 Running，但

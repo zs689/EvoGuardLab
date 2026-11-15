@@ -395,6 +395,12 @@ InjecAgent 的 commit `f19c9f2c…` 有第三方清单的
 不需要 daemon 的部分做了：`scripts/check_build_context.py` 静态模拟
 `.dockerignore`，PASS（180 文件 / 2.2 MiB，敏感项全挡、8 个 COPY 源齐全）。
 
+**根因更正**：后来用 `docker desktop start` 查到，该命令触发 `wsl.exe`
+被 `PROGRAM BLOCKED BY SECURITY POLICY` 拒绝 —— **Docker 与 WSL 是同一个
+阻塞**，不是两件事；早先「backend 卡在拉 modules manifest」只是表象。
+用户只要在安全中心 → 命令安全 → 程序黑名单放行
+`%WINDIR%\System32\wsl.exe`，两项可一起解。
+
 **WSL（EG-004）**：`wsl.exe` 被安全策略程序黑名单直接拒绝，规则明确禁止
 绕行或换壳，我没重试。只读探测：`vmms`/`WSLService` Running，但
 Packages 下无 Linux 发行版；Docker Desktop 自带 `Ubuntu-7.0.0-28.28`，
