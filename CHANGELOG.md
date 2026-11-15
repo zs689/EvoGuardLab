@@ -292,3 +292,18 @@
   堆 0.153→0.482 MiB 缓慢上升（采样列表自身在 tracemalloc 范围内），
   **既不证明也不排除泄漏**，更正上轮「堆无明显增长」的说法。
   要下无泄漏结论需排除采样开销的独立长跑，未做。
+
+### 第十五轮（2026-11-15）：堆归因结论确定 + 稳定性三层约束
+
+- **推翻第十四轮「既不证明也不排除泄漏」**：三条证据定位为
+  观测器自身开销（720 采样点实测 0.285 MiB / 60 分钟涨 0.329 MiB），
+  **非 Store 泄漏**。对照实验不留采样点组堆 -0.010 MiB。
+- `check_soak` 改为采样点写临时 JSONL、内存只留 float 列表、
+  tracemalloc 停止后读回（产物格式不变、临时文件删除）。
+- 新增运行期硬判据 `heap_growth_mb < 0.15`、
+  `tests/test_soak_heap.py`、`EG-010/heap-stability` 门槛。
+- 新增 `scripts/heap_attribution_probe.py` 与
+  `docs/review-remediation/heap-stability.md`。
+- 修后 30 分钟长跑 4/4：436576 次写 0 错，堆 0.137→0.053 MiB
+  （-0.084，无上升趋势），`heap_stable=true`；门槛可证伪验证通过。
+  965 tests OK / 28-28 gate。
