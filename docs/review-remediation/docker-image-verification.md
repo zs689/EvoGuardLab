@@ -84,7 +84,18 @@ error: package directory 'ai-service/evoguard_inspect' does not exist
 ## 七、复现
 
 ```bash
-docker build -t evoguardlab:verify .
+# 0. 准备基础镜像（境外直连极慢时可换国内源；验证用镜像已清理）
+docker pull docker.1ms.run/library/python:3.11-slim
+docker tag docker.1ms.run/library/python:3.11-slim python:3.11-slim
+
+# 1. 静态两层防线
 python scripts/check_build_context.py --json <path>
+
+# 2. 构建与镜像层/Linux wheel 实测
+docker build -t evoguardlab:verify .
 python scripts/verify_docker_image.py --image evoguardlab:verify --json <path>
 ```
+
+验证用的容器、named volume 由脚本 `finally` 清理；
+验证镜像与临时基础镜像 tag 在交付后已按「用完清掉」删除，
+**Docker Desktop 与其他项目容器（cvat 等）未动**。
