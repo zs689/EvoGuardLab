@@ -222,3 +222,16 @@
 - `_WriteGuardConn._normalize()` 处理 SQL 注释前缀与 `WITH … INSERT`，
   `tests/test_single_writer.py` 11→13 项。
 - `what-i-need.md` / `corpus-supply-chain.md` / 台账 EG-018 同步进展。
+
+### 第十一轮（2026-11-15）：v3 冻结集与判定线可复算（实验仍未跑）
+
+- 新增 `scripts/build_v3_frozen_split.py`：确定性生成
+  `experiments/semantic_injection_v3/frozen_split.json`（288 条 / 24 模板组
+  整组划分 / 五集合 × 五切片 / 未见 schema 与校准集无交集 /
+  每集合 sha256 / integrity 锁死 / `--freeze` 拒二次生成 / 篡改可检出）。
+- 新增 `tests/test_v3_frozen_split.py` 10 项，含八条判定线逐条越线
+  可证伪验证；`GATE` 指纹保持不变。
+- **`result.json` 仍不存在**，`test_experiment_not_yet_executed` 保持为红；
+  独立复跑前置条件未满足，工具链就绪不等于实验有结论。
+- v3 plan 顶部加进展块（§六 判定线未动）、台账 EG-017、
+  after.md §十六 同步。

@@ -411,3 +411,26 @@ Packages 下无 Linux 发行版；Docker Desktop 自带 `Ubuntu-7.0.0-28.28`，
 `tests/test_single_writer.py` 11 → 13 项。
 E 类剩余四项（v3 可执行化、小时级 soak、更多压测轮次、可访问性自查、
 gate 并发压测）下一轮，不需要你提供东西。
+
+## 十六、第十一轮（2026-11-15）：v3 工具链可复算，但实验仍未跑
+
+Docker/WSL 仍被 `wsl.exe` 安全策略拦（规则禁止绕过，未重试），
+所以这轮做 E 类里科学价值最高的一件：把 v3 预注册从「只写了计划」
+推进到「划分与判定线都可复算」。
+
+- 新增 `scripts/build_v3_frozen_split.py`：确定性生成
+  `experiments/semantic_injection_v3/frozen_split.json`，288 条、
+  24 个模板组**整组划分**、五个集合各覆盖五个切片、
+  `test_unseen_schema` 的 schema 与 calibration 无交集、
+  每集合 sha256 + 条数、`integrity_sha256` 锁死、
+  `--freeze` 拒绝二次生成、篡改可检出。
+- 新增 `tests/test_v3_frozen_split.py` 10 项：确定性、整组不跨集、
+  schema 无交集、五切片、冻结/篡改、以及**八条判定线逐条越线
+  都能单独把总判定拉红**（可证伪）。`GATE` 指纹一字未改。
+- **边界写死**：`result.json` 仍不存在，
+  `test_experiment_not_yet_executed` 保持为红；合成样本不代表真实
+  世界分布；「未参与调参的一方复跑」这个前置条件仍未满足。
+  工具链就绪 ≠ 实验有结论。
+
+v3 plan 顶部加「工具链进展」块，§六 判定线表格一字未动；
+台账 EG-017 同步。
