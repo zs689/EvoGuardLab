@@ -534,3 +534,71 @@ EG-004 补 Linux 实测、EG-016 补容器运行层实测（仍 🟡）。
 独立审查 scorecard 84.8 不变 —— 那是独立审查口径，不跟自评走。
 边界：GitHub CI 未实跑、基础镜像经国内源拉取不能外推到 CI、
 未做镜像签名/漏洞扫描。
+
+## 十九、第十四轮（2026-11-15）：更正一处归类、补 CI 静态校验与小时级 soak
+
+### 1. 先更正上轮的不准确说法
+
+上轮把「小时级 soak」写进「需要人或别的机器」——**归类错了**。
+它不需要任何外部条件，只是要在本机连续挂 60 分钟。
+这轮启动 `--soak-seconds 3600` 补验（结果见本节末尾补充）。
+
+### 2. CI 里有个真缺口（静态审查查不出，得对着 workflow 看）
+
+`.github/workflows/test.yml` 的「Docker build-context gate」原本只跑
+`check_docker_context.py`，**没有跑第十三轮新增的
+`check_build_context.py`** —— 而正是后者新增的「pyproject 声明是否被
+COPY 覆盖」校验挡住了 `evoguard_inspect` 漏拷那个 bug。
+也就是说：修好的防线在 CI 里是空的，回归了也不会报警。
+
+修法：该 step 改成两步都跑（`mkdir -p gate_artifacts` 后
+`check_docker_context.py --out ...` + `check_build_context.py --json
+gate_artifacts/build_context.json`，注意两个脚本参数不同）。
+
+### 3. 新增 CI 引用完整性静态校验
+
+`scripts/check_ci_references.py`：解析 test.yml 的 `run:` 块，检查
+① 引用的 `scripts/*.py` 存在；② 命令里的 `--flag` 在脚本 argparse
+定义里；③ 6 个关键门槛脚本都在 workflow 里被调用。
+产物 `probes/ci_references.json`，`EG-023/ci-references` 门槛，
+gate 26 → 27。
+
+**又抓到一次自己脚本的假绿**：第一版「是否被 CI 引用」是扫全文正则，
+注释行里含脚本名也算数 → 把新脚本注释掉仍判 PASS。已改成只统计
+非注释的 `run:` 行；重做可证伪验证：注释掉 → RC=1 且报
+「关键门槛脚本没进 CI」，还原 → PASS。
+
+**边界**：这不执行 workflow、不验证 GitHub 表达式或 runner 环境，
+**不能替代在 GitHub 上真跑一遍**。
+
+### 4. 长时验证又抓到一个诊断脚本自身的竞态
+
+首次启动 3600 秒 soak，**12 秒就崩了**：
+`_dir_bytes()` 在 `os.listdir()` 与 `os.path.getsize()` 之间，
+SQLite 的临时 `a.db-journal` 被删 → `FileNotFoundError`。
+这是诊断脚本的 bug，不是产品问题（30 分钟那次没撞上是运气）。
+已加 `try/except OSError` 跳过瞬时文件，短跑 60 秒 4/4 确认后重启。
+这类「验证工具自己把长时验证搞崩」的问题，只有真挂 60 分钟才会暴露。
+
+### 5. 60 分钟连续 soak 结果（`probes/soak3600.json`，4/4）
+
+3600 秒 / 8 线程共 **979904 次写、0 错误**，`created` 全程恒为 8、
+`discarded` 恒为 0，720 个采样点；真实 `taskkill /F` 两种配置各恢复
+120/120 行，磁盘量与之前一致。这是第一次真正达到「小时级」。
+
+**但堆的观察要如实写**：`tracemalloc` 从首采样 0.153 MiB 涨到末采样
+0.482 MiB（峰值 0.504 MiB），中间有波动（300 秒时曾回落到 0.070）。
+采样列表本身在追踪范围内、720 个点约 0.2 MiB，量级与涨幅相当，
+**所以既不能据此断言 Store 泄漏，也没有排除它** —— 推翻上一轮
+30 分钟时写的「堆无明显增长」。要下「无泄漏」结论，需要一次把采样
+开销排除在追踪范围外的独立长跑，本轮没做。
+
+确定的部分是：连接数恒定、无丢弃、近百万次写零错误。
+
+### 本轮小结
+
+- 更正上轮把「小时级 soak」误归到「需要人或别的机器」；
+- 修 CI 真缺口（新门槛脚本没进 workflow）并加静态校验，
+  且修了该校验自身的假绿；
+- 修长时诊断脚本的 journal 竞态；
+- 完成 60 分钟 soak。gate 26 → 27。

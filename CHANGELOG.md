@@ -272,3 +272,23 @@
   镜像 `6e0dba1f50a0` / 191MB。
 - 台账 EG-003 🟡→✅（✅7/🟡20/⬜0）；EG-004/EG-016 补实测证据。
   独立审查 scorecard 84.8 不变。
+
+### 第十四轮（2026-11-15）：CI 静态校验与小时级 soak
+
+- **修 CI 真缺口**：`test.yml` 的 Docker 静态门禁漏跑
+  `check_build_context.py`（挡住 evoguard_inspect 漏拷的脚本），
+  改成两个脚本都跑，参数分别 `--out` / `--json`。
+- 新增 `scripts/check_ci_references.py`：静态校验 CI 引用的脚本存在、
+  参数被 argparse 定义、6 个关键门槛脚本都在 workflow 里；
+  修了自身「注释行也算引用」的假绿，可证伪验证通过。
+  `EG-023/ci-references` 门槛，gate 26 → 27。
+- 更正上轮归类错误：小时级 soak 本机可做，启动
+  `--soak-seconds 3600` 连续 60 分钟补验，替代此前最长 30 分钟。
+- 长时验证前修了 `store_remaining_checks.py` 的竞态：
+  `_dir_bytes()` 遍历时 SQLite 临时 journal 可能消失导致
+  `FileNotFoundError`（首次 3600s 跑 12 秒即崩），已加 OSError 保护。
+- **60 分钟连续 soak 完成**：979904 次写 / 0 错误 / created 恒 8 /
+  discarded 恒 0 / 720 采样点，4/4（`probes/soak3600.json`）。
+  堆 0.153→0.482 MiB 缓慢上升（采样列表自身在 tracemalloc 范围内），
+  **既不证明也不排除泄漏**，更正上轮「堆无明显增长」的说法。
+  要下无泄漏结论需排除采样开销的独立长跑，未做。
