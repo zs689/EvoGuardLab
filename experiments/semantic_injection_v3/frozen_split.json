@@ -1,0 +1,154 @@
+{
+  "gate_sha256": "8aba16521813e0c7552f6581014a7f6da1dc32893cbaa14b75f47149a6f9ba9d",
+  "generator": "scripts/build_v3_frozen_split.py",
+  "groups": 24,
+  "integrity_sha256": "1ed0e8d5dbe7891dc3c642130bb1bedacea768926a8a93d2bc82e8ca1a869390",
+  "method": "deterministic synthetic; template-group-wise split; no RNG/network",
+  "notes": [
+    "只冻结划分，不是实验结果；result.json 不存在。",
+    "合成样本不代表真实世界分布，v3 结论需独立复跑。"
+  ],
+  "samples_per_group": 12,
+  "schema_version": 1,
+  "seen_schemas": [
+    "mail.search",
+    "calendar.create",
+    "file.read",
+    "ticket.update",
+    "contact.lookup"
+  ],
+  "slices": [
+    "zh",
+    "en",
+    "long_text",
+    "normal_task",
+    "model_unavailable"
+  ],
+  "splits": {
+    "calibration": {
+      "count": 120,
+      "groups": [
+        "g00",
+        "g01",
+        "g02",
+        "g03",
+        "g04",
+        "g05",
+        "g06",
+        "g07",
+        "g08",
+        "g09"
+      ],
+      "schemas": [
+        "calendar.create",
+        "contact.lookup",
+        "file.read",
+        "mail.search",
+        "ticket.update"
+      ],
+      "sha256": "4ccd92b95a367aa29bc8ad766c5e02d21e1e021ce383c66f5bf696f62817da4a",
+      "slices": [
+        "en",
+        "long_text",
+        "model_unavailable",
+        "normal_task",
+        "zh"
+      ]
+    },
+    "long_tail": {
+      "count": 24,
+      "groups": [
+        "g22",
+        "g23"
+      ],
+      "schemas": [
+        "file.read",
+        "ticket.update"
+      ],
+      "sha256": "936a9aa4423ef7e30261c001732ba8a76a9b2d38af927763ed322ca0929508b3",
+      "slices": [
+        "en",
+        "long_text",
+        "model_unavailable",
+        "normal_task",
+        "zh"
+      ]
+    },
+    "overdefense": {
+      "count": 24,
+      "groups": [
+        "g20",
+        "g21"
+      ],
+      "schemas": [
+        "calendar.create",
+        "mail.search"
+      ],
+      "sha256": "7b8edc4030b017b475e15c91b4f596fe5a53cc32161041ee87c1b3539c2730c3",
+      "slices": [
+        "en",
+        "long_text",
+        "model_unavailable",
+        "normal_task",
+        "zh"
+      ]
+    },
+    "test_seen": {
+      "count": 72,
+      "groups": [
+        "g10",
+        "g11",
+        "g12",
+        "g13",
+        "g14",
+        "g15"
+      ],
+      "schemas": [
+        "calendar.create",
+        "contact.lookup",
+        "file.read",
+        "mail.search",
+        "ticket.update"
+      ],
+      "sha256": "448426ad571916902451387be8b0a14da8c127063d1bf4447d6e1ca42ee1e96d",
+      "slices": [
+        "en",
+        "long_text",
+        "model_unavailable",
+        "normal_task",
+        "zh"
+      ]
+    },
+    "test_unseen_schema": {
+      "count": 48,
+      "groups": [
+        "g16",
+        "g17",
+        "g18",
+        "g19"
+      ],
+      "schemas": [
+        "fleet.dispatch",
+        "genome.query",
+        "iot.unlock",
+        "ledger.transfer"
+      ],
+      "sha256": "eb05f9f8a2128344bbc9db73e2dcc94667c48a97f484030d1c287e4597baee17",
+      "slices": [
+        "en",
+        "long_text",
+        "model_unavailable",
+        "normal_task",
+        "zh"
+      ]
+    }
+  },
+  "total": 288,
+  "unseen_schemas": [
+    "crm.export",
+    "iot.unlock",
+    "ledger.transfer",
+    "fleet.dispatch",
+    "genome.query"
+  ]
+}
