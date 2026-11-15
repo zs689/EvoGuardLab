@@ -1,11 +1,25 @@
 {
   "boundary": "镜像层实测仍需 docker daemon；本检查只保证规则无漏。",
+  "declared_data_sources": [
+    "scripts/defense_demo.py",
+    "ai-service/api/app.py",
+    "frontend/index.html",
+    "config/thresholds_v1.json",
+    "config/thresholds_v2_calibrated.json",
+    "docs/taxonomy.md",
+    "experiments/metrics.json"
+  ],
+  "declared_package_dirs": [
+    "ai-service/evoguard",
+    "ai-service/evoguard_inspect"
+  ],
   "dockerfile_copy_sources": [
     "pyproject.toml",
     "README.md",
     "LICENSE",
     "evoguard_cli.py",
     "ai-service/evoguard",
+    "ai-service/evoguard_inspect",
     "ai-service/api/app.py",
     "config",
     "frontend",
@@ -14,13 +28,14 @@
     "scripts/defense_demo.py"
   ],
   "excluded_files": 4,
-  "included_bytes": 2292439,
-  "included_files": 180,
+  "included_bytes": 2316700,
+  "included_files": 183,
   "intentional_includes": [
     "experiments/metrics.json"
   ],
   "method": "Python 近似模拟 .dockerignore，不是 docker build 实测",
   "missing_copy_sources": [],
+  "missing_declared": [],
   "passed": true,
   "rules": 51,
   "sensitive": [

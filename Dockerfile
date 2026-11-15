@@ -20,6 +20,7 @@ WORKDIR /app
 # .dockerignore 是第二道防线；两层独立，任一层被改坏另一层还在。
 COPY pyproject.toml README.md LICENSE evoguard_cli.py ./
 COPY ai-service/evoguard ./ai-service/evoguard
+COPY ai-service/evoguard_inspect ./ai-service/evoguard_inspect
 COPY ai-service/api/app.py ./ai-service/api/app.py
 COPY config ./config
 COPY frontend ./frontend

@@ -313,6 +313,23 @@ def c_e2e_speedup():
                    "probes/http_ab_repeat.json + http_ab_repeat/*.json")
 
 
+def c_docker_image_verify():
+    """EG-003：镜像层与 Linux wheel 的实测证据必须留在仓库里。"""
+    d = os.path.join(ROOT, "docs", "review-remediation", "probes")
+    rep = _json(os.path.join(d, "docker_image_verification.json")) or {}
+    checks = rep.get("checks") or []
+    ids = {c.get("id") for c in checks}
+    need = {"no-leaked-files", "no-broad-copy", "non-root",
+            "readonly-root-service", "volume-separated", "linux-wheel"}
+    ok = (rep.get("passed") is True and need <= ids
+          and all(c.get("pass") is True for c in checks))
+    return _result("EG-003/docker-verify", ok,
+                   ("镜像层 + Linux wheel %d/%d 实测通过"
+                    % (sum(1 for c in checks if c.get("pass")), len(checks)))
+                   if ok else "Docker 实测证据缺失或未全过",
+                   "probes/docker_image_verification.json")
+
+
 def c_frontend_a11y():
     """前端静态可访问性：控件可访问名称不能退化。"""
     d = os.path.join(ROOT, "docs", "review-remediation", "probes")
@@ -556,6 +573,7 @@ CHECKS = [
     ("EG-010", c_e2e_speedup),
     ("EG-010", c_write_gate_stress),
     ("EG-020", c_frontend_a11y),
+    ("EG-003", c_docker_image_verify),
 ]
 
 

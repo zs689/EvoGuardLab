@@ -1,0 +1,72 @@
+{
+  "checks": [
+    {
+      "desc": "镜像层无 .git/.env/*.db/语料/租户数据",
+      "found": "",
+      "id": "no-leaked-files",
+      "pass": true,
+      "rc": 0,
+      "stderr": ""
+    },
+    {
+      "broad_copy_layers": [],
+      "desc": "历史层无 `COPY . /app`（Dockerfile 用显式 COPY 清单）",
+      "id": "no-broad-copy",
+      "layer_count": 28,
+      "pass": true,
+      "stderr": ""
+    },
+    {
+      "desc": "运行用户非 root（uid 10001）",
+      "id": "non-root",
+      "id_output": "uid=10001(evoguard) gid=10001(evoguard) groups=10001(evoguard)",
+      "pass": true,
+      "stderr": ""
+    },
+    {
+      "db_trigger_status": "200",
+      "desc": "--read-only + tmpfs + 卷下服务健康、/api/live 返回 200",
+      "health": "healthy",
+      "id": "readonly-root-service",
+      "live_status": "200",
+      "pass": true,
+      "start_error": ""
+    },
+    {
+      "data_in_volume": "evoguard.db",
+      "desc": "业务库落在卷、镜像层 /app/data 为空",
+      "id": "volume-separated",
+      "image_layer_data": "",
+      "pass": true
+    },
+    {
+      "cli_err": "",
+      "cli_head": "usage: evoguard [-h] {demo,scan,intent,eval,test,serve,config,scorecard} ...\n\nEvoGuardLab — 校验「拒绝是否真的发生在副作用之前」\n\npositional arguments:\n  {demo,scan,intent,eval,test,serve,config,scorecard}\n    demo    ",
+      "desc": "Linux 容器内安装 wheel、import 三个包、CLI 可用",
+      "id": "linux-wheel",
+      "import": "linux-import-ok",
+      "import_err": "",
+      "pass": true,
+      "pip_stderr": "oot' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv\n\n[notice] A new release of pip is available: 24.0 -> 26.3\n[notice] To update, run: pip install --upgrade pip",
+      "pip_stdout": "Processing /tmp/evoguardlab-0.6.0-py3-none-any.whl\nInstalling collected packages: evoguardlab\nSuccessfully installed evoguardlab-0.6.0",
+      "steps_rc": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "wheel": "evoguardlab-0.6.0-py3-none-any.whl"
+    }
+  ],
+  "image": "evoguardlab:verify",
+  "method": "本机 Docker Desktop（Linux 容器），参数列表调用，不 push 不上传",
+  "passed": true,
+  "summary": {
+    "fail": 0,
+    "pass": 6,
+    "total": 6
+  },
+  "version": 2
+}

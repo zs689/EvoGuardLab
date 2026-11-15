@@ -126,8 +126,39 @@ def main():
                                 "leaked_count": len(leaked),
                                 "sample": leaked[:3]})
 
+    # pyproject.toml 声明的包目录 / data-files 源文件，必须都进构建上下文。
+    # 只查「COPY 源存在」会漏掉「声明了却没 COPY」——EG-003 实测就踩到
+    # evoguard_inspect 漏拷导致 pip install -e . 在容器里失败。
+    with io.open(os.path.join(ROOT, "pyproject.toml"),
+                 encoding="utf-8") as f:
+        pyproj = f.read()
+    declared_pkg_dirs = []
+    m = re.search(r"package-dir\s*=\s*\{([^}]*)\}", pyproj, re.S)
+    if m:
+        declared_pkg_dirs = [v for _, v in
+                             re.findall(r'"([^"]+)"\s*=\s*"([^"]+)"',
+                                        m.group(1)) if v != "."]
+    data_sources = []
+    dm = re.search(r"\[tool\.setuptools\.data-files\](.*?)(?=\n\[|\Z)",
+                   pyproj, re.S)
+    if dm:
+        for val in re.findall(r'"([^"]+)"', dm.group(1)):
+            if "/" in val and not val.startswith("share/"):
+                data_sources.append(val)
+
+    def covered(path):
+        return any(c == path or c.rstrip("/") == path.rstrip("/")
+                   or path.startswith(c.rstrip("/") + "/")
+                   or c.startswith(path.rstrip("/") + "/")
+                   for c in copies)
+
+    missing_declared = sorted({p for p in declared_pkg_dirs + data_sources
+                               if not covered(p)})
+    problems_extra = ["pyproject 声明但 Dockerfile 未 COPY：%s" % p
+                      for p in missing_declared]
+
     ok = (not any(x["leaked_count"] for x in sensitive_check)
-          and not missing_copy)
+          and not missing_copy and not problems_extra)
     report = {
         "version": 1,
         "method": "Python 近似模拟 .dockerignore，不是 docker build 实测",
@@ -137,6 +168,9 @@ def main():
         "excluded_files": len(excluded),
         "dockerfile_copy_sources": copies,
         "missing_copy_sources": missing_copy,
+        "declared_package_dirs": declared_pkg_dirs,
+        "declared_data_sources": data_sources,
+        "missing_declared": missing_declared,
         "intentional_includes": sorted(INTENTIONAL),
         "sensitive": sensitive_check,
         "passed": ok,
@@ -152,6 +186,11 @@ def main():
                             else "LEAK %d %s" % (x["leaked_count"],
                                                 x["sample"])))
     print("COPY 源缺失: %s" % (missing_copy or "无"))
+    for p in problems_extra:
+        print("  [!] %s" % p)
+    print("pyproject 声明包/资产: %d 个目录 + %d 个文件，漏拷 %d"
+          % (len(declared_pkg_dirs), len(data_sources),
+             len(missing_declared)))
     print("== %s ==（上下文 %d 文件 / %.1f MiB）"
           % ("PASS" if ok else "FAIL", len(files),
              report["included_bytes"] / 1048576.0))
