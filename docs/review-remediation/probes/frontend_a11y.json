@@ -1,0 +1,20 @@
+{
+  "buttons": 6,
+  "focus_rules": 4,
+  "inputs": 10,
+  "js_onclick_selectors": [
+    "#runs-body tr[data-id]",
+    ".nav-item"
+  ],
+  "label_for_targets": 0,
+  "lang": "zh-CN",
+  "method": "stdlib html.parser 静态解析；不等于真实浏览器/读屏验证",
+  "notes": [
+    "CSS 有 :focus 规则（4 处）",
+    "以下选择器由 JS 挂 onclick，键盘可达性需浏览器确认：#runs-body tr[data-id], .nav-item"
+  ],
+  "page": "frontend/index.html",
+  "passed": true,
+  "problems": [],
+  "version": 1
+}

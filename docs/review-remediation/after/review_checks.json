@@ -133,21 +133,33 @@
       "status": "pass"
     },
     {
-      "detail": "新默认 [1093.2, 1067.85] ms vs 全关 [2815.78, 3247.42] ms，均无 5xx",
-      "evidence": "probes/http_ab_*.json",
+      "detail": "各 5 次，新默认中位 1242.87 ms vs 全关 3829.38 ms，零重叠无 5xx",
+      "evidence": "probes/http_ab_repeat.json + http_ab_repeat/*.json",
       "id": "EG-010/e2e",
+      "status": "pass"
+    },
+    {
+      "detail": "3 轮 x 200 线程，峰值排队 [177, 178, 179]",
+      "evidence": "probes/write_gate_stress.json",
+      "id": "EG-010/gate-stress",
+      "status": "pass"
+    },
+    {
+      "detail": "10 个 input / 6 个 button，0 项问题",
+      "evidence": "probes/frontend_a11y.json",
+      "id": "EG-020/frontend-a11y",
       "status": "pass"
     }
   ],
-  "generated_at": "2026-11-15T13:13:29",
+  "generated_at": "2026-11-15T13:56:45",
   "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
-  "revision": "5c8931a44d82f0d13b9a8d6d5c962dcdb4f1e04e",
-  "seconds": 24.1,
+  "revision": "f6e045921db9d75b8da2d457b2986f82913e2f37",
+  "seconds": 25.79,
   "summary": {
     "fail": 0,
-    "pass": 23,
+    "pass": 25,
     "skip": 0,
-    "total": 23
+    "total": 25
   },
   "version": 1
 }

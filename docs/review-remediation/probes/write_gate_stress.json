@@ -1,0 +1,43 @@
+{
+  "passed": true,
+  "repeats": 3,
+  "rows": [
+    {
+      "acquired": 200,
+      "elapsed_s": 0.115,
+      "errors": [],
+      "hold_ms": 0.2,
+      "locked": false,
+      "note": "peak_waiters>0 证明确实发生排队，不是全部顺序执行",
+      "passed": true,
+      "peak_waiters": 177,
+      "threads": 200,
+      "waiters": 0
+    },
+    {
+      "acquired": 200,
+      "elapsed_s": 0.118,
+      "errors": [],
+      "hold_ms": 0.2,
+      "locked": false,
+      "note": "peak_waiters>0 证明确实发生排队，不是全部顺序执行",
+      "passed": true,
+      "peak_waiters": 178,
+      "threads": 200,
+      "waiters": 0
+    },
+    {
+      "acquired": 200,
+      "elapsed_s": 0.114,
+      "errors": [],
+      "hold_ms": 0.2,
+      "locked": false,
+      "note": "peak_waiters>0 证明确实发生排队，不是全部顺序执行",
+      "passed": true,
+      "peak_waiters": 179,
+      "threads": 200,
+      "waiters": 0
+    }
+  ],
+  "version": 1
+}

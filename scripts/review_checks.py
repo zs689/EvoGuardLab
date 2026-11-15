@@ -297,25 +297,50 @@ def _p95_of(rep):
 
 
 def c_e2e_speedup():
-    """新默认在真实 HTTP 写路径上必须明显快于全关，且两边都无 5xx。"""
+    """端到端 HTTP A/B：各 5 次不许有重叠，且全部无 5xx。"""
     d = os.path.join(ROOT, "docs", "review-remediation", "probes")
-    on = _json(os.path.join(d, "http_ab_on.json")) or {}
-    on2 = _json(os.path.join(d, "http_ab_on2.json")) or {}
-    off = _json(os.path.join(d, "http_ab_off.json")) or {}
-    off2 = _json(os.path.join(d, "http_ab_off2.json")) or {}
-    vals_on = [_p95_of(x) for x in (on, on2)]
-    vals_off = [_p95_of(x) for x in (off, off2)]
-    ok = (all(v for v in vals_on + vals_off)
-          and max(vals_on) < min(vals_off)
-          and all((x.get("aggregated") or {}).get("write_run", {})
-                  .get("availability_min") == 1.0
-                  for x in (on, on2, off, off2)))
+    rep = _json(os.path.join(d, "http_ab_repeat.json")) or {}
+    rows = rep.get("runs") or []
+    ok = (rep.get("no_overlap") is True
+          and rep.get("all_availability_1") is True
+          and rep.get("no_5xx") is True
+          and len(rows) == 10)
+    nd = rep.get("new_default", {}).get("median_ms")
+    ao = rep.get("all_off", {}).get("median_ms")
     return _result("EG-010/e2e", ok,
-                   ("新默认 %s ms vs 全关 %s ms，均无 5xx"
-                    % (vals_on, vals_off)) if ok
-                   else "产物缺失或端到端收益不成立：%s / %s"
-                   % (vals_on, vals_off),
-                   "probes/http_ab_*.json")
+                   ("各 5 次，新默认中位 %s ms vs 全关 %s ms，零重叠无 5xx"
+                    % (nd, ao)) if ok else "端到端收益证据不成立",
+                   "probes/http_ab_repeat.json + http_ab_repeat/*.json")
+
+
+def c_frontend_a11y():
+    """前端静态可访问性：控件可访问名称不能退化。"""
+    d = os.path.join(ROOT, "docs", "review-remediation", "probes")
+    rep = _json(os.path.join(d, "frontend_a11y.json")) or {}
+    problems = rep.get("problems") or []
+    ok = rep.get("passed") is True and not problems
+    return _result("EG-020/frontend-a11y", ok,
+                   ("%d 个 input / %d 个 button，0 项问题"
+                    % (rep.get("inputs", 0), rep.get("buttons", 0)))
+                   if ok else "静态检查未通过：%s" % problems[:3],
+                   "probes/frontend_a11y.json")
+
+
+def c_write_gate_stress():
+    """写闸门高并发下计数不漂、确实发生排队。"""
+    d = os.path.join(ROOT, "docs", "review-remediation", "probes")
+    rep = _json(os.path.join(d, "write_gate_stress.json")) or {}
+    rows = rep.get("rows") or []
+    ok = (rep.get("passed") is True and len(rows) >= 3
+          and all(r.get("acquired") == r.get("threads")
+                  and r.get("waiters") == 0
+                  and r.get("peak_waiters", 0) > 0 for r in rows))
+    return _result("EG-010/gate-stress", ok,
+                   ("%d 轮 x %d 线程，峰值排队 %s"
+                    % (len(rows), rows[0].get("threads", 0) if rows else 0,
+                       [r.get("peak_waiters") for r in rows]))
+                   if ok else "并发压测未通过",
+                   "probes/write_gate_stress.json")
 
 
 def c_enterprise_e2e():
@@ -529,6 +554,8 @@ CHECKS = [
     ("EG-010", c_remaining_checks),
     ("EG-010", c_single_writer),
     ("EG-010", c_e2e_speedup),
+    ("EG-010", c_write_gate_stress),
+    ("EG-020", c_frontend_a11y),
 ]
 
 

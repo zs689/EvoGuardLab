@@ -1,0 +1,112 @@
+{
+  "all_availability_1": true,
+  "all_off": {
+    "max_ms": 4304.11,
+    "median_ms": 3829.38,
+    "min_ms": 3167.25,
+    "n": 5
+  },
+  "boundary": "同机顺序运行；两组 P95 绝对值受当时机器负载影响，看相对差距",
+  "method": "loadtest.py --requests 24 --workers 8 --rounds 3, each config x5",
+  "new_default": {
+    "max_ms": 1359.59,
+    "median_ms": 1242.87,
+    "min_ms": 1233.7,
+    "n": 5
+  },
+  "no_5xx": true,
+  "no_overlap": true,
+  "runs": [
+    {
+      "availability_min": 1.0,
+      "config": "new_default",
+      "p95_median_ms": 1239.76,
+      "run": 1,
+      "status_counts": {
+        "200": 72
+      }
+    },
+    {
+      "availability_min": 1.0,
+      "config": "new_default",
+      "p95_median_ms": 1359.59,
+      "run": 2,
+      "status_counts": {
+        "200": 72
+      }
+    },
+    {
+      "availability_min": 1.0,
+      "config": "new_default",
+      "p95_median_ms": 1242.87,
+      "run": 3,
+      "status_counts": {
+        "200": 72
+      }
+    },
+    {
+      "availability_min": 1.0,
+      "config": "new_default",
+      "p95_median_ms": 1233.7,
+      "run": 4,
+      "status_counts": {
+        "200": 72
+      }
+    },
+    {
+      "availability_min": 1.0,
+      "config": "new_default",
+      "p95_median_ms": 1278.4,
+      "run": 5,
+      "status_counts": {
+        "200": 72
+      }
+    },
+    {
+      "availability_min": 1.0,
+      "config": "all_off",
+      "p95_median_ms": 4304.11,
+      "run": 1,
+      "status_counts": {
+        "200": 72
+      }
+    },
+    {
+      "availability_min": 1.0,
+      "config": "all_off",
+      "p95_median_ms": 3829.38,
+      "run": 2,
+      "status_counts": {
+        "200": 72
+      }
+    },
+    {
+      "availability_min": 1.0,
+      "config": "all_off",
+      "p95_median_ms": 3747.32,
+      "run": 3,
+      "status_counts": {
+        "200": 72
+      }
+    },
+    {
+      "availability_min": 1.0,
+      "config": "all_off",
+      "p95_median_ms": 3167.25,
+      "run": 4,
+      "status_counts": {
+        "200": 72
+      }
+    },
+    {
+      "availability_min": 1.0,
+      "config": "all_off",
+      "p95_median_ms": 4002.13,
+      "run": 5,
+      "status_counts": {
+        "200": 72
+      }
+    }
+  ],
+  "version": 1
+}
