@@ -1,0 +1,162 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""EG-003 静态自查：模拟 .dockerignore 过滤构建上下文。
+
+    python scripts/check_build_context.py --json <path>
+
+**边界**：这是 Python 近似模拟 Docker 的匹配规则，用来发现规则写漏；
+不能替代 `docker build` 的镜像层实测（本机 daemon 不可达）。
+"""
+import argparse
+import fnmatch
+import io
+import json
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+SENSITIVE = [
+    (".git", "版本控制历史"),
+    (".env", "本地凭据"),
+    ("data/external", "外部语料（许可+隐私）"),
+    ("data/tenants", "租户数据"),
+    ("experiments", "实验产物"),
+    ("__pycache__", "缓存"),
+]
+
+
+def load_rules():
+    with io.open(os.path.join(ROOT, ".dockerignore"), encoding="utf-8") as f:
+        lines = f.readlines()
+    rules = []
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        neg = line.startswith("!")
+        if neg:
+            line = line[1:]
+        rules.append((neg, line.rstrip("/")))
+    return rules
+
+
+def matches(rule, rel):
+    """近似 Docker：整段名匹配或前缀匹配 + fnmatch。"""
+    rel = rel.replace("\\", "/")
+    if rule == rel:
+        return True
+    if rel.startswith(rule + "/"):
+        return True
+    if fnmatch.fnmatch(rel, rule):
+        return True
+    # **/foo 形式
+    if rule.startswith("**/"):
+        tail = rule[3:]
+        if fnmatch.fnmatch(os.path.basename(rel), tail):
+            return True
+        if fnmatch.fnmatch(rel, tail):
+            return True
+    return False
+
+
+def included(rel, rules):
+    inc = True
+    for neg, rule in rules:
+        if matches(rule, rel):
+            inc = neg
+    return inc
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--json", default="")
+    a = ap.parse_args()
+    rules = load_rules()
+
+    files, excluded, sensitive_check = [], [], []
+    for base, dirs, names in os.walk(ROOT):
+        rel_base = os.path.relpath(base, ROOT).replace("\\", "/")
+        if rel_base == ".":
+            rel_base = ""
+        # 目录级排除（模拟 Docker 的父目录规则）
+        if rel_base and not included(rel_base, rules):
+            dirs[:] = []
+            continue
+        for n in names:
+            rel = (rel_base + "/" + n).lstrip("/")
+            if included(rel, rules):
+                try:
+                    size = os.path.getsize(os.path.join(base, n))
+                except OSError:
+                    size = 0
+                files.append((rel, size))
+            else:
+                excluded.append(rel)
+
+    # Dockerfile 里显式 COPY 的源，必须都在上下文里
+    with io.open(os.path.join(ROOT, "Dockerfile"), encoding="utf-8") as f:
+        dockerfile = f.read()
+    copies = []
+    for m in re.finditer(r"^COPY\s+(.+?)\s+\S+\s*$", dockerfile, re.M):
+        for tok in m.group(1).split():
+            if not tok.startswith("$"):
+                copies.append(tok)
+    missing_copy = [c for c in copies
+                    if not any(f == c or f.startswith(c.rstrip("/") + "/")
+                               for f, _ in files)]
+
+    # experiments/metrics.json 是 .dockerignore 里刻意 ! 放行的只读资产，
+    # Dockerfile 也显式 COPY 它 —— 不算泄漏。
+    INTENTIONAL = {"experiments/metrics.json"}
+    for prefix, desc in SENSITIVE:
+        leaked = [f for f, _ in files
+                  if (f not in INTENTIONAL) and
+                  (f == prefix or f.startswith(prefix + "/") or
+                   (prefix in ("__pycache__",) and "__pycache__" in f))]
+        sensitive_check.append({"item": prefix, "desc": desc,
+                                "leaked_count": len(leaked),
+                                "sample": leaked[:3]})
+
+    # 后缀类敏感文件
+    for pat, desc in ((".db", "数据库"), (".pem", "私钥"), (".key", "密钥")):
+        leaked = [f for f, _ in files if f.endswith(pat)]
+        sensitive_check.append({"item": "*" + pat, "desc": desc,
+                                "leaked_count": len(leaked),
+                                "sample": leaked[:3]})
+
+    ok = (not any(x["leaked_count"] for x in sensitive_check)
+          and not missing_copy)
+    report = {
+        "version": 1,
+        "method": "Python 近似模拟 .dockerignore，不是 docker build 实测",
+        "rules": len(rules),
+        "included_files": len(files),
+        "included_bytes": sum(s for _, s in files),
+        "excluded_files": len(excluded),
+        "dockerfile_copy_sources": copies,
+        "missing_copy_sources": missing_copy,
+        "intentional_includes": sorted(INTENTIONAL),
+        "sensitive": sensitive_check,
+        "passed": ok,
+        "boundary": "镜像层实测仍需 docker daemon；本检查只保证规则无漏。",
+    }
+    if a.json:
+        with io.open(a.json, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2,
+                      sort_keys=True)
+            f.write("\n")
+    for x in sensitive_check:
+        print("%-22s %s" % (x["item"], "OK" if not x["leaked_count"]
+                            else "LEAK %d %s" % (x["leaked_count"],
+                                                x["sample"])))
+    print("COPY 源缺失: %s" % (missing_copy or "无"))
+    print("== %s ==（上下文 %d 文件 / %.1f MiB）"
+          % ("PASS" if ok else "FAIL", len(files),
+             report["included_bytes"] / 1048576.0))
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

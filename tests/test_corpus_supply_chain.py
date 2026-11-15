@@ -44,11 +44,19 @@ class TestCorpusSupplyChain(unittest.TestCase):
 
     def test_pinned_and_licensed_passes_strictly(self):
         make_source(self.root, "good")
+        # 联网核实后的完整状态：上游 commit 已印证 → 严格模式下零告警
+        up_dir = os.path.join(self.root, "data")
+        with io.open(os.path.join(up_dir, "corpus_upstream.json"), "w",
+                     encoding="utf-8") as f:
+            json.dump({"sources": {"good": {
+                "commit": "a" * 40,
+                "commit_status": "verified_by_sha256_match"}}}, f)
         VC.write_lock(self.root)
         ok, rep = VC.verify(self.root)
         self.assertTrue(ok, rep["problems"] + rep["warnings"])
         self.assertEqual(rep["warnings"], [])
-        self.assertEqual(rep["entries"][0]["pin_status"], "pinned")
+        self.assertEqual(rep["entries"][0]["pin_status"], "content_pinned",
+                         "逐文件 sha256 锁字节优先于 commit")
 
     def test_tampered_cases_are_detected(self):
         d = make_source(self.root, "x")
@@ -71,7 +79,8 @@ class TestCorpusSupplyChain(unittest.TestCase):
         VC.write_lock(self.root)
         ok, rep = VC.verify(self.root)
         self.assertTrue(ok)
-        self.assertTrue(any("未锁定" in w for w in rep["warnings"]))
+        self.assertTrue(any("未锁定" in w or "未核实" in w
+                            for w in rep["warnings"]))
 
     def test_corrupt_manifest_is_a_problem(self):
         d = make_source(self.root, "bad")

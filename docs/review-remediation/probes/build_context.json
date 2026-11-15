@@ -1,0 +1,83 @@
+{
+  "boundary": "镜像层实测仍需 docker daemon；本检查只保证规则无漏。",
+  "dockerfile_copy_sources": [
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+    "evoguard_cli.py",
+    "ai-service/evoguard",
+    "ai-service/api/app.py",
+    "config",
+    "frontend",
+    "docs/taxonomy.md",
+    "experiments/metrics.json",
+    "scripts/defense_demo.py"
+  ],
+  "excluded_files": 4,
+  "included_bytes": 2292439,
+  "included_files": 180,
+  "intentional_includes": [
+    "experiments/metrics.json"
+  ],
+  "method": "Python 近似模拟 .dockerignore，不是 docker build 实测",
+  "missing_copy_sources": [],
+  "passed": true,
+  "rules": 51,
+  "sensitive": [
+    {
+      "desc": "版本控制历史",
+      "item": ".git",
+      "leaked_count": 0,
+      "sample": []
+    },
+    {
+      "desc": "本地凭据",
+      "item": ".env",
+      "leaked_count": 0,
+      "sample": []
+    },
+    {
+      "desc": "外部语料（许可+隐私）",
+      "item": "data/external",
+      "leaked_count": 0,
+      "sample": []
+    },
+    {
+      "desc": "租户数据",
+      "item": "data/tenants",
+      "leaked_count": 0,
+      "sample": []
+    },
+    {
+      "desc": "实验产物",
+      "item": "experiments",
+      "leaked_count": 0,
+      "sample": []
+    },
+    {
+      "desc": "缓存",
+      "item": "__pycache__",
+      "leaked_count": 0,
+      "sample": []
+    },
+    {
+      "desc": "数据库",
+      "item": "*.db",
+      "leaked_count": 0,
+      "sample": []
+    },
+    {
+      "desc": "私钥",
+      "item": "*.pem",
+      "leaked_count": 0,
+      "sample": []
+    },
+    {
+      "desc": "密钥",
+      "item": "*.key",
+      "leaked_count": 0,
+      "sample": []
+    }
+  ],
+  "version": 1
+}

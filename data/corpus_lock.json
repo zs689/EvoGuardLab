@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-13T21:59:18",
+  "generated_at": "2026-11-15T00:17:19",
   "purpose": "语料本体不入库；这里锁生成产物的哈希、许可与上游版本状态。",
   "schema": 1,
   "sources": [
@@ -9,12 +9,24 @@
       "cases_lines": 120,
       "cases_sha256": "cc22347c2c57018f77141115ea52344b7c1c367e314e022f4d0d0bd68b0a14d0",
       "commit": null,
+      "commit_status": "unverified",
+      "commit_verified": false,
+      "content_hashes": [
+        "files[].sha256"
+      ],
+      "from_upstream": [],
       "license": "MIT",
       "license_url": "https://github.com/ethz-spylab/agentdojo/blob/main/LICENSE",
       "manifest": true,
       "name": "agentdojo",
-      "pin_status": "unpinned",
+      "pin_status": "content_pinned",
       "repo": "ethz-spylab/agentdojo",
+      "sources_count": 1,
+      "upstream_commit": null,
+      "upstream_evidence": [
+        "manifest 已声明 MIT + license_url",
+        "第三方清单 https://github.com/silex-ai-lab/jev-runtime-observability/blob/main/docs/EVAL.md 记 AgentDojo MIT / commit 089ed468c（对应 PyPI 0.1.35）"
+      ],
       "upstream_files": 4
     },
     {
@@ -23,12 +35,29 @@
       "cases_lines": 413,
       "cases_sha256": "5fdeee47f7edd6ffd5b09f4069198fe3dc5182de44117e10411911d93471c41c",
       "commit": null,
-      "license": null,
-      "license_url": null,
+      "commit_status": "unverified",
+      "commit_verified": false,
+      "content_hashes": [
+        "cases_sha256",
+        "git_blob_sha",
+        "raw_sha256"
+      ],
+      "from_upstream": [
+        "license_url"
+      ],
+      "license": "Apache-2.0+MIT",
+      "license_url": "https://github.com/Justinuse1/pojia-breaker",
       "manifest": true,
       "name": "chinese",
-      "pin_status": "unpinned",
-      "repo": null,
+      "pin_status": "content_pinned",
+      "repo": "Justinuse1/pojia-breaker, ZZZ-zero/JailbreakBench",
+      "sources_count": 3,
+      "upstream_commit": null,
+      "upstream_evidence": [
+        "manifest.sources.pojia / jbb_tpl / jbb_seed 分别声明 MIT / Apache-2.0 / Apache-2.0",
+        "第三方镜像 https://kaiyuanbang.cn/zh-cn/repo/justinuse1-pojia-breaker.html 记 pojia-breaker 为 MIT",
+        "ZZZ-zero/JailbreakBench 仓库存在且含『越狱提示词.txt』与 JailBench seed csv（https://github.org/ZZZ-zero/JailbreakBench）"
+      ],
       "upstream_files": 0
     },
     {
@@ -37,12 +66,28 @@
       "cases_lines": 62,
       "cases_sha256": "f32b4cd2ccfc5c9f6fcc63d2ee96d547dfae6e99a9da6641dc07fab1fe7862ef",
       "commit": null,
-      "license": null,
-      "license_url": null,
+      "commit_status": "unverified",
+      "commit_verified": false,
+      "content_hashes": [
+        "blob_sha",
+        "cases_sha256",
+        "raw_sha256"
+      ],
+      "from_upstream": [
+        "license_url"
+      ],
+      "license": "MIT",
+      "license_url": "https://github.com/Justinuse1/pojia-breaker",
       "manifest": true,
       "name": "chinese_jailbreak",
-      "pin_status": "unpinned",
-      "repo": null,
+      "pin_status": "content_pinned",
+      "repo": "Justinuse1/pojia-breaker",
+      "sources_count": 1,
+      "upstream_commit": null,
+      "upstream_evidence": [
+        "manifest.source 记 repo=Justinuse1/pojia-breaker, license=MIT, blob_sha=e9a1deeae7b6c266962f5b3e32177e1e243d46c4",
+        "第三方镜像 https://kaiyuanbang.cn/zh-cn/repo/justinuse1-pojia-breaker.html 明确『MIT 许可证』"
+      ],
       "upstream_files": 0
     },
     {
@@ -51,12 +96,28 @@
       "cases_lines": 2108,
       "cases_sha256": "c17e347cf27853c1915709628fde24cba42fd6cb3a0181c7cc86af4a659f9e06",
       "commit": null,
-      "license": null,
-      "license_url": null,
+      "commit_status": "verified_by_sha256_match",
+      "commit_verified": true,
+      "content_hashes": [
+        "cases_sha256",
+        "files[].git_sha",
+        "files[].sha256"
+      ],
+      "from_upstream": [],
+      "license": "MIT",
+      "license_url": "https://github.com/uiuc-kang-lab/InjecAgent/blob/main/LICENSE",
       "manifest": true,
       "name": "injecagent",
-      "pin_status": "unpinned",
-      "repo": null,
+      "pin_status": "content_pinned",
+      "repo": "uiuc-kang-lab/InjecAgent",
+      "sources_count": 1,
+      "upstream_commit": "f19c9f2c79a41046eb13c03c51a24c567a8ffa07",
+      "upstream_evidence": [
+        "https://github.com/yzhao062/catchbench/blob/main/THIRD_PARTY_LICENSES.md 记 InjecAgent upstream revision f19c9f2c79a41046eb13c03c51a24c567a8ffa07, Licence MIT, 并附 MIT 全文",
+        "https://huggingface.co/datasets/superlinked/sie-task-evidence/commit/af2fa890... 记 data/test_cases_dh_base.json 的 source_file_sha256 = 0a8186468d21389af432e8c7b399ae42264d1b93a07b65c7a489468508604305",
+        "本地 manifest.files[0].sha256 与该值完全一致 → 本地字节正是该 commit 下的文件",
+        "https://github.com/silex-ai-lab/jev-runtime-observability/blob/main/docs/EVAL.md 同样记 InjecAgent MIT / f19c9f2c"
+      ],
       "upstream_files": 4
     },
     {
@@ -65,12 +126,26 @@
       "cases_lines": null,
       "cases_sha256": null,
       "commit": null,
-      "license": null,
-      "license_url": null,
+      "commit_status": "upstream_head_not_matched",
+      "commit_verified": false,
+      "content_hashes": [
+        "cases_sha256",
+        "raw_sha256"
+      ],
+      "from_upstream": [],
+      "license": "Apache-2.0",
+      "license_url": "https://hf-mirror.com/datasets/jackhhao/jailbreak-classification/raw/main/README.md",
       "manifest": true,
       "name": "jailbreak_classification",
-      "pin_status": "unpinned",
-      "repo": null,
+      "pin_status": "content_pinned",
+      "repo": "jackhhao/jailbreak-classification",
+      "sources_count": 1,
+      "upstream_commit": null,
+      "upstream_evidence": [
+        "HF 数据集页 https://huggingface.co/datasets/jackhhao/jailbreak-classification 显示 License: apache-2.0",
+        "commit 历史 https://huggingface.co/datasets/jackhhao/jailbreak-classification/commits/2f2ceeb39658696fd3f462403562b6eea5306287 显示 6 个 commit 全部在 2023-09-30，之后未变",
+        "arXiv 2610.30678 参考文献亦记『Hugging Face dataset card, Apache-2.0 licence, first published 30 September 2023』"
+      ],
       "upstream_files": 0
     }
   ]

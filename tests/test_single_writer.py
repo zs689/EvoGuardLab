@@ -58,6 +58,24 @@ class TestWriteGuardConn(unittest.TestCase):
         c.rollback()
         self.assertEqual(gate.released, 1, "异常路径也必须放锁")
 
+    def test_commented_sql_still_takes_lock(self):
+        """注释前缀不能成为绕过写锁的后门。"""
+        for sql in ("-- note\nINSERT INTO t VALUES(1)",
+                    "/* c */ UPDATE t SET a=2",
+                    "  -- two\n/* b */ DELETE FROM t"):
+            raw, gate = _mem(), FakeGate()
+            c = core._WriteGuardConn(raw, gate)
+            c.execute(sql)
+            self.assertEqual(gate.acquired, 1, "漏锁：%r" % sql)
+            c.rollback()
+
+    def test_with_cte_insert_takes_lock(self):
+        raw, gate = _mem(), FakeGate()
+        c = core._WriteGuardConn(raw, gate)
+        c.execute("WITH x AS (SELECT 1 AS a) INSERT INTO t SELECT a FROM x")
+        self.assertEqual(gate.acquired, 1)
+        c.rollback()
+
     def test_executescript_is_treated_as_write(self):
         raw, gate = _mem(), FakeGate()
         c = core._WriteGuardConn(raw, gate)

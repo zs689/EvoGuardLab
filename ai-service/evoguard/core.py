@@ -207,11 +207,32 @@ class _WriteGuardConn:
         object.__setattr__(self, "_gate", gate)
         object.__setattr__(self, "_held", False)
 
+    @staticmethod
+    def _normalize(sql):
+        """剥掉前导的 -- 行注释与 /* */ 块注释，避免注释绕过写锁判定。"""
+        text = str(sql).lstrip()
+        while True:
+            if text.startswith("--"):
+                nl = text.find("\n")
+                text = text[nl + 1:].lstrip() if nl >= 0 else ""
+            elif text.startswith("/*"):
+                end = text.find("*/")
+                text = text[end + 2:].lstrip() if end >= 0 else ""
+            else:
+                break
+        return text.lower()
+
     def _maybe_lock(self, sql):
         if object.__getattribute__(self, "_held"):
             return
-        text = str(sql).lstrip().lower()
-        if any(text.startswith(p) for p in _WRITE_PREFIXES):
+        text = self._normalize(sql)
+        is_write = any(text.startswith(p) for p in _WRITE_PREFIXES)
+        # `WITH cte AS (...) INSERT/UPDATE/DELETE ...` 以 with 开头但会写；
+        # 宁可多锁一次，也不能漏锁导致串行化被绕过。
+        if not is_write and text.startswith("with"):
+            is_write = any(w in text for w in
+                           (" insert ", " update ", " delete ", " replace "))
+        if is_write:
             gate = object.__getattribute__(self, "_gate")
             gate.acquire()
             object.__setattr__(self, "_held", True)

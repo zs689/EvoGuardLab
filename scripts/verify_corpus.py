@@ -62,6 +62,52 @@ def list_sources(root=ROOT):
     return out
 
 
+def _collect_sources(m):
+    """从顶层与嵌套 source/sources 收集上游声明。
+
+    之前只读 m["license"] / m["repo"]，而 4 个 manifest 把 repo 和 license
+    写在 `source` 或 `sources` 里 —— 于是「4 个源缺 license」其实是校验器
+    的读取 bug，不是数据缺失。这里把三种形态都吃进来。
+    """
+    out = []
+
+    def add(x):
+        if isinstance(x, dict):
+            out.append(x)
+
+    if m.get("repo") or m.get("license") or m.get("license_url"):
+        add({"repo": m.get("repo"), "license": m.get("license"),
+             "license_url": m.get("license_url")})
+    add(m.get("source"))
+    srcs = m.get("sources")
+    if isinstance(srcs, dict):
+        for v in srcs.values():
+            add(v)
+    elif isinstance(srcs, list):
+        for v in srcs:
+            add(v)
+    return out
+
+
+def _content_hashes(m, srcs):
+    """列出真正锁定**文件内容**的哈希字段（比 commit 更精确）。"""
+    found = []
+    for obj in [m] + srcs:
+        for k in ("blob_sha", "git_blob_sha", "raw_sha256",
+                  "cases_sha256", "sha256"):
+            v = obj.get(k)
+            if v and str(v).lower() not in PLACEHOLDER_COMMITS:
+                found.append(k)
+    for f in (m.get("files") or []):
+        if isinstance(f, dict) and f.get("sha256"):
+            found.append("files[].sha256")
+    for f in (m.get("files") or []):
+        if isinstance(f, dict) and f.get("git_sha") and \
+                str(f["git_sha"]).lower() not in PLACEHOLDER_COMMITS:
+            found.append("files[].git_sha")
+    return sorted(set(found))
+
+
 def build_entry(root, name):
     d = os.path.join(root, "data", "external", name)
     mf = os.path.join(d, "manifest.json")
@@ -69,6 +115,10 @@ def build_entry(root, name):
     entry = {"name": name, "manifest": False, "cases": False,
              "license": None, "license_url": None, "repo": None,
              "commit": None, "pin_status": "unpinned",
+             "content_hashes": [], "sources_count": 0,
+             "upstream_commit": None, "upstream_evidence": None,
+             "commit_status": None, "commit_verified": False,
+             "from_upstream": [],
              "cases_sha256": None, "cases_bytes": None, "cases_lines": None,
              "upstream_files": 0}
     if os.path.isfile(mf):
@@ -78,17 +128,51 @@ def build_entry(root, name):
         except (OSError, ValueError) as exc:
             entry["manifest_error"] = repr(exc)
             return entry
+        srcs = _collect_sources(m)
+        repos = sorted({x["repo"] for x in srcs if x.get("repo")})
+        lics = sorted({x["license"] for x in srcs if x.get("license")})
+        urls = sorted({x["license_url"] for x in srcs
+                       if x.get("license_url")})
+        hashes = _content_hashes(m, srcs)
+        commit = m.get("commit") or m.get("git_sha")
         entry.update({
             "manifest": True,
-            "license": m.get("license"),
-            "license_url": m.get("license_url"),
-            "repo": m.get("repo"),
-            "commit": m.get("commit") or m.get("git_sha"),
+            "license": "+".join(lics) or None,
+            "license_url": (urls[0] if urls else m.get("license_url")),
+            "repo": ", ".join(repos) or m.get("repo"),
+            "commit": commit,
+            "sources_count": len(srcs),
+            "content_hashes": hashes,
             "upstream_files": len(m.get("files") or []),
         })
-        commit = str(entry["commit"] or "").lower()
-        entry["pin_status"] = ("unpinned" if (not commit or
-                               commit in PLACEHOLDER_COMMITS) else "pinned")
+        # 内容哈希锁定 > commit 锁定 > 未锁定。
+        # `cache` 是占位符，不算。
+        c = str(commit or "").lower()
+        if hashes:
+            entry["pin_status"] = "content_pinned"
+        elif c and c not in PLACEHOLDER_COMMITS:
+            entry["pin_status"] = "commit_pinned"
+        else:
+            entry["pin_status"] = "unpinned"
+        # 联网核实的不可变上游版本（可选文件，见 docs/corpus-supply-chain.md）
+        up_path = os.path.join(root, "data", "corpus_upstream.json")
+        if os.path.isfile(up_path):
+            try:
+                with io.open(up_path, encoding="utf-8") as f:
+                    up = json.load(f).get("sources", {}).get(name)
+                if up:
+                    entry["upstream_commit"] = up.get("commit")
+                    entry["upstream_evidence"] = up.get("evidence")
+                    entry["commit_status"] = up.get("commit_status")
+                    entry["commit_verified"] = str(
+                        up.get("commit_status", "")).startswith("verified")
+                    # 只在 manifest 缺字段时补全，并留痕来源
+                    for k in ("license", "license_url"):
+                        if not entry.get(k) and up.get(k):
+                            entry[k] = up[k]
+                            entry.setdefault("from_upstream", []).append(k)
+            except (OSError, ValueError):
+                pass
     if os.path.isfile(cases):
         entry.update({
             "cases": True,
@@ -140,9 +224,14 @@ def verify(root=ROOT, lock_path=None):
                 problems.append("%s: 有效行数 %s != 锁清单 %s"
                                 % (name, cur["cases_lines"],
                                    exp["cases_lines"]))
-        if cur["pin_status"] != "pinned":
-            warnings.append("%s: 上游 commit 未锁定（git_sha=%r）"
+        if cur["pin_status"] == "unpinned":
+            warnings.append("%s: 既无内容哈希也无上游 commit（git_sha=%r）"
                             % (name, cur["commit"]))
+        if cur.get("pin_status") != "unpinned" and \
+                not cur.get("commit_verified"):
+            warnings.append(
+                "%s: 上游 commit 未核实（内容 sha256 已锁，status=%s）"
+                % (name, cur.get("commit_status") or "unknown"))
     report = {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "sources_present": len(names),
@@ -194,9 +283,9 @@ def main():
             print("未导入外部语料（data/external 不存在）—— 不算失败，"
                   "但依赖语料的测试会 skip。")
         for e in rep["entries"]:
-            print("  %-24s cases=%s lines=%s pin=%s license=%s"
+            print("  %-24s cases=%-5s lines=%-5s pin=%-15s license=%-12s repo=%s"
                   % (e["name"], e["cases"], e["cases_lines"],
-                     e["pin_status"], e["license"]))
+                     e["pin_status"], e["license"], (e["repo"] or "-")[:38]))
         for p in rep["problems"]:
             print("  ! " + p)
         for w in rep["warnings"]:
