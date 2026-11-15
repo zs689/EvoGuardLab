@@ -434,3 +434,70 @@ Docker/WSL 仍被 `wsl.exe` 安全策略拦（规则禁止绕过，未重试）�
 
 v3 plan 顶部加「工具链进展」块，§六 判定线表格一字未动；
 台账 EG-017 同步。
+
+## 十七、第十二轮（2026-11-15）：E 类收尾（前半）
+
+Docker/WSL 复查仍被 `wsl.exe` 安全策略拦（未重试），继续做不用提供
+就能做的四项。
+
+### 1. 前端静态可访问性（EG-020/021）
+
+新增 `scripts/check_frontend_a11y.py`（stdlib `html.parser`，不装浏览器）。
+首跑 **FAIL，9 项真问题**：`#q`、`#f-status`、`#f-agent`、`#f-kw`、
+`#r-agent`、`#r-task`、`#r-fault`、`#r-mode`、`#r-comp` 只有 placeholder，
+没有可访问名称 —— 读屏用户听不到这些控件是干什么的。
+
+按最小改动补 `aria-label`（只加属性，不动结构），复跑 **PASS**：
+10 个 input / 6 个 button、0 项问题、`<html lang="zh-CN">` 已在、
+CSS 有 4 处 `:focus`。`review_checks.py` 加 `EG-020/frontend-a11y` 门槛防退化。
+
+**如实留边界**：`#runs-body tr[data-id]` 与 `.nav-item` 由 JS 挂 onclick，
+键盘可达性静态查不了，仍需真实浏览器人工确认；不写成「已验证」。
+
+### 2. 写闸门并发压测
+
+新增 `scripts/stress_write_gate.py`：200 线程抢同一把 `_WriteGate`、
+连续 3 轮。结果 `acquired=200` / `waiters=0` / `locked=False` 三轮全对，
+峰值排队 177–179（说明真的发生竞争，不是顺序执行完事）。
+`EG-010/gate-stress` 门槛守着。
+
+### 3–4. 重负载（A/B 各 5 次 + 30 分钟连续 soak）
+
+串行放后台跑，结果见本节后续补充与 `probes/http_ab_repeat/`、
+`probes/soak1800.json`。
+
+### 3. 端到端 A/B 从各 2 次加到各 5 次
+
+同参数 `--requests 24 --workers 8 --rounds 3`，串行跑满 10 次
+（产物 `probes/http_ab_repeat/` 10 份 + `http_ab_repeat.json` 汇总）：
+
+| 配置 | 5 次 P95 中位 (ms) | 范围 | 状态 |
+|---|---|---|---|
+| 新默认（池 + 写串行化） | **1242.87** | 1233.7–1359.6 | 5/5 `availability=1.0` |
+| 全关（旧行为） | 3829.38 | 3167.2–4304.1 | 5/5 `availability=1.0` |
+
+**十次零重叠**（最慢的新默认仍快于最快的全关），全部 24×200、
+无 5xx。约 **3.1 倍**。绝对数比第九轮那两次略高（当时 1068–1093 ms），
+两组同比抬升，机器负载波动，**相对差距稳定**才是结论。
+`EG-010/e2e` 门槛改读这 10 次汇总（零重叠 + 无 5xx 才过）。
+
+### 4. 30 分钟连续 soak（此前最长 10 分钟）
+
+`store_remaining_checks.py --soak-seconds 1800`，**4/4 全过**：
+**431799 次写 / 0 错误**，`created` 全程恒为 8、`discarded=0`、
+堆峰值 0.34 MiB（首采样 0.161 MiB → 末采样 0.216 MiB，无明显增长）、
+360 个采样点；真实 `taskkill /F` 两种配置各恢复 120/120 行、磁盘量
+与之前一致（`probes/soak1800.json`）。
+
+和此前对照：旧默认 10 分钟 98314 次写 / 1 次 `database is locked`；
+新默认 10 分钟 173247 次 / 0 错；新默认 **30 分钟 431799 次 / 0 错**。
+**仍未到小时级**（要挂着跑 60 分钟），但连续时长翻了三倍，
+连接数与堆都不随时间增长。
+
+### 本轮小结
+
+E 类四项全部做完：前端可访问性（修 9 个真问题）、写闸门并发压测、
+A/B 各 5 次（十次零重叠、约 3.1 倍）、30 分钟 soak（43 万次写零错）。
+`review_checks.py` 新增 `EG-020/frontend-a11y`、`EG-010/gate-stress`，
+`EG-010/e2e` 改守 10 次汇总，gate 23 → 25 项。
+Docker/WSL 唯一的硬阻塞仍是 `wsl.exe` 安全策略黑名单，没绕过。

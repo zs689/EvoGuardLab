@@ -235,3 +235,23 @@
   独立复跑前置条件未满足，工具链就绪不等于实验有结论。
 - v3 plan 顶部加进展块（§六 判定线未动）、台账 EG-017、
   after.md §十六 同步。
+
+### 第十二轮（2026-11-15）：前端可访问性 + 写闸门并发压测
+
+- 新增 `scripts/check_frontend_a11y.py`：首跑发现 9 个 input/select
+  只有 placeholder、无可访问名称（读屏听不到用途）。补 `aria-label`
+  后 PASS（10 input / 6 button / 0 问题 / lang 与 :focus 齐全）。
+  边界：JS 挂 onclick 的 `tr`/`.nav-item` 键盘可达性需真实浏览器。
+  新增 `EG-020/frontend-a11y` 门槛。
+- 新增 `scripts/stress_write_gate.py`：200 线程 × 3 轮，
+  acquired/waiters/locked 三轮全对，峰值排队 177–179。
+  新增 `EG-010/gate-stress` 门槛。
+- HTTP A/B 从各 2 次加到**各 5 次**：新默认中位 1242.87 ms
+  （1233.7–1359.6）vs 全关 3829.38 ms（3167.2–4304.1），
+  十次零重叠、全部 availability 1.0、无 5xx，约 3.1 倍。
+  `EG-010/e2e` 门槛改读 10 次汇总；产物 `probes/http_ab_repeat/`。
+- **30 分钟连续 soak**：431799 次写 / 0 错误、`created` 恒为 8、
+  `discarded=0`、堆 0.161 → 0.216 MiB 无明显增长、360 采样点，
+  4/4（`probes/soak1800.json`）。仍未到小时级，但连续时长翻三倍。
+- `EG-010/e2e` 门槛改读 10 次汇总；新增 `EG-020/frontend-a11y`、
+  `EG-010/gate-stress`，gate 23 → 25 项。
