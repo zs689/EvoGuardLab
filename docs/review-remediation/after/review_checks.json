@@ -161,17 +161,23 @@
       "evidence": "probes/ci_references.json",
       "id": "EG-023/ci-references",
       "status": "pass"
+    },
+    {
+      "detail": "436576 次写，堆增长 -0.084 MiB，观测器已排除",
+      "evidence": "probes/soak_heap_stable.json",
+      "id": "EG-010/heap-stability",
+      "status": "pass"
     }
   ],
-  "generated_at": "2026-11-15T19:02:05",
+  "generated_at": "2026-11-15T19:58:50",
   "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
-  "revision": "34cedbad92c1ee27a713e18b16b64e9f9a7c5052",
-  "seconds": 25.49,
+  "revision": "201f33c3b9b4c504bc2eb027ccb7da415491b72e",
+  "seconds": 27.95,
   "summary": {
     "fail": 0,
-    "pass": 27,
+    "pass": 28,
     "skip": 0,
-    "total": 27
+    "total": 28
   },
   "version": 1
 }

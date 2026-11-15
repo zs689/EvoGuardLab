@@ -112,16 +112,25 @@ def check_real_kill(root, mode="pool"):
 
 
 def check_soak(root, seconds=60, workers=8):
-    """持续写，每 5 秒采样连接数与 Python 堆，看是否随时间增长。"""
+    """持续写，每 5 秒采样连接数与 Python 堆，看是否随时间增长。
+
+    **观测器自身不能污染堆指标**：采样字典若留在内存，720 个点实测占
+    0.285 MiB，会把「观测开销」误读成「Store 泄漏」（60 分钟那次
+    0.153→0.482 MiB 就是这个）。这里每 5 秒把采样点写入临时 JSONL 并
+    flush，内存只保留一个 float 列表；tracemalloc 结束后再读回组装产物，
+    产物格式不变。
+    """
     _set_env("pool")
     d = os.path.join(root, "soak")
     os.makedirs(d, exist_ok=True)
     path = os.path.join(d, "a.db")
+    sample_path = os.path.join(d, "samples.jsonl")
     s = core.Store(path)
+    sf = io.open(sample_path, "w", encoding="utf-8", newline="\n")
     tracemalloc.start()
     base = tracemalloc.get_traced_memory()[0]
     stop = threading.Event()
-    errs, samples, written = [], [], [0]
+    errs, heaps, written = [], [], [0]
     lock = threading.Lock()
 
     def worker(k):
@@ -145,11 +154,16 @@ def check_soak(root, seconds=60, workers=8):
     for _ in range(max(1, seconds // 5)):
         time.sleep(5)
         cur = tracemalloc.get_traced_memory()[0]
-        samples.append({"t_s": round(time.monotonic() - t0, 1),
-                        "rows": written[0],
-                        "pool": s.pool_stats(),
-                        "heap_mb": round((cur - base) / 1048576.0, 3),
-                        "db_bytes": _dir_bytes(d)})
+        heap_mb = round((cur - base) / 1048576.0, 3)
+        rec = {"t_s": round(time.monotonic() - t0, 1),
+               "rows": written[0],
+               "pool": s.pool_stats(),
+               "heap_mb": heap_mb,
+               "db_bytes": _dir_bytes(d)}
+        # 立即落盘：临时字符串引用计数归零即释放，不累积在堆里
+        sf.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
+        sf.flush()
+        heaps.append(heap_mb)
     stop.set()
     for t in ts:
         t.join(timeout=10)
@@ -157,22 +171,47 @@ def check_soak(root, seconds=60, workers=8):
     tracemalloc.stop()
     st = s.pool_stats()
     s.close()
+    sf.close()
+
+    # tracemalloc 已停，此时读回不会计入堆指标
+    samples = []
+    with io.open(sample_path, encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                samples.append(json.loads(line))
+    try:
+        os.unlink(sample_path)
+    except OSError:
+        pass
 
     created = [x["pool"]["created"] for x in samples]
-    heaps = [x["heap_mb"] for x in samples]
+    heap_growth = (round(heaps[-1] - heaps[0], 3)
+                   if len(heaps) >= 2 else None)
+    heap_stable = heap_growth is not None and heap_growth < 0.15
     ok = (not errs and st["created"] <= 32 and st["discarded"] == 0
-          and max(heaps) < 8.0 and max(created) <= 32)
+          and max(heaps) < 8.0 and max(created) <= 32 and heap_stable)
     return {
         "id": "soak", "pass": bool(ok),
         "detail": ("%ds / %d 线程共 %d 次写：created %s→%s，"
-                   "堆峰值 %.2f MiB，错误 %d"
+                   "堆 %.3f→%.3f MiB（增长 %+.3f），错误 %d"
                    % (seconds, workers, written[0],
                       created[0] if created else "-",
                       created[-1] if created else "-",
-                      peak / 1048576.0, len(errs))),
+                      heaps[0] if heaps else 0.0,
+                      heaps[-1] if heaps else 0.0,
+                      heap_growth if heap_growth is not None else 0.0,
+                      len(errs))),
         "evidence": {"seconds": seconds, "workers": workers,
                      "writes": written[0], "samples": samples,
-                     "errors": errs[:3], "final_pool": st},
+                     "errors": errs[:3], "final_pool": st,
+                     "heap_growth_mb": heap_growth,
+                     "heap_first_mb": heaps[0] if heaps else None,
+                     "heap_last_mb": heaps[-1] if heaps else None,
+                     "heap_peak_mb": round(peak / 1048576.0, 3),
+                     "heap_stable": bool(heap_stable),
+                     "observer_excluded": True,
+                     "observer_note": "采样点写 JSONL 不驻留内存；"
+                                      "tracemalloc 停止后才读回"},
     }
 
 

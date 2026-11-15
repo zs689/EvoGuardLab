@@ -1,0 +1,249 @@
+{
+  "config": {
+    "json": "docs/review-remediation/probes/heap_attribution.json",
+    "seconds": 150,
+    "workers": 8
+  },
+  "method": "对照 + tracemalloc 按行 compare_to；不靠量级猜测",
+  "rows": [
+    {
+      "errors": 0,
+      "heap_first_mb": 0.137,
+      "heap_growth_mb": 0.018,
+      "heap_last_mb": 0.155,
+      "heap_peak_mb": 0.182,
+      "heap_series": [
+        0.137,
+        0.099,
+        0.054,
+        0.146,
+        0.103,
+        0.045,
+        0.113,
+        0.061,
+        0.16,
+        0.128,
+        0.09,
+        0.053,
+        0.158,
+        0.119,
+        0.081,
+        0.17,
+        0.12,
+        0.075,
+        0.15,
+        0.109,
+        0.064,
+        0.164,
+        0.122,
+        0.082,
+        0.179,
+        0.14,
+        0.098,
+        0.06,
+        0.053,
+        0.155
+      ],
+      "mode": "sampled",
+      "probe_own_growth_kb": 4.5,
+      "samples_kept": 30,
+      "seconds": 150,
+      "top_allocations": [
+        {
+          "count_diff": 1382,
+          "file": "core.py",
+          "line": 242,
+          "size_diff_kb": 116.7
+        },
+        {
+          "count_diff": 16,
+          "file": "threading.py",
+          "line": 297,
+          "size_diff_kb": 5.9
+        },
+        {
+          "count_diff": 16,
+          "file": "threading.py",
+          "line": 593,
+          "size_diff_kb": 2.4
+        },
+        {
+          "count_diff": 9,
+          "file": "heap_attribution_probe.py",
+          "line": 58,
+          "size_diff_kb": 2.4
+        },
+        {
+          "count_diff": 8,
+          "file": "threading.py",
+          "line": 921,
+          "size_diff_kb": 2.2
+        },
+        {
+          "count_diff": 21,
+          "file": "core.py",
+          "line": 359,
+          "size_diff_kb": 2.1
+        },
+        {
+          "count_diff": 31,
+          "file": "heap_attribution_probe.py",
+          "line": 72,
+          "size_diff_kb": 2.1
+        },
+        {
+          "count_diff": 30,
+          "file": "core.py",
+          "line": 393,
+          "size_diff_kb": 1.9
+        },
+        {
+          "count_diff": 40,
+          "file": "threading.py",
+          "line": 925,
+          "size_diff_kb": 1.6
+        },
+        {
+          "count_diff": 8,
+          "file": "threading.py",
+          "line": 1284,
+          "size_diff_kb": 1.2
+        },
+        {
+          "count_diff": 7,
+          "file": "functools.py",
+          "line": 545,
+          "size_diff_kb": 1.1
+        },
+        {
+          "count_diff": 9,
+          "file": "_weakrefset.py",
+          "line": 88,
+          "size_diff_kb": 1.1
+        }
+      ],
+      "workers": 8,
+      "writes": 39234
+    },
+    {
+      "errors": 0,
+      "heap_first_mb": 0.139,
+      "heap_growth_mb": -0.01,
+      "heap_last_mb": 0.129,
+      "heap_peak_mb": 0.174,
+      "heap_series": [
+        0.139,
+        0.105,
+        0.069,
+        0.17,
+        0.134,
+        0.099,
+        0.065,
+        0.162,
+        0.112,
+        0.073,
+        0.039,
+        0.142,
+        0.109,
+        0.075,
+        0.045,
+        0.148,
+        0.117,
+        0.079,
+        0.146,
+        0.108,
+        0.073,
+        0.157,
+        0.135,
+        0.098,
+        0.055,
+        0.149,
+        0.114,
+        0.064,
+        0.141,
+        0.129
+      ],
+      "mode": "bare",
+      "probe_own_growth_kb": 1.8,
+      "samples_kept": 0,
+      "seconds": 150,
+      "top_allocations": [
+        {
+          "count_diff": 1157,
+          "file": "core.py",
+          "line": 242,
+          "size_diff_kb": 97.8
+        },
+        {
+          "count_diff": 16,
+          "file": "threading.py",
+          "line": 297,
+          "size_diff_kb": 5.9
+        },
+        {
+          "count_diff": 21,
+          "file": "core.py",
+          "line": 359,
+          "size_diff_kb": 2.1
+        },
+        {
+          "count_diff": 9,
+          "file": "heap_attribution_probe.py",
+          "line": 58,
+          "size_diff_kb": 1.8
+        },
+        {
+          "count_diff": 16,
+          "file": "threading.py",
+          "line": 593,
+          "size_diff_kb": 1.6
+        },
+        {
+          "count_diff": 40,
+          "file": "threading.py",
+          "line": 925,
+          "size_diff_kb": 1.6
+        },
+        {
+          "count_diff": 8,
+          "file": "threading.py",
+          "line": 921,
+          "size_diff_kb": 1.6
+        },
+        {
+          "count_diff": 8,
+          "file": "threading.py",
+          "line": 1284,
+          "size_diff_kb": 1.2
+        },
+        {
+          "count_diff": 7,
+          "file": "functools.py",
+          "line": 545,
+          "size_diff_kb": 1.1
+        },
+        {
+          "count_diff": 7,
+          "file": "functools.py",
+          "line": 546,
+          "size_diff_kb": 1.1
+        },
+        {
+          "count_diff": 16,
+          "file": "threading.py",
+          "line": 920,
+          "size_diff_kb": 0.9
+        },
+        {
+          "count_diff": 14,
+          "file": "core.py",
+          "line": 361,
+          "size_diff_kb": 0.7
+        }
+      ],
+      "workers": 8,
+      "writes": 27071
+    }
+  ],
+  "version": 1
+}

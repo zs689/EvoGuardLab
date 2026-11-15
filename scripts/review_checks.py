@@ -344,6 +344,26 @@ def c_ci_references():
                    "probes/ci_references.json")
 
 
+def c_heap_stability():
+    """长时 soak：观测器不驻留内存，Store 堆不随时间增长。"""
+    d = os.path.join(ROOT, "docs", "review-remediation", "probes")
+    rep = _json(os.path.join(d, "soak_heap_stable.json")) or {}
+    soak = next((c for c in (rep.get("checks") or [])
+                 if c.get("id") == "soak"), {})
+    ev = soak.get("evidence") or {}
+    growth = ev.get("heap_growth_mb")
+    ok = (rep.get("passed") is True and soak.get("pass") is True
+          and ev.get("heap_stable") is True
+          and ev.get("observer_excluded") is True
+          and growth is not None and growth < 0.15
+          and len(ev.get("samples") or []) >= 100)
+    return _result("EG-010/heap-stability", ok,
+                   ("%d 次写，堆增长 %+.3f MiB，观测器已排除"
+                    % (ev.get("writes", 0), growth if growth is not None else 0))
+                   if ok else "堆稳定性证据缺失或不达标",
+                   "probes/soak_heap_stable.json")
+
+
 def c_frontend_a11y():
     """前端静态可访问性：控件可访问名称不能退化。"""
     d = os.path.join(ROOT, "docs", "review-remediation", "probes")
@@ -589,6 +609,7 @@ CHECKS = [
     ("EG-020", c_frontend_a11y),
     ("EG-003", c_docker_image_verify),
     ("EG-023", c_ci_references),
+    ("EG-010", c_heap_stability),
 ]
 
 
