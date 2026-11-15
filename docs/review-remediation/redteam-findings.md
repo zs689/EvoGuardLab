@@ -21,6 +21,14 @@ enterprise.tenancy / core）、`ai-service/api/app.py`、CI workflow、台账。
 实现是 `return prompt`；工具调用序列由 `_next()` 规则状态机决定，不由 LLM 决定。
 `answer()` 虽然会调 `provider.complete()`，但那只是**写答案**，不决定下一步工具。
 
+**补充澄清（避免误读）**：项目**能接本地真模型** —— `gateway.py:378-390`
+有 `LocalProvider` / `OllamaNativeProvider`（`AGENTLAB_LLM=ollama`），
+`real_model_bench.py` 也用真模型跑独立基准。但全仓
+`provider.complete()` 的调用点只有 `runtime.py:284`（answer）、
+`experience.py:125` 和该基准脚本，**没有任何一处让模型决定
+「下一步调用哪个工具」**。所以问题不是「没有真模型」，而是
+**真模型不在间接注入链的决策位置上** —— 换任何模型都补不出这条链。
+
 **后果**：「工具返回里的恶意指令 → 模型被劫持 → 调用危险工具」这条间接
 注入主链在受测系统里**根本不存在**。所以：
 - `guard_tool_output` 的内容隔离测不出效果 —— `security.py:374-379`
