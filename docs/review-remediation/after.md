@@ -501,3 +501,36 @@ A/B 各 5 次（十次零重叠、约 3.1 倍）、30 分钟 soak（43 万次写
 `review_checks.py` 新增 `EG-020/frontend-a11y`、`EG-010/gate-stress`，
 `EG-010/e2e` 改守 10 次汇总，gate 23 → 25 项。
 Docker/WSL 唯一的硬阻塞仍是 `wsl.exe` 安全策略黑名单，没绕过。
+
+## 十八、第十三轮（2026-11-15 晚）：Docker 镜像层实测，EG-003 转绿
+
+张硕按手册方案 A **手动启动** Docker Desktop（未改安全设置、
+未放行 `wsl.exe`），daemon 29.7.2 / linux / amd64 就绪。
+
+**构建期两道坎**：
+1. 从 Docker Hub 拉 `python:3.11-slim` 590 秒只下 7.34MB/29.86MB。
+   改用国内源 `docker.1ms.run/library/python:3.11-slim` 拉取后
+   `docker tag` 成本地名，**没改 Dockerfile、没改 Docker 配置**。
+2. **真 bug**：`docker build` 第 11 层报
+   `package directory 'ai-service/evoguard_inspect' does not exist` ——
+   `pyproject.toml` 声明了它，Dockerfile 的显式 COPY 清单却漏了，
+   镜像此前**根本构建不起来**。补一行 COPY；并给
+   `check_build_context.py` 加「pyproject 声明的包/资产是否被 COPY 覆盖」
+   校验（修前会判红，修后 2 目录 + 7 文件漏拷 0）。
+
+**验证脚本自身的假绿**：第一版用字符串拼 shell 命令，Windows
+`cmd.exe` 不认单引号，`find` 失败却输出空 → 被误判 PASS。
+全部改成参数列表（`shell=False`）并加 `rc==0` 约束后重跑才可信。
+
+**结果（`docker-image-verification.md`，6/6）**：镜像 ID
+`6e0dba1f50a0` / 191MB；镜像层无敏感数据；`docker history` 无
+`COPY . /app`；`uid=10001`；`--read-only`+tmpfs+卷下 `healthy`
+且 `/api/live` 200；卷里有 `evoguard.db` 而镜像层 `/app/data` 为空；
+**Linux wheel** 在全新 `python:3.11-slim` 容器里安装、
+import 三个包、`evoguard --help` 全通。
+
+台账 **EG-003 🟡 → ✅**（自评 ✅7 / 🟡20 / ⬜0）；
+EG-004 补 Linux 实测、EG-016 补容器运行层实测（仍 🟡）。
+独立审查 scorecard 84.8 不变 —— 那是独立审查口径，不跟自评走。
+边界：GitHub CI 未实跑、基础镜像经国内源拉取不能外推到 CI、
+未做镜像签名/漏洞扫描。

@@ -255,3 +255,20 @@
   4/4（`probes/soak1800.json`）。仍未到小时级，但连续时长翻三倍。
 - `EG-010/e2e` 门槛改读 10 次汇总；新增 `EG-020/frontend-a11y`、
   `EG-010/gate-stress`，gate 23 → 25 项。
+
+### 第十三轮（2026-11-15 晚）：Docker 镜像层实测，EG-003 转 ✅
+
+- 手动启动 Docker Desktop（未改安全设置/未放行 wsl.exe），
+  daemon 29.7.2/linux 可用。境外拉 `python:3.11-slim` 慢，
+  改国内源拉取后 tag 成本地名，未改 Dockerfile/Docker 配置。
+- **修真 bug**：Dockerfile 漏拷 `ai-service/evoguard_inspect`，
+  导致 `pip install -e .` 在容器里失败、镜像根本构建不起来。
+  补 COPY；`check_build_context.py` 增加「pyproject 声明覆盖」校验。
+- 新增 `scripts/verify_docker_image.py`（参数列表调用，避免
+  cmd.exe 单引号造成的假绿）与 `docs/review-remediation/
+  docker-image-verification.md`：**6/6 通过** —— 镜像层无敏感数据、
+  历史层无整仓 COPY、uid 10001、只读根+卷下 healthy、
+  卷/镜像层分离、Linux wheel 安装/import/CLI 全通。
+  镜像 `6e0dba1f50a0` / 191MB。
+- 台账 EG-003 🟡→✅（✅7/🟡20/⬜0）；EG-004/EG-016 补实测证据。
+  独立审查 scorecard 84.8 不变。
