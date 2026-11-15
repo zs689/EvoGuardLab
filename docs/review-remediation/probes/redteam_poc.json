@@ -1,0 +1,79 @@
+{
+  "note": "只读复现，未修改产品代码；True = 缺点可复现",
+  "reproduced": 5,
+  "rows": [
+    {
+      "detail": {
+        "exfil_encoded_blob": {
+          "bypass": true,
+          "regex_matches": true,
+          "scan_found": false
+        },
+        "injection_tool_directive": {
+          "bypass": true,
+          "regex_matches": true,
+          "scan_found": false
+        }
+      },
+      "name": "detector_pre_bypass",
+      "reproduced": true
+    },
+    {
+      "detail": {
+        "decision": "report",
+        "effect": "reported_only",
+        "enforcing": false,
+        "mode": "audit",
+        "text_unchanged": true
+      },
+      "name": "default_audit_only",
+      "reproduced": true
+    },
+    {
+      "detail": {
+        "approved_by": "attacker_without_tenant",
+        "request_tenant": "acme",
+        "status": "approved",
+        "tenant_id_arg": null
+      },
+      "name": "approval_cross_tenant",
+      "reproduced": true
+    },
+    {
+      "detail": {
+        "dbs_created": [
+          "t0",
+          "t1",
+          "t2",
+          "t3",
+          "t4",
+          "t5",
+          "t6",
+          "t7"
+        ],
+        "note": "app._STORES 按路径缓存且无淘汰；匿名自报租户可反复触发"
+      },
+      "name": "stores_unbounded",
+      "reproduced": true
+    },
+    {
+      "detail": {
+        "status": {
+          "victim_a": 200,
+          "victim_b": 200,
+          "victim_c": 200
+        },
+        "tenant_dbs_created": [
+          "victim_a\\evoguard.db",
+          "victim_b\\evoguard.db",
+          "victim_c\\evoguard.db"
+        ],
+        "token_sent": false
+      },
+      "name": "anonymous_tenant_http",
+      "reproduced": true
+    }
+  ],
+  "total": 5,
+  "version": 1
+}
