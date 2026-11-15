@@ -206,3 +206,19 @@
   新默认 14691 写/0 错 vs 全关 9564 写/8 错 → 单主机多进程不需要
   跨进程应用层锁；上轮那条「缺点」按数据修正，多主机共享存储仍未验。
 - 946 项回归在开与关两种配置下全绿，23/23 gate。
+
+### 第十轮（2026-11-15）：语料核实、Docker/WSL 探测、SQL 前缀加固
+
+- **修 EG-018 校验器 bug**：`verify_corpus.py` 改读嵌套
+  `source`/`sources`，区分 `content_pinned` 与 `commit_verified`；
+  新增 `data/corpus_upstream.json`（联网核实的许可/版本/证据 URL/可信度）；
+  `tests/test_corpus_upstream.py` 6/6；`--write-lock` 重建锁清单。
+  5 源 license 全齐、告警 9→4；InjecAgent commit 有 sha256 印证。
+  **`--strict` 仍判红**，没为变绿放宽。
+- Docker：启动实测失败（backend 卡在拉 desktop.docker.com modules
+  manifest），如实不写「镜像层实测通过」；新增
+  `scripts/check_build_context.py` 静态验证 PASS（180 文件/2.2 MiB）。
+- WSL：`wsl.exe` 被安全策略黑名单拦截，未绕过；只读探测记录环境状态。
+- `_WriteGuardConn._normalize()` 处理 SQL 注释前缀与 `WITH … INSERT`，
+  `tests/test_single_writer.py` 11→13 项。
+- `what-i-need.md` / `corpus-supply-chain.md` / 台账 EG-018 同步进展。

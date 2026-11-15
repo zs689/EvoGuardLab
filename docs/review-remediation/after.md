@@ -372,3 +372,36 @@ rollback、非数据损坏；不改变「只开池」的推荐（默认路径同
 
 946 项回归在新默认与全关两种配置下都全绿，23/23 gate。
 详见 `single-writer-innovation.md` §八。
+
+## 十五、第十轮（2026-11-15）：按「自己搞」推进三块
+
+用户说 Docker/WSL 电脑里有、语料上游自己上网找、其他自己搞。
+
+**语料（EG-018）**：复核发现「4 源缺 license / 全部 unpinned」是我自己
+`verify_corpus.py` 的 bug —— 只读顶层字段，而 4 个 manifest 把 repo 与
+license 写在嵌套 `source`/`sources` 里。修完并联网核实后：
+5 个源 license/license_url 全齐、全部 `content_pinned`；
+InjecAgent 的 commit `f19c9f2c…` 有第三方清单的
+`source_file_sha256=0a818646…` 与本地 `files[0].sha256` 完全一致作印证。
+告警 9 → 4，**`--strict` 仍判红**（内容哈希锁字节 ≠ 上游版本可追溯，
+没放宽）。新增 `data/corpus_upstream.json`、`tests/test_corpus_upstream.py`
+6/6、`--write-lock` 重建锁清单。
+
+**Docker（EG-003）**：CLI 29.7.2 / Desktop 4.87.0 装在用户目录；
+启动 `Docker Desktop.exe`（pid 28528）后等 96 秒 daemon 仍不可达，
+进程退出，backend 日志停在拉
+`https://desktop.docker.com/modules/4.87/modules.json`。
+**镜像层实测没做成**，如实不写成通过。
+不需要 daemon 的部分做了：`scripts/check_build_context.py` 静态模拟
+`.dockerignore`，PASS（180 文件 / 2.2 MiB，敏感项全挡、8 个 COPY 源齐全）。
+
+**WSL（EG-004）**：`wsl.exe` 被安全策略程序黑名单直接拒绝，规则明确禁止
+绕行或换壳，我没重试。只读探测：`vmms`/`WSLService` Running，但
+Packages 下无 Linux 发行版；Docker Desktop 自带 `Ubuntu-7.0.0-28.28`，
+所以 daemon 一旦可用，跑 Linux 容器即可覆盖 Linux wheel 验证。
+
+**其他自己搞**：`_WriteGuardConn._normalize()` 处理 `--` / `/* */`
+注释前缀与 `WITH … INSERT`，堵住绕过写锁的后门；
+`tests/test_single_writer.py` 11 → 13 项。
+E 类剩余四项（v3 可执行化、小时级 soak、更多压测轮次、可访问性自查、
+gate 并发压测）下一轮，不需要你提供东西。

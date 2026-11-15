@@ -1,5 +1,46 @@
 # 还差什么（按「需要你提供什么」分类）
 
+> ## 进展（2026-11-15，你说「自己搞」之后）
+>
+> **B1 语料 —— 大幅推进，但不是靠「补 commit」**：复核发现「4 源缺 license」
+> 是我 `verify_corpus.py` 只读顶层字段的 bug（数据写在嵌套 `source`/`sources`）。
+> 修完 + 联网核实后：5 个源 license/license_url 齐全、全部
+> `content_pinned`；InjecAgent 的 commit `f19c9f2c…` 由第三方清单的
+> `source_file_sha256` 与本地 `files[0].sha256` 完全一致印证。
+> 告警 9 → 4，且全部精确为「上游 commit 未核实」。**`--strict` 仍判红**，
+> 没放宽：内容哈希锁字节 ≠ 上游版本可追溯。见
+> `data/corpus_upstream.json`、`docs/corpus-supply-chain.md` 顶部更正块。
+>
+> **A1 Docker —— 尝试过，daemon 起不来**：
+> - CLI 在 `<LOCALAPPDATA>\Programs\DockerDesktop\resources\bin\docker.exe`
+>   （用户目录安装，不在 Program Files），版本 29.7.2 / Desktop 4.87.0；
+> - 我启动了 `Docker Desktop.exe`（pid 28528），等 96 秒 daemon 仍不可达，
+>   进程随后退出；
+> - 日志 `com.docker.backend.exe.log` 停在
+>   `fetching manifest from https://desktop.docker.com/modules/4.87/modules.json`
+>   之后再无输出 —— 卡在拉外网 modules manifest。
+> - **不需要 daemon 的部分已做**：`scripts/check_build_context.py`
+>   静态模拟 `.dockerignore`，PASS（180 文件 / 2.2 MiB，`.git`/`.env`/
+>   `*.db`/语料/租户数据/缓存全挡，Dockerfile 的 8 个 COPY 源齐全）。
+>   产物 `probes/build_context.json`。**这不等于镜像层实测**。
+> - 要继续只需要你：让 Docker Desktop 能连上 `desktop.docker.com`
+>   （挂代理 / 配置离线），或手动启动后托盘变绿告诉我。
+>
+> **A2 WSL —— 被安全策略硬拦，我不会绕**：
+> - `wsl.exe` 调用直接被 `PROGRAM BLOCKED BY SECURITY POLICY` 拒绝
+>   （程序黑名单），规则明确禁止换壳重试；
+> - 只读探测：`vmms` 与 `WSLService` 都在 Running，但
+>   `%LOCALAPPDATA%\Packages` 下**没有任何 Linux 发行版**；
+> - Docker Desktop 4.87 日志显示自带 `Ubuntu-7.0.0-28.28`（docker-desktop
+>   发行版），所以**只要 A1 的 daemon 起来，跑 Linux 容器就能覆盖 Linux
+>   wheel 验证**，不必单独装 WSL 发行版。
+>
+> **E 类已兑现两项**：SQL 前缀识别加固（`--` / `/* */` 注释、
+> `WITH … INSERT`，测试 11 → 13 项）、构建上下文静态检查。
+> 其余四项（v3 可执行化、小时级 soak、更多压测轮次、可访问性自查、
+> gate 并发压测）下一轮继续，不用你提供任何东西。
+
+
 台账现状：**✅6 / 🟡21 / ⬜0**。下面每一项都写清「卡住哪条」「我需要什么」
 「拿到能产出什么」「拿不到的替代方案」——不把「我不想做」混成「做不了」。
 
