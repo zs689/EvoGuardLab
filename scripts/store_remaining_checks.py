@@ -43,8 +43,14 @@ def _dir_bytes(d):
     total = 0
     for f in os.listdir(d):
         p = os.path.join(d, f)
-        if os.path.isfile(p):
-            total += os.path.getsize(p)
+        try:
+            if os.path.isfile(p):
+                total += os.path.getsize(p)
+        except OSError:
+            # SQLite 的临时 -journal 可能在 listdir 与 getsize 之间被删。
+            # 60 分钟 soak 里实测撞到过 FileNotFoundError，不能让诊断脚本
+            # 自己把长时验证搞崩。
+            pass
     return total
 
 

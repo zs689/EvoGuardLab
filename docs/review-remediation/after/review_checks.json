@@ -155,17 +155,23 @@
       "evidence": "probes/docker_image_verification.json",
       "id": "EG-003/docker-verify",
       "status": "pass"
+    },
+    {
+      "detail": "22 个 run 块，6 个脚本引用，关键门槛齐全",
+      "evidence": "probes/ci_references.json",
+      "id": "EG-023/ci-references",
+      "status": "pass"
     }
   ],
-  "generated_at": "2026-11-15T17:44:46",
+  "generated_at": "2026-11-15T19:02:05",
   "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
-  "revision": "7ea87b3ae4282068eccd308bfcf3332cd66e8dee",
-  "seconds": 22.48,
+  "revision": "34cedbad92c1ee27a713e18b16b64e9f9a7c5052",
+  "seconds": 25.49,
   "summary": {
     "fail": 0,
-    "pass": 26,
+    "pass": 27,
     "skip": 0,
-    "total": 26
+    "total": 27
   },
   "version": 1
 }

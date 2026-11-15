@@ -1,0 +1,25 @@
+{
+  "method": "静态解析 run: 块，不执行 workflow，不替代真实 CI",
+  "passed": true,
+  "problems": [],
+  "reference_checks": 7,
+  "required_scripts": [
+    "review_checks.py",
+    "check_wheel_manifest.py",
+    "wheel_smoke.py",
+    "check_docker_context.py",
+    "check_build_context.py",
+    "defense_demo.py"
+  ],
+  "run_blocks": 22,
+  "scripts_referenced": [
+    "check_build_context.py",
+    "check_docker_context.py",
+    "check_wheel_manifest.py",
+    "defense_demo.py",
+    "review_checks.py",
+    "wheel_smoke.py"
+  ],
+  "version": 1,
+  "workflow": ".github/workflows/test.yml"
+}

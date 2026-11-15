@@ -330,6 +330,20 @@ def c_docker_image_verify():
                    "probes/docker_image_verification.json")
 
 
+def c_ci_references():
+    """EG-023：CI 引用的脚本/参数不能漂移，关键门槛不能掉出 workflow。"""
+    d = os.path.join(ROOT, "docs", "review-remediation", "probes")
+    rep = _json(os.path.join(d, "ci_references.json")) or {}
+    ok = rep.get("passed") is True and not (rep.get("problems") or [])
+    return _result("EG-023/ci-references", ok,
+                   ("%d 个 run 块，%d 个脚本引用，关键门槛齐全"
+                    % (rep.get("run_blocks", 0),
+                       len(rep.get("scripts_referenced", []))))
+                   if ok else "CI 引用有问题：%s"
+                   % (rep.get("problems") or [])[:3],
+                   "probes/ci_references.json")
+
+
 def c_frontend_a11y():
     """前端静态可访问性：控件可访问名称不能退化。"""
     d = os.path.join(ROOT, "docs", "review-remediation", "probes")
@@ -574,6 +588,7 @@ CHECKS = [
     ("EG-010", c_write_gate_stress),
     ("EG-020", c_frontend_a11y),
     ("EG-003", c_docker_image_verify),
+    ("EG-023", c_ci_references),
 ]
 
 
