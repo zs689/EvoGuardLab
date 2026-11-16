@@ -307,3 +307,33 @@
 - 修后 30 分钟长跑 4/4：436576 次写 0 错，堆 0.137→0.053 MiB
   （-0.084，无上升趋势），`heap_stable=true`；门槛可证伪验证通过。
   965 tests OK / 28-28 gate。
+
+### 第十六轮（2026-11-16）：AgentWatch —— 监测其他 Agent + 强制防护
+
+用户把目标重定义为「监测其他 agent 运行/未运行时的 bug 与漏洞，
+并防止人/AI 入侵被监测 agent」。新增独立能力层
+`ai-service/evoguard/agent_watch.py`（不改既有 security/runtime/agents 语义）：
+
+- `AgentTarget`：callable / HTTP / 声明式 manifest 三种方式接入**外部** agent；
+  协议里 tool_outputs 是不可信文本并进入决策 —— 间接注入链真实存在。
+- `static_audit()`：不运行 agent，查 9 类配置/权限/声明漏洞。
+- `runtime_probe()`：正常/间接注入/越权/工具故障四类探针，
+  判定 hijack / unauthorized / silent_failure 并保留原始 tool_calls。
+- `GuardGateway`：**默认 enforce=True**（与 DEFAULT_MODE=audit 相反），
+  输入/工具输出/工具调用三处真拦，deny 时不透传 agent 结果。
+- `scripts/agent_watch_proxy.py`：HTTP 防护代理，`/invoke` deny 返 403；
+  `/bypass` 默认关闭，仅用于对照验证。
+- 顺带修红队清单两条已知漏检：`_PRE` 的
+  `injection_tool_directive` / `exfil_encoded_blob` 前置子串写错；
+  并把 `injection_tool_directive` 正则扩到「执行脚本:」「运行命令：」。
+  网关层另用不依赖 `_PRE` 的全正则扫描兜底。
+
+验证：`verify_agent_watch.py --with-http` **8/8**，
+含「关网关攻击成功 / 开网关被拦」「直连后端成功 / 经代理 403」对照；
+`tests/test_agent_watch.py` **13/13**；新增
+`AGENT-WATCH/verification` 门槛，gate 28 → 29。
+978 tests OK / 29-29 gate / wheel 含 agent_watch.py。
+
+**边界**：原有 app.py 默认仍是 audit，新能力需显式部署到入口；
+规则级非语义级；静态审计非源码 SAST；未接真 LLM 做可疑判定；
+单机；误报代价上升。详见 `docs/agent-watch.md` §三。

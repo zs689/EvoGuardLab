@@ -5,6 +5,7 @@ measures the *execution effect*, not just the detection hit.
 
 [中文说明](README.zh.md) · [Architecture](docs/architecture.svg) · [Experiments](experiments/) ·
 [API contract](docs/api-contract-v1.json) · [Enterprise boundaries](docs/enterprise-readiness.md) ·
+[AgentWatch: monitor & guard external agents](docs/agent-watch.md) ·
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md) · MIT
 
 ---
