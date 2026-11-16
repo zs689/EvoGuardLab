@@ -167,17 +167,23 @@
       "evidence": "probes/soak_heap_stable.json",
       "id": "EG-010/heap-stability",
       "status": "pass"
+    },
+    {
+      "detail": "8/8 项通过：静态/运行态/网关/网络层对照齐全",
+      "evidence": "probes/agent_watch_verification.json",
+      "id": "AGENT-WATCH/verification",
+      "status": "pass"
     }
   ],
-  "generated_at": "2026-11-15T19:58:50",
+  "generated_at": "2026-11-16T11:22:43",
   "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
-  "revision": "201f33c3b9b4c504bc2eb027ccb7da415491b72e",
-  "seconds": 27.95,
+  "revision": "c25dc333d834c3917a185c3cd984bdffcdb5a309",
+  "seconds": 38.14,
   "summary": {
     "fail": 0,
-    "pass": 28,
+    "pass": 29,
     "skip": 0,
-    "total": 28
+    "total": 29
   },
   "version": 1
 }

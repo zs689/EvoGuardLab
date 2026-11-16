@@ -116,7 +116,9 @@ _det("injection_delimiter", "warn",
      "出现对话模板的保留标记，试图伪造角色边界",
      "用户粘贴原始 prompt 做讨论时会命中")
 _det("injection_tool_directive", "error",
-     r"(?:执行以下|运行以下|调用).{0,8}(?:命令|脚本|工具)\s*[:：]",
+     # 中文间接注入常见三种写法：执行以下X / 执行X / 调用X。
+     # 只写「执行以下」会漏掉「执行脚本:」「运行命令：」这类更常见的祈使句。
+     r"(?:执行|运行|调用).{0,8}(?:命令|脚本|工具)\s*[:：]",
      "在内容里夹带「执行以下命令」，常见于间接注入",
      "运维类任务里正常出现，需要结合来源判断")
 
@@ -187,10 +189,13 @@ _PRE = {
     "injection_prompt_leak": ("提示词", "系统提示", "prompt", "instructions",
                               "system message"),
     "injection_delimiter": ("<|", "[inst]", "<<sys>>", "<</sys>>"),
-    "injection_tool_directive": ("执行以下", "运行以下", "调用以下"),
+    # 正则首组是 (?:执行以下|运行以下|调用)，pre 必须包含「调用」本身，
+    # 只写「调用以下」会让 `调用工具：` 这类载荷漏检（红队 PoC 已复现）。
+    "injection_tool_directive": ("执行", "运行", "调用"),
     "exfil_url_with_secret": ("://",),
     "exfil_data_uri": ("data:",),
-    "exfil_encoded_blob": ("?",),
+    # 正则首字符类为 [?&]，pre 只写 "?" 会漏掉 `&data=...` 形态。
+    "exfil_encoded_blob": ("?", "&"),
     "secret_aws_key": ("akia",),
     "secret_openai_key": ("sk-",),
     "secret_github_token": ("ghp_", "gho_", "ghu_", "ghs_", "ghr_"),

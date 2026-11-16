@@ -364,6 +364,24 @@ def c_heap_stability():
                    "probes/soak_heap_stable.json")
 
 
+def c_agent_watch():
+    """新能力层：监测其他 agent + 强制防护的闭环证据不能退化。"""
+    d = os.path.join(ROOT, "docs", "review-remediation", "probes")
+    rep = _json(os.path.join(d, "agent_watch_verification.json")) or {}
+    checks = rep.get("checks") or []
+    need = {"static_audit_finds_vulns", "runtime_probe_finds_bugs",
+            "attack_succeeds_without_guard", "guard_blocks_attack",
+            "http_proxy_blocks_external_attack"}
+    ids = {c.get("id") for c in checks}
+    ok = (rep.get("passed") is True and need <= ids
+          and all(c.get("pass") is True for c in checks))
+    return _result("AGENT-WATCH/verification", ok,
+                   ("%d/%d 项通过：静态/运行态/网关/网络层对照齐全"
+                    % (sum(1 for c in checks if c.get("pass")), len(checks)))
+                   if ok else "AgentWatch 闭环证据缺失或未全过",
+                   "probes/agent_watch_verification.json")
+
+
 def c_frontend_a11y():
     """前端静态可访问性：控件可访问名称不能退化。"""
     d = os.path.join(ROOT, "docs", "review-remediation", "probes")
@@ -610,6 +628,7 @@ CHECKS = [
     ("EG-003", c_docker_image_verify),
     ("EG-023", c_ci_references),
     ("EG-010", c_heap_stability),
+    ("AGENT-WATCH", c_agent_watch),
 ]
 
 
