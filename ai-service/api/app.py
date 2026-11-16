@@ -40,6 +40,7 @@ import runtime    # noqa: E402
 import skills     # noqa: E402
 import experience # noqa: E402
 import service_controls  # noqa: E402  —— 服务层工程基线（纯标准库）
+import agent_watch       # noqa: E402  —— 外部 agent 监测/入口防护
 
 try:                                    # 企业形态模块：缺失也不能拖垮服务
     from enterprise import audit as ent_audit          # noqa: E402
@@ -79,6 +80,34 @@ def _read_version():
 VERSION = _read_version()
 # 单一全局实例：限流窗口需要在多线程间共享（check_rate 内用 Lock 保护）。
 CONTROLS = service_controls.ServiceControls.from_env()
+
+# AgentWatch 入口防护。**默认 enforce** —— 与 security.DEFAULT_MODE=audit
+# 相反：这里命中高危直接拒绝，不是只记账。
+#   AGENTLAB_AGENT_WATCH=off    → 完全关闭
+#   AGENTLAB_AGENT_WATCH=audit  → 只统计不拦（对照/观察用）
+#   enforce（默认）              → 命中 error 级特征返回 403
+_AW_MODE = (os.environ.get("AGENTLAB_AGENT_WATCH") or "enforce").strip().lower()
+AW_GATE = (None if _AW_MODE in ("off", "0", "false")
+           else agent_watch.GuardGateway(enforce=(_AW_MODE != "audit")))
+AW_BLOCKED = [0]          # list 包一层，避免 global 声明
+AW_SEEN = [0]
+
+
+def agent_watch_text(body):
+    """把请求体文本交给入口网关。返回 None（放行）或 deny 决策。"""
+    if AW_GATE is None:
+        return None
+    try:
+        text = json.dumps(body, ensure_ascii=False)
+    except (TypeError, ValueError):
+        text = str(body)
+    decision = AW_GATE.inspect_input(text[:MAX_BODY_BYTES])
+    AW_SEEN[0] += 1
+    if decision.findings:
+        AW_BLOCKED[0] += 1 if not decision.allowed else 0
+    if AW_GATE.enforce and not decision.allowed:
+        return decision
+    return None
 
 # 企业形态：租户、配额、指标、追踪、审计。默认全部「可用但不落盘」。
 TENANT_RESOLVER = ent_tenancy.HeaderResolver() if _ENT_OK else None
@@ -789,6 +818,10 @@ class Handler(BaseHTTPRequestHandler):
                          "audit_failures": AUDIT_FAILURES,
                          "db": store_health(self._tenant_id),
                          "metrics_exists": os.path.exists(METRICS),
+                "agent_watch": {"mode": _AW_MODE,
+                                "enforce": bool(AW_GATE and AW_GATE.enforce),
+                                "scanned": AW_SEEN[0],
+                                "blocked": AW_BLOCKED[0]},
                          "db_path": tenant_db_path(self._tenant_id)})
 
     def h_metrics_prometheus(self):
@@ -926,6 +959,12 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
         except Exception:
             return self._err("E_BAD_REQUEST", "请求体不是合法 JSON")
+        deny = agent_watch_text(body)
+        if deny is not None:
+            return self._err(
+                "E_INPUT_BLOCKED",
+                "输入命中高危注入特征（%s），已拒绝"
+                % ",".join(f["code"] for f in deny.findings)[:200], 403)
         try:
             out = run_experiment(self._tenant_id, body)
         except ValueError as exc:
@@ -950,6 +989,12 @@ class Handler(BaseHTTPRequestHandler):
         payload = body.get("payload", body)
         if not isinstance(payload, dict):
             return self._err("E_BAD_REQUEST", "payload 必须是对象")
+        deny = agent_watch_text(payload)
+        if deny is not None:
+            return self._err(
+                "E_INPUT_BLOCKED",
+                "输入命中高危注入特征（%s），已拒绝"
+                % ",".join(f["code"] for f in deny.findings)[:200], 403)
         try:
             validate_run_payload(payload)
         except ValueError as exc:

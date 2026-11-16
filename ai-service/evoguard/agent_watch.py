@@ -17,8 +17,12 @@ Python，那条链不存在，所以测不出注入。
 
 零运行时依赖，只用标准库。
 """
+import base64
+import html
 import json
 import re
+import unicodedata
+import urllib.parse
 import urllib.request
 
 try:                                    # 包内导入
@@ -287,6 +291,54 @@ class GuardDecision:
                 "sanitized": self.sanitized}
 
 
+_B64_RE = re.compile(r"[A-Za-z0-9+/]{20,}={0,2}")
+
+
+def _decode_views(text):
+    """生成「同一内容的不同编码视图」。
+
+    为什么必须做：正则只认字面量，而 LLM 能读懂编码后的指令。
+    `%E5%BF%BD%E7%95%A5`、`&#24573;&#30053;`、base64、全角形式
+    都是一句话的不同写法，只扫原文等于给攻击者留后门。
+
+    限制视图数量与长度，避免把编码当放大器（解码炸弹）。
+    """
+    t = _sec._text(text)[:20000]
+    views = []
+    try:
+        nf = unicodedata.normalize("NFKC", t)
+        if nf != t:
+            views.append(("nfkc", nf))
+    except (TypeError, ValueError):
+        pass
+    try:
+        u = urllib.parse.unquote(t)
+        u = urllib.parse.unquote(u)          # 双重编码
+        if u != t:
+            views.append(("url", u))
+    except (TypeError, ValueError):
+        pass
+    try:
+        h = html.unescape(t)
+        if h != t:
+            views.append(("html", h))
+    except (TypeError, ValueError):
+        pass
+    for m in _B64_RE.finditer(t):
+        token = m.group(0)
+        if len(token) % 4:
+            token += "=" * (4 - len(token) % 4)
+        try:
+            dec = base64.b64decode(token, validate=True).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if len(dec) >= 6 and dec.isprintable() and dec != t:
+            views.append(("base64", dec))
+            if len(views) >= 8:
+                break
+    return views[:8]
+
+
 def _scan_strict(text, where):
     """不依赖 _PRE 降噪表的全正则扫描（网关专用，避免已知漏检）。
 
@@ -296,22 +348,35 @@ def _scan_strict(text, where):
     """
     s = _sec._text(text)
     clean, decoded, counts = _sec.strip_invisible(s)
-    out = []
-    for view in (clean, decoded if counts["tag"] else None):
-        if view is None:
-            continue
-        for d in _sec.DETECTORS:
-            m = d["re"].search(view)
-            if m:
-                out.append({"code": d["code"], "severity": d["severity"],
-                            "where": where,
-                            "match": view[max(0, m.start() - 20):m.end() + 20][:120]})
+    views = [("raw", clean)]
+    if counts["tag"]:
+        views.append(("tag", decoded))
+    views.extend(_decode_views(clean))
+
     seen = set()
     uniq = []
-    for f in out:
-        if f["code"] not in seen:
-            seen.add(f["code"])
-            uniq.append(f)
+    for name, view in views:
+        for d in _sec.DETECTORS:
+            if d["code"] in seen:
+                continue
+            m = d["re"].search(view)
+            if not m:
+                continue
+            seen.add(d["code"])
+            uniq.append({"code": d["code"], "severity": d["severity"],
+                         "where": where, "decoded_from":
+                             None if name == "raw" else name,
+                         # 把检测器自带的误报说明带出来，运维据此判断
+                         # 「这条是不是又是运维文本被扫到了」
+                         "false_positive": d.get("false_positive", ""),
+                         "match": view[max(0, m.start() - 20):m.end() + 20][:120]})
+    if counts["tag"] or any(name != "raw" for name, _ in views):
+        # 只有解码后才命中 = 明确在做混淆，单独记一条，便于审计区分
+        if any(f.get("decoded_from") for f in uniq):
+            uniq.append({"code": "obfuscated_payload", "severity": "error",
+                         "where": where, "decoded_from": "multiple",
+                         "match": ",".join(sorted({f["decoded_from"] for f in uniq
+                                                   if f.get("decoded_from")}))[:80]})
     uniq.extend(_sec._hidden_findings(counts, decoded, where))
     return uniq
 
