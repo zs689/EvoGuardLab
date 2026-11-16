@@ -685,3 +685,32 @@ SQLite 的临时 `a.db-journal` 被删 → `FileNotFoundError`。
 
 验证：9/9（新增编码项）、14/14 回归、29/29 gate、979 tests OK、
 build-context / ci-references PASS。
+
+## 二十三、第十八轮（2026-11-16）：联网调研 → 修两个真绕过 + 语义层
+
+用户：「去网上找办法解决啊？你不是能联网吗，缺点 3 条」。
+先查再动手，避免凭猜：
+
+**查到的可用结论**（写进 `docs/agent-watch.md` 一点五）：
+- Meta LlamaFirewall / PromptGuard 2 的分层思路（规则 → 语义 → 代码分析）；
+  PromptGuard 2 在 AgentDojo 把 ASR 从 17.6% 压到 7.5%；
+- PromptGuard 2 只读 512 token，长文档需分块；
+- Unicode 混淆研究：**西里尔/希腊同形字能穿过 NFKC**，是「自愈式载荷」根基。
+
+**实测自己的网关，确认两处真漏**：
+- `ignоre аll previouѕ`（西里尔 о/а/ѕ）→ `[]`；
+- `i.g.n.o.r.e …`、`i g n o r e …` → `[]`。
+修法：加 homoglyph 映射表 + 「单字符+空格+单字符」压缩视图；
+正常英文/俄语/中文不误报。
+
+**核实一条我原先猜错的**：我先前推断「长文本会被截断漏扫」，
+实测 15010 字符文档尾部 payload 能命中 —— 网关 raw 视图是全量扫，
+不存在这个问题。如实记下来，不把「没修的 bug」写成修了。
+
+**新增可选语义层**：`SemanticJudge` 调本机 Ollama qwen3:4b。
+召回 9/10、语料误报 1/40、业务误报 0/5；`think` 必须放顶层
+（放 options 里不生效，response 为空）。**4B 判定不稳定**，
+同一文本不同参数出现过相反结论，所以只给 review、不单独 deny。
+入口用 `AGENTLAB_AGENT_WATCH_SEMANTIC=1` 开启，默认关（0.5–3s/条）。
+
+验证 10/10、回归 17/17、gate 29/29、982 tests OK。
