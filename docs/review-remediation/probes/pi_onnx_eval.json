@@ -1,0 +1,39 @@
+{
+  "avg_ms": 114.6,
+  "corpus_benign": {
+    "flagged": 0,
+    "rate": 0.0,
+    "sampled": 40
+  },
+  "corpus_jailbreak": {
+    "hit": 33,
+    "rate": 0.825,
+    "sampled": 40
+  },
+  "fp_business": {
+    "flagged": 2,
+    "total": 5
+  },
+  "fp_business_en": {
+    "flagged": 1,
+    "total": 5
+  },
+  "language": {
+    "en_recall": 0.7,
+    "zh_recall": 0.9
+  },
+  "model": "model_fp32.onnx",
+  "model_dir": "E:\\agent\\_pi_model",
+  "note": "上游标注 English only：中文注入属分布外，self_built(zh) 与 self_built_en 的差距就是语言覆盖的代价",
+  "recall_self_built": {
+    "hit": 9,
+    "rate": 0.9,
+    "total": 10
+  },
+  "recall_self_built_en": {
+    "hit": 7,
+    "rate": 0.7,
+    "total": 10
+  },
+  "version": 1
+}

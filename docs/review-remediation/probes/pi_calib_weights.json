@@ -1,0 +1,20 @@
+{
+  "bias": -0.401998,
+  "features": [
+    "p_deberta",
+    "rule_error_hits",
+    "biz_word",
+    "len_norm",
+    "strong_hint"
+  ],
+  "note": "校准头权重；DeBERTa 本体未改。数据为模板构造，只证明方法有效，不证明线上泛化",
+  "trained_on": 120,
+  "version": 1,
+  "weights": [
+    4.485135,
+    1.786451,
+    -4.83139,
+    2.654044,
+    3.756844
+  ]
+}

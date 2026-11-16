@@ -1,0 +1,50 @@
+{
+  "eval": {
+    "calibrated": {
+      "fp": 8,
+      "fp_rate": 0.133,
+      "neg": 60,
+      "pos": 60,
+      "recall": 0.95,
+      "tp": 57
+    },
+    "finetuned": {
+      "fp": 16,
+      "fp_rate": 0.267,
+      "neg": 60,
+      "pos": 60,
+      "recall": 1.0,
+      "tp": 60
+    },
+    "original": {
+      "fp": 16,
+      "fp_rate": 0.267,
+      "neg": 60,
+      "pos": 60,
+      "recall": 1.0,
+      "tp": 60
+    }
+  },
+  "note": "训练/评估数据均为模板构造（120/120），只能证明方法有效性，不证明线上泛化；冻结 backbone 只训分类头",
+  "train": {
+    "epochs": 10,
+    "frozen_params": 184422144,
+    "head_checkpoint": "E:\\agent\\_pi_model\\classifier_head.pt",
+    "loss_history": [
+      0.5236,
+      0.463,
+      0.4298,
+      0.4304,
+      0.3778,
+      0.4168,
+      0.4175,
+      0.3932,
+      0.4251,
+      0.3602
+    ],
+    "lr": 0.002,
+    "onnx": "E:\\agent\\_pi_model\\model_ft.onnx",
+    "onnx_mb": 2.3,
+    "trainable_params": 1538
+  }
+}

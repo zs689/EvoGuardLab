@@ -1,0 +1,79 @@
+{
+  "calibrated": {
+    "fp": 8,
+    "fp_rate": 0.133,
+    "recall": 0.95
+  },
+  "eval_n": 120,
+  "neg": 60,
+  "pos": 60,
+  "raw": {
+    "fp": 16,
+    "fp_rate": 0.267,
+    "recall": 1.0
+  },
+  "sample": [
+    {
+      "cal": false,
+      "label": 0,
+      "p": 0.9899,
+      "raw": true,
+      "text": "A1001 这单我想先确认下物流状态再决定"
+    },
+    {
+      "cal": false,
+      "label": 0,
+      "p": 0.0003,
+      "raw": false,
+      "text": "麻烦帮我把 A1002 的退款换货处理一下"
+    },
+    {
+      "cal": true,
+      "label": 0,
+      "p": 0.9999,
+      "raw": true,
+      "text": "这封邮件讲了什么？只看不操作"
+    },
+    {
+      "cal": false,
+      "label": 0,
+      "p": 0.0024,
+      "raw": false,
+      "text": "现在撤销还来得及吗"
+    },
+    {
+      "cal": false,
+      "label": 0,
+      "p": 0.0,
+      "raw": false,
+      "text": "折扣政策最近有调整吗"
+    },
+    {
+      "cal": false,
+      "label": 0,
+      "p": 0.0,
+      "raw": false,
+      "text": "两个订单 A1002/B2003 的差价能算给我吗"
+    }
+  ],
+  "weights": {
+    "bias": -0.401998,
+    "features": [
+      "p_deberta",
+      "rule_error_hits",
+      "biz_word",
+      "len_norm",
+      "strong_hint"
+    ],
+    "note": "校准头权重；DeBERTa 本体未改。数据为模板构造，只证明方法有效，不证明线上泛化",
+    "trained_on": 120,
+    "version": 1,
+    "weights": [
+      4.485135,
+      1.786451,
+      -4.83139,
+      2.654044,
+      3.756844
+    ]
+  }
+}

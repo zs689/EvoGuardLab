@@ -175,10 +175,10 @@
       "status": "pass"
     }
   ],
-  "generated_at": "2026-11-16T13:02:30",
+  "generated_at": "2026-11-16T18:40:17",
   "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
-  "revision": "9982a90e253cf5647b04d52d94206e612abb3fd5",
-  "seconds": 24.78,
+  "revision": "4da05b354041b9e732cc1de77116f1c77c50fcfe",
+  "seconds": 34.01,
   "summary": {
     "fail": 0,
     "pass": 29,

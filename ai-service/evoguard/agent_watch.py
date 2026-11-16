@@ -20,7 +20,10 @@ Python，那条链不存在，所以测不出注入。
 import base64
 import html
 import json
+import os
 import re
+import subprocess
+import threading
 import unicodedata
 import urllib.parse
 import urllib.request
@@ -511,6 +514,115 @@ class SemanticJudge:
             out["confidence"] = 0.0
         out["reason"] = str(d.get("reason") or "")[:80]
         return out
+
+
+class OnnxInjectionJudge:
+    """通过**长驻子进程**调用隔离 venv 里的 ONNX 注入分类器。
+
+    为什么不用 import：主服务跑在系统 Python 上，不装也不该装
+    onnxruntime；模型推理放在独立 venv，用 stdin/stdout 管道通信。
+    首次调用才启动进程（加载 DeBERTa 要 1-2 秒），之后每条约几十毫秒。
+
+    协议：每行一条文本 → 每行一个 JSON（见 scripts/prompt_injection_onnx.py
+    的 --serve 分支）。文本里的换行会被压成空格。
+    """
+
+    def __init__(self, python=None, script=None, model_dir=None, timeout=30):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        py = python or os.environ.get("AGENTLAB_PI_PYTHON") or os.path.join(
+            os.path.dirname(root), "_pi_venv", "Scripts", "python.exe")
+        self.python = py
+        self.script = script or os.path.join(
+            root, "scripts", "prompt_injection_onnx.py")
+        self.model_dir = model_dir or os.environ.get(
+            "AGENTLAB_PI_MODEL_DIR") or os.path.join(
+            os.path.dirname(root), "_pi_model")
+        self.timeout = timeout
+        self.calib_path = os.path.join(
+            root, "docs", "review-remediation", "probes",
+            "pi_calib_weights.json")
+        self._proc = None
+        self._lock = threading.Lock()
+        self._broken = False
+
+    def available(self):
+        if not (os.path.isfile(self.python) and os.path.isfile(self.script)):
+            return False
+        for name in ("model_int8.onnx", "model_fp32.onnx"):
+            if os.path.isfile(os.path.join(self.model_dir, name)):
+                return True
+        return False
+
+    def describe(self):
+        return {"kind": "onnx-deberta", "python": self.python,
+                "model_dir": self.model_dir, "available": self.available(),
+                "broken": self._broken}
+
+    def _ensure(self):
+        if self._proc is not None and self._proc.poll() is None:
+            return True
+        if self._broken:
+            return False
+        env = dict(os.environ)
+        env["AGENTLAB_PI_MODEL_DIR"] = self.model_dir
+        try:
+            args = [self.python, self.script, "--serve"]
+            if os.path.isfile(self.calib_path):
+                # 有校准头就用校准后的概率（改校准层权重，不动 DeBERTa）
+                args.append("--calibrated")
+            self._proc = subprocess.Popen(
+                args,
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                bufsize=1, env=env)
+            return True
+        except OSError:
+            self._broken = True
+            return False
+
+    def judge(self, text):
+        out = {"manipulative": False, "confidence": 0.0, "reason": "",
+               "model": "deberta-v3-prompt-injection-onnx", "error": None}
+        with self._lock:
+            if not self._ensure():
+                out["error"] = "onnx judge unavailable"
+                return out
+        line = str(text).replace("\n", " ").replace("\r", " ")[:8000]
+        try:
+            with self._lock:
+                self._proc.stdin.write(line + "\n")
+                self._proc.stdin.flush()
+                raw = self._proc.stdout.readline()
+        except (OSError, ValueError) as exc:
+            self._broken = True
+            out["error"] = "pipe: " + repr(exc)[:100]
+            return out
+        if not raw:
+            self._broken = True
+            out["error"] = "empty response from onnx judge"
+            return out
+        try:
+            d = json.loads(raw)
+        except ValueError:
+            out["error"] = "bad json: " + raw[:80]
+            return out
+        if d.get("error"):
+            out["error"] = str(d["error"])[:120]
+            return out
+        out["manipulative"] = d.get("label") == "INJECTION"
+        out["confidence"] = float(d.get("p_injection") or 0.0)
+        out["reason"] = "deberta p=%.3f" % out["confidence"]
+        return out
+
+    def close(self):
+        with self._lock:
+            if self._proc is not None and self._proc.poll() is None:
+                try:
+                    self._proc.terminate()
+                except OSError:
+                    pass
+            self._proc = None
 
 
 class GuardGateway:

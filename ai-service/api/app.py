@@ -92,7 +92,13 @@ _AW_MODE = (os.environ.get("AGENTLAB_AGENT_WATCH") or "enforce").strip().lower()
 _AW_SEM = None
 if (os.environ.get("AGENTLAB_AGENT_WATCH_SEMANTIC") or "").strip() \
         in ("1", "true", "on"):
-    _cand = agent_watch.SemanticJudge()
+    # 判官二选一：ollama（中文业务误报低）或 onnx（DeBERTa，快但业务误报高）。
+    _judge = (os.environ.get("AGENTLAB_AGENT_WATCH_JUDGE")
+              or "ollama").strip().lower()
+    if _judge == "onnx":
+        _cand = agent_watch.OnnxInjectionJudge()
+    else:
+        _cand = agent_watch.SemanticJudge()
     _AW_SEM = _cand if _cand.available() else None
 AW_GATE = (None if _AW_MODE in ("off", "0", "false")
            else agent_watch.GuardGateway(enforce=(_AW_MODE != "audit"),
@@ -829,6 +835,8 @@ class Handler(BaseHTTPRequestHandler):
                 "agent_watch": {"mode": _AW_MODE,
                                 "enforce": bool(AW_GATE and AW_GATE.enforce),
                                 "semantic": bool(_AW_SEM),
+                                "semantic_kind": (type(_AW_SEM).__name__
+                                                  if _AW_SEM else None),
                                 "scanned": AW_SEEN[0],
                                 "blocked": AW_BLOCKED[0]},
                          "db_path": tenant_db_path(self._tenant_id)})
