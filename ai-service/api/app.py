@@ -87,8 +87,16 @@ CONTROLS = service_controls.ServiceControls.from_env()
 #   AGENTLAB_AGENT_WATCH=audit  → 只统计不拦（对照/观察用）
 #   enforce（默认）              → 命中 error 级特征返回 403
 _AW_MODE = (os.environ.get("AGENTLAB_AGENT_WATCH") or "enforce").strip().lower()
+# 语义层：显式开启才探测本地模型（探测要 3 秒，不能拖慢普通启动）。
+# 代价是每条 0.5-3 秒，所以默认关。
+_AW_SEM = None
+if (os.environ.get("AGENTLAB_AGENT_WATCH_SEMANTIC") or "").strip() \
+        in ("1", "true", "on"):
+    _cand = agent_watch.SemanticJudge()
+    _AW_SEM = _cand if _cand.available() else None
 AW_GATE = (None if _AW_MODE in ("off", "0", "false")
-           else agent_watch.GuardGateway(enforce=(_AW_MODE != "audit")))
+           else agent_watch.GuardGateway(enforce=(_AW_MODE != "audit"),
+                                         semantic=_AW_SEM))
 AW_BLOCKED = [0]          # list 包一层，避免 global 声明
 AW_SEEN = [0]
 
@@ -820,6 +828,7 @@ class Handler(BaseHTTPRequestHandler):
                          "metrics_exists": os.path.exists(METRICS),
                 "agent_watch": {"mode": _AW_MODE,
                                 "enforce": bool(AW_GATE and AW_GATE.enforce),
+                                "semantic": bool(_AW_SEM),
                                 "scanned": AW_SEEN[0],
                                 "blocked": AW_BLOCKED[0]},
                          "db_path": tenant_db_path(self._tenant_id)})

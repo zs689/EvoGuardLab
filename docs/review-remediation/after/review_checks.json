@@ -169,16 +169,16 @@
       "status": "pass"
     },
     {
-      "detail": "9/9 项通过：静态/运行态/网关/网络层对照齐全",
+      "detail": "10/10 项通过：静态/运行态/网关/网络层对照齐全",
       "evidence": "probes/agent_watch_verification.json",
       "id": "AGENT-WATCH/verification",
       "status": "pass"
     }
   ],
-  "generated_at": "2026-11-16T12:39:06",
+  "generated_at": "2026-11-16T13:02:30",
   "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
-  "revision": "80c5c0133d0568fb9cb8849606a8c755a1e94cc1",
-  "seconds": 34.32,
+  "revision": "9982a90e253cf5647b04d52d94206e612abb3fd5",
+  "seconds": 24.78,
   "summary": {
     "fail": 0,
     "pass": 29,

@@ -372,7 +372,8 @@ def c_agent_watch():
     need = {"static_audit_finds_vulns", "runtime_probe_finds_bugs",
             "attack_succeeds_without_guard", "guard_blocks_attack",
             "http_proxy_blocks_external_attack",
-            "encoded_bypass_caught"}
+            "encoded_bypass_caught",
+            "homoglyph_and_despaced_caught"}
     ids = {c.get("id") for c in checks}
     ok = (rep.get("passed") is True and need <= ids
           and all(c.get("pass") is True for c in checks))
