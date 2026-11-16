@@ -337,3 +337,24 @@
 **边界**：原有 app.py 默认仍是 audit，新能力需显式部署到入口；
 规则级非语义级；静态审计非源码 SAST；未接真 LLM 做可疑判定；
 单机；误报代价上升。详见 `docs/agent-watch.md` §三。
+
+### 第十七轮（2026-11-16）：入口默认拦截 + 编码绕过覆盖
+
+用户「补缺点」。针对上轮列的三条落差逐条处理：
+
+- **入口防护从「独立层」变成「默认生效」**：`app.py` 在
+  `POST /api/run`、`POST /api/jobs` 解析 body 后走
+  `GuardGateway.inspect_input`，命中 error 级返回 403
+  `E_INPUT_BLOCKED`；`/api/health` 暴露
+  `agent_watch.{mode,enforce,scanned,blocked}`。
+  `AGENTLAB_AGENT_WATCH=enforce`（默认）/`audit`/`off`。
+  实测正常 200、注入 403，979 项既有回归零误伤。
+- **编码绕过覆盖**：网关扫描前生成 URL / HTML 实体 / Base64 /
+  全角 NFKC 四类解码视图；只在解码后命中时额外记
+  `obfuscated_payload`（error）。四种写法全部命中，正常文本不误报。
+- 误报可观测：finding 带 `false_positive` 说明，health 有 `blocked` 计数。
+- 验证 9/9（新增 `encoded_bypass_caught`）、回归 14/14、
+  gate 29/29、979 tests OK。
+- 文档 `docs/agent-watch.md` §三 改成「已补上 / 仍存在」两段，
+  仍非语义级、静态审计非 SAST、代理非唯一入口、未接 LLM 判定、
+  单机、误报代价真实存在。

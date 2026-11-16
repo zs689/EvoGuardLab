@@ -661,3 +661,27 @@ SQLite 的临时 `a.db-journal` 被删 → `FileNotFoundError`。
 到唯一入口才保护 EvoGuardLab 自己；规则级检测不是语义级；
 静态审计不是源码 SAST；未接真 LLM 判定；单机。这些写进 §三，
 不藏。
+
+## 二十二、第十七轮（2026-11-16）：按「补缺点」逐条落地
+
+上轮列的三条落差，逐条处理并给出实测：
+
+1. **入口不拦 → 默认拦**：`app.py` 的 `POST /api/run` 与
+   `POST /api/jobs` 在读 body 后调 `GuardGateway.inspect_input`，
+   命中 error 级返回 403 `E_INPUT_BLOCKED`；`/api/health` 暴露
+   `agent_watch.{mode,enforce,scanned,blocked}`。
+   开关 `AGENTLAB_AGENT_WATCH=enforce(默认)/audit/off`。
+   实测：正常请求 200、注入 403，979 项既有回归**零误伤**。
+2. **编码绕过 → 解码视图**：URL / HTML 实体 / Base64 / 全角 NFKC
+   四类视图，只在解码后命中时额外记 `obfuscated_payload`(error)。
+   四种写法全部命中，正常文本（含 `15%`）不误报。
+3. **误报 → 可观测 + 可降级**：finding 带检测器原有
+   `false_positive` 说明；health 有 `blocked` 计数；可降到 audit。
+
+**没有解决的**（写进 `docs/agent-watch.md` §三「仍存在」）：
+语义级改写/多轮诱导/谐音拆字仍在外；静态审计不是 SAST；
+网关不是唯一入口时仍可被绕过；未接真实 LLM 判定；单机；
+误报代价真实存在（「运行命令：」会被拦）。
+
+验证：9/9（新增编码项）、14/14 回归、29/29 gate、979 tests OK、
+build-context / ci-references PASS。
