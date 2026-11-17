@@ -52,12 +52,31 @@ class TestV3Preregistration(unittest.TestCase):
         ok, note = G.v2_archive_intact()
         self.assertTrue(ok, note)
 
-    def test_experiment_not_yet_executed(self):
-        """预注册状态：还没有 v3 结果文件。跑了之后要显式更新本测试。"""
+    def test_result_if_present_is_honestly_marked(self):
+        """结果可以由工具链产出，但**绝不能冒充独立复跑**。
+
+        预注册的原始断言是「result.json 不存在」。WS-03-T1 要求本机执行
+        实验，所以这里显式更新：允许文件存在，但必须
+        1) independent_reproduction=false；
+        2) gate_sha256 与冻结判定线一致；
+        3) 判定失败时 passed=false（不许靠改判定线翻绿）。
+        """
+        import json
         p = os.path.join(ROOT, "experiments", "semantic_injection_v3",
                          "result.json")
-        self.assertFalse(os.path.isfile(p),
-                         "v3 已有结果文件，请同步更新预注册状态与台账")
+        if not os.path.isfile(p):
+            return                      # 尚未执行也合法
+        with io.open(p, encoding="utf-8") as f:
+            d = json.load(f)
+        self.assertIs(d.get("independent_reproduction"), False,
+                      "工具链自跑必须标记 independent_reproduction=false，"
+                      "不能冒充未参与调参的独立复跑者")
+        self.assertEqual(d.get("gate_sha256"), G.gate_sha256(),
+                         "结果里的判定线指纹与冻结值不一致")
+        self.assertIn("prereg_status", d)
+        if not d.get("passed"):
+            self.assertTrue(d.get("checks") or d.get("metrics"),
+                            "判定失败也必须留下逐条证据，不许直接删结果")
 
     def test_plan_declares_no_gate_relaxation(self):
         with io.open(PLAN, encoding="utf-8") as f:

@@ -71,11 +71,17 @@ class TestFrozenSplit(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(state, "tampered")
 
-    def test_experiment_still_not_executed(self):
+    def test_result_never_claims_independent_reproduction(self):
+        """即使工具链产出了结果，也不许声称是独立复跑。"""
+        import json
         p = os.path.join(ROOT, "experiments", "semantic_injection_v3",
                          "result.json")
-        self.assertFalse(os.path.isfile(p),
-                         "工具链不能替独立复跑者产出实验结果")
+        if not os.path.isfile(p):
+            return
+        with io.open(p, encoding="utf-8") as f:
+            d = json.load(f)
+        self.assertIs(d.get("independent_reproduction"), False)
+        self.assertEqual(d.get("gate_sha256"), G.gate_sha256())
 
 
 class TestGateFalsifiability(unittest.TestCase):

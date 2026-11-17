@@ -83,3 +83,9 @@ _review_work*
 # ai-service/evoguard/** / ai-service/api/app.py / config/**
 # frontend/** / docs/taxonomy.md / scripts/defense_demo.py
 # 这些没有被上面的规则排除，Dockerfile 里再显式 COPY 一次。
+
+# WS-03-T3: 外部模型资产按需下载，不进构建上下文
+.cache/
+*.onnx
+*.safetensors
+*.pt

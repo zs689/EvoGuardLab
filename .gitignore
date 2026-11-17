@@ -23,3 +23,8 @@ docs/resume-bullets.md
 
 # 下载缓存（框架源码、外部语料原始 blob），不进版本控制
 _sandbox/
+
+# WS-03-T3: 外部模型资产（按需下载，不随仓库分发）
+.cache/
+*.onnx
+*.safetensors

@@ -1,0 +1,44 @@
+{
+  "assets": {
+    "added_tokens.json": {
+      "sha256": "dc046d04c9b0ada7ae6f1dc89c465801799acdf0c9a6aab8c15a1b2d5ca4e91f",
+      "size": 23,
+      "url": "https://hf-mirror.com/ProtectAI/deberta-v3-base-prompt-injection-v2/resolve/main/onnx/added_tokens.json"
+    },
+    "config.json": {
+      "sha256": "3093743035223c46b1497a72e939e56fa0a50afbd7bafbf7eb8aad060b8d23f8",
+      "size": 1014,
+      "url": "https://hf-mirror.com/ProtectAI/deberta-v3-base-prompt-injection-v2/resolve/main/onnx/config.json"
+    },
+    "model_fp32.onnx": {
+      "sha256": "f0ea7f239f765aedbde7c9e163a7cb38a79c5b8853d3f76db5152172047b228c",
+      "size": 738563188,
+      "url": "https://hf-mirror.com/ProtectAI/deberta-v3-base-prompt-injection-v2/resolve/main/onnx/model.onnx"
+    },
+    "special_tokens_map.json": {
+      "sha256": "b2f1b2f15f29a6b6d9d6ea4eca1675d2c231a71477f151d48f79cc83a625ba21",
+      "size": 970,
+      "url": "https://hf-mirror.com/ProtectAI/deberta-v3-base-prompt-injection-v2/resolve/main/onnx/special_tokens_map.json"
+    },
+    "spm.model": {
+      "sha256": "c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd",
+      "size": 2464616,
+      "url": "https://hf-mirror.com/ProtectAI/deberta-v3-base-prompt-injection-v2/resolve/main/onnx/spm.model"
+    },
+    "tokenizer.json": {
+      "sha256": "f0a66ad0d735d8dca9ecac4ff50fcdef4bb6adbadd2941a926844844d2c2059b",
+      "size": 8656744,
+      "url": "https://hf-mirror.com/ProtectAI/deberta-v3-base-prompt-injection-v2/resolve/main/onnx/tokenizer.json"
+    },
+    "tokenizer_config.json": {
+      "sha256": "77d3dd1a9c30397a06545251ed9274bd92e4a85feb98497eeed50c920f962274",
+      "size": 1392,
+      "url": "https://hf-mirror.com/ProtectAI/deberta-v3-base-prompt-injection-v2/resolve/main/onnx/tokenizer_config.json"
+    }
+  },
+  "license": "Apache-2.0",
+  "model": "ProtectAI/deberta-v3-base-prompt-injection-v2",
+  "note": "sha256 来自本机已下载文件；onnx/model.onnx 重命名为 model_fp32.onnx",
+  "source": "https://hf-mirror.com/ProtectAI/deberta-v3-base-prompt-injection-v2",
+  "version": 1
+}

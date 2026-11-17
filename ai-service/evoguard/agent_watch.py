@@ -606,10 +606,13 @@ class OnnxInjectionJudge:
         self.python = python or self._find_python(root)
         self.script = script or os.path.join(
             root, "scripts", "prompt_injection_onnx.py")
+        cache = os.path.join(root, ".cache", "models", "pi")
+        default = (cache if os.path.isfile(
+            os.path.join(cache, "model_fp32.onnx"))
+            else os.path.join(os.path.dirname(root), "_pi_model"))
         self.model_dir = model_dir or (
             os.environ.get("EVOGUARD_PI_MODEL_DIR")
-            or os.environ.get("AGENTLAB_PI_MODEL_DIR")) or os.path.join(
-            os.path.dirname(root), "_pi_model")
+            or os.environ.get("AGENTLAB_PI_MODEL_DIR")) or default
         self.timeout = timeout
         self.calib_path = os.path.join(
             root, "docs", "review-remediation", "probes",
