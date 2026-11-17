@@ -27,9 +27,12 @@ class TestLimiters(unittest.TestCase):
 
     def test_sqlite_limiter_same_semantics(self):
         lim = D.SQLiteLimiter()
-        self.assertTrue(lim.check("a", 2, 10, now=100.0)[0])
-        self.assertTrue(lim.check("a", 2, 10, now=101.0)[0])
-        self.assertFalse(lim.check("a", 2, 10, now=102.0)[0])
+        try:
+            self.assertTrue(lim.check("a", 2, 10, now=100.0)[0])
+            self.assertTrue(lim.check("a", 2, 10, now=101.0)[0])
+            self.assertFalse(lim.check("a", 2, 10, now=102.0)[0])
+        finally:
+            lim.close()
 
     def test_sqlite_shares_across_instances(self):
         """两个实例指向同一文件 = 两个 API 副本共享配额。"""

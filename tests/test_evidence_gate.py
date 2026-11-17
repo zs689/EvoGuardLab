@@ -31,9 +31,10 @@ class TestMigration(unittest.TestCase):
             self.assertTrue(hasattr(E, n), n)
 
     def test_docx_module_has_no_leaked_handle(self):
-        src = open(os.path.join(ROOT, "ai-service", "evoguard",
-                                "evidence_gate", "docx_reader.py"),
-                   encoding="utf-8").read()
+        with open(os.path.join(ROOT, "ai-service", "evoguard",
+                               "evidence_gate", "docx_reader.py"),
+                  encoding="utf-8") as f:
+            src = f.read()
         self.assertIn("with zipfile.ZipFile", src)
         self.assertIn("outlineLvl", src)   # WS-05 迁入时补的大纲级别
 

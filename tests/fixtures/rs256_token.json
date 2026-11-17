@@ -1,0 +1,19 @@
+{
+ "expect": {
+  "aud": "evoguard-api",
+  "iss": "https://idp.example",
+  "tenant_id": "tenant-fixture"
+ },
+ "jwks": {
+  "keys": [
+   {
+    "e": "AQAB",
+    "kid": "fixture-2026",
+    "kty": "RSA",
+    "n": "ytUimODnpqNTKirIFjboieNzxqBL5ml6_Xglu9vjLFtXXej7CMH_cXhs5LW5bDY2N-D5T4W_YtH5TC3gfJwUhyljX0jvgbBw9KePvZvgxIhbqiI0ST-4I2exV-pOAQlza6P-PhLC8wA-hTvAj92EcaGGv6BB0hovH7qV_flEeJ_JOXCev0cazTd-LmjustMsGulomZR-u7uhR-gy6HKt1i_IiLC4i71vp8-B8xUlTMz2GF2u0giNRjHUuuz4Pu7mPOQbtPDbFliBNzQnvWXGBukN9lUrcgvIjZwIHAAno6CLQ4DdwqJ9XMnexSOch65bVvKieJJ6-8STIBWvSJj09w"
+   }
+  ]
+ },
+ "note": "openssl 3.x 独立签名；纯标准库实现必须能验过。exp=2100 年。",
+ "token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImZpeHR1cmUtMjAyNiJ9.eyJ0ZW5hbnRfaWQiOiJ0ZW5hbnQtZml4dHVyZSIsImlzcyI6Imh0dHBzOi8vaWRwLmV4YW1wbGUiLCJhdWQiOiJldm9ndWFyZC1hcGkiLCJleHAiOjQxMDI0NDQ4MDAsInJvbGVzIjpbInJlYWRlciJdfQ.U88OkN3hm1dIdAhxi1hfvENzwmVn2u2ecofBR0ckP2rqEyTKDqVGOprnQdtCt2SPXDZv05Xko0p28orbesp2KTVBHqyVsbrdVjkgS5MMkdn9HEvDGwmo5dwG4ZdBXeRUiev-d0nYiuxGtSZRKUuDsQ79yyTTK9tH-ej-zwAO56EYOuTTfM_j5HVferI1-sMiBkS2bPLz7f-uTv6ri7JBecKeLXhwZK8y4e3boKuY7zUtrxy8CxK26QXUL3tSp_hatuoBHE48ympq2cpMdp42UUUs2bxguEFEtb9-y71bwU-4TkAWAOEeLNxRsXF4OHKBBfJW2WqHrwSsm0fx7bFsHw"
+}

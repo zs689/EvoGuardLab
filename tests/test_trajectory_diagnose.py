@@ -70,7 +70,8 @@ class TestGenericDiagnosis(unittest.TestCase):
         import ast
         path = os.path.join(ROOT, "ai-service", "evoguard",
                             "trajectory_diagnose.py")
-        src = open(path, encoding="utf-8").read()
+        with open(path, encoding="utf-8") as f:
+            src = f.read()
         tree = ast.parse(src)
         tree.body[0].value.value = ""    # 清掉模块 docstring 再查
         code = ast.dump(tree)
