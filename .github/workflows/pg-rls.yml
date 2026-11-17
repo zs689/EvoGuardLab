@@ -1,0 +1,61 @@
+# INT-05：在有 PostgreSQL/Redis 的 CI 环境里跑真 RLS 与多副本压测。
+# 本机无 docker daemon / postgres 二进制，所以这条验证放在 CI。
+name: pg-rls-live
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: evoguard
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+
+    env:
+      PGPASSWORD: postgres
+      EVOGUARD_REDIS_URL: redis://127.0.0.1:6379/0
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 单元测试（零依赖模式）
+        run: python -m unittest discover -s tests -q
+
+      - name: 门禁
+        run: python scripts/review_checks.py --gate
+
+      - name: 真 PostgreSQL RLS（直连 services 里的实例）
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          python scripts/pg_rls_live.py \
+            --dsn "postgresql://postgres:postgres@127.0.0.1:5432/evoguard" \
+            --out docs/review-remediation/probes/pg_rls_live.json
+
+      - name: 双副本 Redis 压测
+        run: python scripts/distributed_stress.py --url "$EVOGUARD_REDIS_URL" \
+               --out docs/review-remediation/probes/distributed_stress.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: probes
+          path: docs/review-remediation/probes/

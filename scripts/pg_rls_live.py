@@ -60,13 +60,60 @@ def _psql(pg_root, port, sql, *, env_tenant=None, db="evo"):
     return _run(cmd, env=env)
 
 
+def _psql_dsn(dsn, sql):
+    """直连已有 PostgreSQL（CI services 场景），用系统 psql。"""
+    return _run(["psql", dsn, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql])
+
+
+def run_dsn(dsn):
+    """不 initdb，直接对已存在的实例验证 RLS（GitHub Actions services 用）。"""
+    _psql_dsn(dsn, "DROP TABLE IF EXISTS runs")
+    _psql_dsn(dsn, SCHEMA)
+    r = _psql_dsn(dsn, P.RLS_DDL)
+    if r.returncode != 0:
+        print("RLS DDL 失败：", (r.stderr or r.stdout)[-400:])
+        return None
+    def count(tenant=None):
+        prefix = ("BEGIN; SET LOCAL app.current_tenant='%s'; " % tenant
+                  if tenant else "BEGIN; ")
+        res = _psql_dsn(dsn, prefix + "SELECT count(*) FROM runs; COMMIT;")
+        try:
+            return int((res.stdout or "").strip().splitlines()[0])
+        except Exception:
+            return None
+    ca, cb, cn = count("A"), count("B"), count(None)
+    rep = {"backend": "real PostgreSQL via DSN (CI services)",
+           "rows_visible": {"tenant_A": ca, "tenant_B": cb, "no_guc": cn},
+           "checks": {"A_sees_only_own": ca == 1,
+                      "B_sees_only_own": cb == 1,
+                      "no_tenant_context_sees_nothing": cn == 0,
+                      "owner_also_restricted": cn == 0}}
+    rep["passed"] = all(rep["checks"].values())
+    return rep
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pg-root", required=True, help="解压后的 pgsql 目录")
+    ap.add_argument("--pg-root", default="", help="解压后的 pgsql 目录（自起实例）")
+    ap.add_argument("--dsn", default="", help="已有实例的 DSN（CI 用，不自起）")
     ap.add_argument("--out", default="")
     ap.add_argument("--keep", action="store_true")
     a = ap.parse_args()
 
+    if a.dsn:
+        rep = run_dsn(a.dsn)
+        if rep is None:
+            return 2
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
+        if a.out:
+            os.makedirs(os.path.dirname(a.out), exist_ok=True)
+            with io.open(a.out, "w", encoding="utf-8", newline="\n") as f:
+                json.dump(rep, f, ensure_ascii=False, indent=2, sort_keys=True)
+                f.write("\n")
+        return 0 if rep["passed"] else 1
+    if not a.pg_root:
+        print("需要 --pg-root 或 --dsn")
+        return 2
     pg = os.path.abspath(a.pg_root)
     if not os.path.isfile(_bin(pg, "initdb")):
         print("找不到 initdb：%s" % pg)
