@@ -1,0 +1,194 @@
+{
+  "sqlite_version": "3.49.1",
+  "rounds": [
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "n": 160,
+      "concurrency": 12,
+      "wall_s": 0.509,
+      "rps": 314.47,
+      "status_counts": {
+        "200": 160
+      },
+      "latency_ms": {
+        "50": 12.73,
+        "95": 61.95,
+        "99": 91.4
+      },
+      "max_bytes": 233,
+      "audit_enabled": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs",
+      "n": 160,
+      "concurrency": 12,
+      "wall_s": 0.642,
+      "rps": 249.24,
+      "status_counts": {
+        "200": 160
+      },
+      "latency_ms": {
+        "50": 8.83,
+        "95": 54.74,
+        "99": 73.8
+      },
+      "max_bytes": 21,
+      "audit_enabled": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/run",
+      "n": 12,
+      "concurrency": 1,
+      "wall_s": 1.46,
+      "rps": 8.22,
+      "status_counts": {
+        "200": 12
+      },
+      "latency_ms": {
+        "50": 116.56,
+        "95": 168.95,
+        "99": 168.95
+      },
+      "max_bytes": 8058,
+      "audit_enabled": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/run",
+      "n": 36,
+      "concurrency": 8,
+      "wall_s": 5.169,
+      "rps": 6.96,
+      "status_counts": {
+        "200": 36
+      },
+      "latency_ms": {
+        "50": 662.86,
+        "95": 3534.7,
+        "99": 3644.21
+      },
+      "max_bytes": 8058,
+      "audit_enabled": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "n": 160,
+      "concurrency": 12,
+      "wall_s": 0.265,
+      "rps": 603.47,
+      "status_counts": {
+        "200": 160
+      },
+      "latency_ms": {
+        "50": 13.68,
+        "95": 56.98,
+        "99": 79.79
+      },
+      "max_bytes": 236,
+      "audit_enabled": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs",
+      "n": 160,
+      "concurrency": 12,
+      "wall_s": 0.304,
+      "rps": 526.07,
+      "status_counts": {
+        "200": 160
+      },
+      "latency_ms": {
+        "50": 19.22,
+        "95": 44.25,
+        "99": 52.72
+      },
+      "max_bytes": 8996,
+      "audit_enabled": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/run",
+      "n": 12,
+      "concurrency": 1,
+      "wall_s": 1.609,
+      "rps": 7.46,
+      "status_counts": {
+        "200": 12
+      },
+      "latency_ms": {
+        "50": 129.06,
+        "95": 174.24,
+        "99": 174.24
+      },
+      "max_bytes": 8058,
+      "audit_enabled": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/run",
+      "n": 36,
+      "concurrency": 8,
+      "wall_s": 5.192,
+      "rps": 6.93,
+      "status_counts": {
+        "200": 36
+      },
+      "latency_ms": {
+        "50": 751.45,
+        "95": 3744.35,
+        "99": 4610.96
+      },
+      "max_bytes": 8059,
+      "audit_enabled": true
+    }
+  ],
+  "retention": {
+    "before": [
+      true,
+      {
+        "reason": "ok",
+        "first_bad_id": null,
+        "checked": 3,
+        "unhashed": 0
+      }
+    ],
+    "deleted": 1,
+    "after": [
+      false,
+      {
+        "reason": "prev_mismatch",
+        "first_bad_id": 2,
+        "checked": 0,
+        "unhashed": 0
+      }
+    ]
+  },
+  "db": {
+    "runs": 96,
+    "journal_mode": "delete",
+    "query_plan": [
+      [
+        6,
+        0,
+        216,
+        "SCAN r"
+      ],
+      [
+        8,
+        0,
+        46,
+        "SEARCH e USING INDEX sqlite_autoindex_experiments_1 (id=?) LEFT-JOIN"
+      ],
+      [
+        39,
+        0,
+        0,
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    ]
+  }
+}

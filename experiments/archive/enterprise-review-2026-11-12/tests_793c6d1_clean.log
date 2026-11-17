@@ -1,0 +1,32 @@
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/health", "request_id": "44c90f1d9e5e4dc8879694eebed8cafa", "status": 200, "ts": "2026-11-12T13:58:36.134657+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/meta", "request_id": "7c619743289e489b877e4ae853eaf221", "status": 200, "ts": "2026-11-12T13:58:36.135646+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/metrics", "request_id": "bfd387057ba548698453c960fff71ff6", "status": 404, "ts": "2026-11-12T13:58:36.150830+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "POST", "path": "/api/run", "request_id": "755a674ee1024a228e95297e75de0d48", "status": 400, "ts": "2026-11-12T13:58:36.152431+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "POST", "path": "/api/run", "request_id": "e0d1a42879054cf497957e6ca28bf3e4", "status": 400, "ts": "2026-11-12T13:58:36.162730+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "POST", "path": "/api/run", "request_id": "13aafd96908d4bbabafc59500ddda828", "status": 400, "ts": "2026-11-12T13:58:36.162730+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "POST", "path": "/api/run", "request_id": "38f62b96b2344749947326c92df17ef6", "status": 400, "ts": "2026-11-12T13:58:36.175609+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "POST", "path": "/api/run", "request_id": "3e77b05973f34d6291b85f6dabeac691", "status": 400, "ts": "2026-11-12T13:58:36.187760+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "POST", "path": "/api/run", "request_id": "9d4de7959b2d47afb2d7f556fb29956b", "status": 200, "ts": "2026-11-12T13:58:36.329792+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "POST", "path": "/api/run", "request_id": "ed8f3c19374e44bbab1eb910392e066f", "status": 400, "ts": "2026-11-12T13:58:36.341980+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/real-model", "request_id": "7eac74c16eee4675a00fa7010cc1ab3d", "status": 200, "ts": "2026-11-12T13:58:36.353223+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/skills", "request_id": "8712108fec6e4dd88262415d859b1a6d", "status": 200, "ts": "2026-11-12T13:58:36.366851+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/experiences", "request_id": "780e6061a354405fad9a8c333a640d98", "status": 200, "ts": "2026-11-12T13:58:36.370948+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/runs", "request_id": "461f6719c49a426eac7a647d3f1cd408", "status": 200, "ts": "2026-11-12T13:58:36.375209+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/taxonomy", "request_id": "d12742445adb41d9bee181dddd6903c4", "status": 200, "ts": "2026-11-12T13:58:36.375209+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/report", "request_id": "613188559c194ec8a09bb39d761d09ae", "status": 200, "ts": "2026-11-12T13:58:36.387830+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/nope", "request_id": "5184b9e1a66642108c303d4cf2e7be66", "status": 404, "ts": "2026-11-12T13:58:36.387830+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/runs/does_not_exist", "request_id": "ffdd8e687b1c4adbbe2ccd7cfb4382be", "status": 404, "ts": "2026-11-12T13:58:36.389898+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/", "request_id": "1fb03017944b419ca7bee59eb59526bc", "status": 200, "ts": "2026-11-12T13:58:36.908525+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/nope", "request_id": "06c206d90140481aa33f998a67bfae79", "status": 404, "ts": "2026-11-12T13:58:36.909883+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/", "request_id": "1459def5066a4384a5fd482d20c203a5", "status": 200, "ts": "2026-11-12T13:58:36.925197+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/health", "request_id": "b5ef6d733272416fb9365fddd1762527", "status": 200, "ts": "2026-11-12T13:58:36.966786+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/api/nope", "request_id": "82b844c94bd74a9f88ac3ef1c3548311", "status": 404, "ts": "2026-11-12T13:58:36.966786+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/../ai-service/api/app.py", "request_id": "1ba420b9e3cf4f58b5dfb956e85dd5e9", "status": 404, "ts": "2026-11-12T13:58:36.979345+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/static/../../ai-service/api/app.py", "request_id": "dc212fc02f704faf8e80b9f01796a3b3", "status": 404, "ts": "2026-11-12T13:58:36.980553+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/..%2f..%2fREADME.md", "request_id": "c89e790b89f24d5d8b6058de114aef8c", "status": 404, "ts": "2026-11-12T13:58:36.981558+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/%2e%2e/%2e%2e/README.md", "request_id": "a027947e8b6544238807a6ef69ad3e9c", "status": 404, "ts": "2026-11-12T13:58:36.981558+00:00"}
+{"actor": "anonymous", "decision": "allowed", "method": "GET", "path": "/../.git/config", "request_id": "7cf5a6f712ef4b42bf5874e3ac5cb80e", "status": 404, "ts": "2026-11-12T13:58:36.982553+00:00"}
+----------------------------------------------------------------------
+Ran 858 tests in 35.384s
+
+OK (skipped=42)
