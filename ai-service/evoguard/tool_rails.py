@@ -145,6 +145,13 @@ def _as_text(v):
 # 只有「结构契约覆盖不到」的地方才在调用侧挂检查；返回侧全量挂职责检查。
 DEFAULT_RAILS = {
     "kb.search": {"call": [], "result": ["regex", "hidden_ascii", "action_scope"]},
+    # INT-01-T2：输出侧事实核验正式启用。单独一个工具名而不是塞进 kb.search，
+    # 是因为它需要 payload 带 evidence_sections；塞进普通检索会让每次调用都
+    # 报一条 evidence_no_source，把真正的信号淹掉。
+    "kb.answer_grounded": {
+        "call": [],
+        "result": ["regex", "hidden_ascii", "action_scope",
+                   {"scanner": "evidence_grounding"}]},
     "kb.search_all": {"call": [], "result": ["regex", "hidden_ascii", "action_scope"]},
     "order.get_order": {"call": [], "result": ["regex", "hidden_ascii", "action_scope"]},
     "order.get_quote_order": {"call": [], "result": ["regex", "hidden_ascii", "action_scope"]},

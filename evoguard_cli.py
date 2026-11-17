@@ -122,6 +122,75 @@ def cmd_scan(a):
     return 0
 
 
+def cmd_react(a):
+    """INT-01-T2：CLI 驱动真实多轮 ReAct Agent。"""
+    import autonomous_agent as AA
+    import tool_registry as TR
+    reg = TR.ToolRegistry()
+    for spec in (a.tool or []):
+        try:
+            name, _, schema = spec.partition("=")
+            reg.from_json_schema(name, json.loads(schema) if schema else {},
+                                 source="cli")
+        except ValueError:
+            print("工具定义不合法：%r" % spec)
+            return 2
+    if not (a.tool or []):
+        reg = TR.REGISTRY
+    calls = []
+
+    def executor(tool, args):
+        calls.append({"tool": tool, "args": args})
+        return {"ok": True, "stub": True}
+
+    out = AA.ReActAgent(agent_type=a.agent_type, goal=a.goal, registry=reg,
+                        executor=executor if a.executor == "stub" else None,
+                        max_steps=a.max_steps).run()
+    if a.json:
+        print(json.dumps({"answer": out["answer"],
+                          "stopped_by": out["stopped_by"],
+                          "contract": out["contract"],
+                          "calls": calls}, ensure_ascii=False, indent=2))
+    else:
+        print("answer=%s" % out["answer"])
+        print("stopped_by=%s" % out["stopped_by"])
+        print("executed=%s effect=%s" % (out["contract"]["executed"],
+                                         out["contract"]["effect"]))
+        for c in calls:
+            print("  called: %s %s" % (c["tool"], c["args"]))
+    return 0
+
+
+def cmd_synth(a):
+    """INT-01-T2：从轨迹 JSON 合成候选 Skill 并跑沙箱门禁（不自动晋升）。"""
+    import core
+    import skill_synthesis as SS
+    with open(a.trace, encoding="utf-8") as f:
+        data = json.load(f)
+    steps = data.get("steps") if isinstance(data, dict) else data
+    import tempfile
+    # core.Store 需要真实文件路径（:memory: 时 dirname 为空会 makedirs('') 失败）
+    db = a.db or tempfile.mktemp(prefix="evo-synth-", suffix=".db")
+    store = core.Store(db)
+    try:
+        out = SS.synthesize(store, steps, task_type=a.task_type)
+    finally:
+        store.close()
+    if a.json:
+        print(json.dumps({"diagnosis": out["diagnosis"],
+                          "accepted": out["accepted"],
+                          "skill_id": (out["skill"] or {}).get("id")},
+                         ensure_ascii=False, indent=2, default=str))
+    else:
+        d = out["diagnosis"]
+        print("root_cause=%s first_bad_step=%s"
+              % (d.get("root_cause"), d.get("first_bad_step")))
+        print("accepted=%s" % out["accepted"].get("accepted"))
+        if not out["accepted"].get("accepted"):
+            print("errors=%s" % out["accepted"].get("errors"))
+    return 0
+
+
 def cmd_intent(a):
     """执行前意图门禁（需要本地模型；没有模型会转 review，不会静默放行）。"""
     import security
@@ -258,6 +327,24 @@ def main(argv=None):
     p.add_argument("--tool", help="工具名；给了就走完整返回值守卫（含职责判断）")
     p.add_argument("--json", action="store_true", help="输出 JSON")
     p.set_defaults(func=cmd_scan)
+
+    p = sub.add_parser("react", help="多轮 ReAct Agent（INT-01 主路径）")
+    p.add_argument("goal", help="任务目标")
+    p.add_argument("--agent-type", default="react")
+    p.add_argument("--tool", action="append",
+                   help='工具定义 name={"type":"object",...}，可多次')
+    p.add_argument("--executor", default="none", choices=["none", "stub"],
+                   help="none=不执行真实副作用；stub=只读桩")
+    p.add_argument("--max-steps", type=int, default=4)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_react)
+
+    p = sub.add_parser("synth", help="从轨迹合成候选 Skill（INT-01 主路径）")
+    p.add_argument("trace", help="轨迹 JSON 文件（含 steps 数组）")
+    p.add_argument("--task-type", default="newdomain")
+    p.add_argument("--db", default="")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_synth)
 
     p = sub.add_parser("intent", help="执行前意图门禁（需本地模型）")
     p.add_argument("agent")

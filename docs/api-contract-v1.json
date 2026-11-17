@@ -6,7 +6,14 @@
   "compatibility": {
     "policy": "新增字段向后兼容；删除/改名/改语义需升主版本并给出迁移窗口。",
     "deprecation": "先在响应里加 deprecated 标记，至少保留一个版本再移除。",
-    "frozen_fields": ["detected", "decision", "attempted", "executed", "effect", "reason"],
+    "frozen_fields": [
+      "detected",
+      "decision",
+      "attempted",
+      "executed",
+      "effect",
+      "reason"
+    ],
     "note": "六字段契约表示「检测建议 != 实际拦截」，任何版本都不允许把 detected 当作 executed 报。"
   },
   "base": {
@@ -30,9 +37,23 @@
       "scheme": "Authorization: Bearer <token>",
       "token_whitelist": "AGENTLAB_IDENTITY_MAP 的键",
       "identity_source": "token -> {tenant, actor, roles}",
-      "ignored_headers": ["X-Tenant-Id", "X-Actor"],
-      "roles": ["reader", "executor", "approver", "ops"],
-      "startup_fail_closed": ["AGENTLAB_API_TOKEN", "AGENTLAB_IDENTITY_MAP", "AGENTLAB_AUDIT_DB", "AGENTLAB_DB", "AGENTLAB_APPROVAL_BACKEND"]
+      "ignored_headers": [
+        "X-Tenant-Id",
+        "X-Actor"
+      ],
+      "roles": [
+        "reader",
+        "executor",
+        "approver",
+        "ops"
+      ],
+      "startup_fail_closed": [
+        "AGENTLAB_API_TOKEN",
+        "AGENTLAB_IDENTITY_MAP",
+        "AGENTLAB_AUDIT_DB",
+        "AGENTLAB_DB",
+        "AGENTLAB_APPROVAL_BACKEND"
+      ]
     }
   },
   "common_request_headers": {
@@ -59,23 +80,89 @@
     "rate_window_default_seconds": 60
   },
   "errors": {
-    "shape": {"error": {"code": "string", "message": "string"}, "request_id": "string"},
+    "shape": {
+      "error": {
+        "code": "string",
+        "message": "string"
+      },
+      "request_id": "string"
+    },
     "codes": [
-      {"code": "E_BAD_REQUEST", "http": 400, "meaning": "请求体/参数不合法"},
-      {"code": "E_TOO_LARGE", "http": 413, "meaning": "请求体超过硬上限"},
-      {"code": "E_FORBIDDEN", "http": 403, "meaning": "身份无对应角色"},
-      {"code": "E_NOT_FOUND", "http": 404, "meaning": "路由或资源不存在"},
-      {"code": "E_UNAVAILABLE", "http": 503, "meaning": "依赖未启用"},
-      {"code": "E_NOT_READY", "http": 503, "meaning": "企业模式缺审批后端，写工具禁用"},
-      {"code": "E_OVERLOADED", "http": 503, "meaning": "作业队列已满"},
-      {"code": "E_CONFLICT", "http": 409, "meaning": "作业状态不允许该操作（如重放 succeeded）"},
-      {"code": "E_INTERNAL", "http": 500, "meaning": "内部错误；**不含堆栈**，只给 request_id"},
-      {"code": "identity_not_bound", "http": 401, "meaning": "token 不在身份映射表"},
-      {"code": "rate_limited", "http": 429, "meaning": "限流；带 retry_after"},
-      {"code": "tenant_quota", "http": 429, "meaning": "租户配额耗尽"},
-      {"code": "kill_switch", "http": 503, "meaning": "停止开关拦下写请求"},
-      {"code": "body_too_large", "http": 413, "meaning": "入口守卫拒收大 body"},
-      {"code": "invalid_tenant", "http": 400, "meaning": "demo 模式租户头不合法"}
+      {
+        "code": "E_BAD_REQUEST",
+        "http": 400,
+        "meaning": "请求体/参数不合法"
+      },
+      {
+        "code": "E_TOO_LARGE",
+        "http": 413,
+        "meaning": "请求体超过硬上限"
+      },
+      {
+        "code": "E_FORBIDDEN",
+        "http": 403,
+        "meaning": "身份无对应角色"
+      },
+      {
+        "code": "E_NOT_FOUND",
+        "http": 404,
+        "meaning": "路由或资源不存在"
+      },
+      {
+        "code": "E_UNAVAILABLE",
+        "http": 503,
+        "meaning": "依赖未启用"
+      },
+      {
+        "code": "E_NOT_READY",
+        "http": 503,
+        "meaning": "企业模式缺审批后端，写工具禁用"
+      },
+      {
+        "code": "E_OVERLOADED",
+        "http": 503,
+        "meaning": "作业队列已满"
+      },
+      {
+        "code": "E_CONFLICT",
+        "http": 409,
+        "meaning": "作业状态不允许该操作（如重放 succeeded）"
+      },
+      {
+        "code": "E_INTERNAL",
+        "http": 500,
+        "meaning": "内部错误；**不含堆栈**，只给 request_id"
+      },
+      {
+        "code": "identity_not_bound",
+        "http": 401,
+        "meaning": "token 不在身份映射表"
+      },
+      {
+        "code": "rate_limited",
+        "http": 429,
+        "meaning": "限流；带 retry_after"
+      },
+      {
+        "code": "tenant_quota",
+        "http": 429,
+        "meaning": "租户配额耗尽"
+      },
+      {
+        "code": "kill_switch",
+        "http": 503,
+        "meaning": "停止开关拦下写请求"
+      },
+      {
+        "code": "body_too_large",
+        "http": 413,
+        "meaning": "入口守卫拒收大 body"
+      },
+      {
+        "code": "invalid_tenant",
+        "http": 400,
+        "meaning": "demo 模式租户头不合法"
+      }
     ]
   },
   "pagination": {
@@ -85,36 +172,296 @@
       "cursor": "上一页最后一条的 started_at；WHERE started_at < cursor"
     },
     "order": "started_at DESC, id DESC（稳定排序键）",
-    "response": {"n": "本页条数", "items": "数组", "limit": "生效上限", "next_cursor": "下一页游标或 null"},
+    "response": {
+      "n": "本页条数",
+      "items": "数组",
+      "limit": "生效上限",
+      "next_cursor": "下一页游标或 null"
+    },
     "note": "响应体大小不随历史总量线性增长。"
   },
   "routes": [
-    {"method": "GET", "path": "/api/live", "kind": "probe", "auth_in_enterprise": true, "description": "存活：不碰 DB、不进业务 SLI", "response": {"ok": true}},
-    {"method": "GET", "path": "/healthz", "kind": "probe", "auth_in_enterprise": true, "description": "存活探针别名"},
-    {"method": "GET", "path": "/api/ready", "kind": "probe", "auth_in_enterprise": true, "description": "就绪：DB/审计不满足返回 503", "response": {"ready": "bool", "checks": {}, "audit": {}}},
-    {"method": "GET", "path": "/api/health", "kind": "diagnostic", "auth_in_enterprise": true, "description": "诊断信息（保留原字段）", "response": {"ok": true, "version": "string", "mode": "string", "tenant": "string"}},
-    {"method": "GET", "path": "/api/metrics", "kind": "business", "auth_in_enterprise": true, "description": "前端唯一 JSON 数字来源；缺失返回 404", "errors": ["E_NOT_FOUND"]},
-    {"method": "GET", "path": "/api/metrics/prometheus", "kind": "metrics", "auth_in_enterprise": true, "description": "Prometheus 文本", "content_type": "text/plain; version=0.0.4; charset=utf-8"},
-    {"method": "GET", "path": "/metrics", "kind": "metrics", "auth_in_enterprise": true, "description": "Prometheus 抓取根路径", "content_type": "text/plain; version=0.0.4; charset=utf-8"},
-    {"method": "GET", "path": "/api/meta", "kind": "business", "auth_in_enterprise": true, "description": "Agent/故障/任务/组合元数据"},
-    {"method": "GET", "path": "/api/real-model", "kind": "business", "auth_in_enterprise": true, "description": "真实模型评测进度；不用 mtime 冒充完成"},
-    {"method": "GET", "path": "/api/taxonomy", "kind": "business", "auth_in_enterprise": true, "description": "故障分类法 Markdown"},
-    {"method": "GET", "path": "/api/report", "kind": "business", "auth_in_enterprise": true, "description": "实验报告 Markdown"},
-    {"method": "GET", "path": "/api/skills", "kind": "business", "auth_in_enterprise": true, "description": "技能库列表"},
-    {"method": "GET", "path": "/api/experiences", "kind": "business", "auth_in_enterprise": true, "description": "经验库列表"},
-    {"method": "GET", "path": "/api/runs", "kind": "business", "auth_in_enterprise": true, "description": "运行历史（游标分页）", "pagination": true},
-    {"method": "GET", "path": "/api/runs/{rid}", "kind": "business", "auth_in_enterprise": true, "description": "单次运行详情：steps/diagnoses/recoveries/faults"},
-    {"method": "POST", "path": "/api/run", "kind": "business", "auth_in_enterprise": true, "roles_required": ["executor"], "description": "触发一次实验运行（同步，兼容期保留）；企业模式还需审批后端", "request": {"agent_type": "string", "task_id": "string", "fault_type": "string", "mode": "baseline|A|B|C|D|R", "fault_chain": "optional array"}, "errors": ["E_BAD_REQUEST", "E_FORBIDDEN", "E_NOT_READY"]},
-    {"method": "POST", "path": "/api/jobs", "kind": "job", "auth_in_enterprise": true, "roles_required": ["executor"], "description": "提交持久作业；只写一行即返回，单 worker 顺序执行", "idempotency": "Idempotency-Key 头或 idempotency_key 字段；同租户同键返回原作业（200），不重复产生副作用", "request": {"payload": "与 /api/run 相同的对象", "idempotency_key": "optional string"}, "response": {"job": "作业对象", "created": "bool"}, "status_codes": {"202": "新作业", "200": "幂等命中已有作业"}, "errors": ["E_BAD_REQUEST", "E_OVERLOADED"]},
-    {"method": "GET", "path": "/api/jobs", "kind": "job", "auth_in_enterprise": true, "description": "按租户列出作业（limit 上限 200）"},
-    {"method": "GET", "path": "/api/jobs/{job_id}", "kind": "job", "auth_in_enterprise": true, "description": "轮询单个作业状态", "states": ["queued", "running", "succeeded", "failed", "canceled", "unknown"], "errors": ["E_NOT_FOUND"]},
-    {"method": "POST", "path": "/api/jobs/{job_id}/cancel", "kind": "job", "auth_in_enterprise": true, "description": "取消仍在排队的作业；已运行的不能假装没跑过", "response": {"canceled": "bool", "job_id": "string"}},
-    {"method": "POST", "path": "/api/jobs/{job_id}/retry", "kind": "job", "auth_in_enterprise": true, "description": "人工对账后显式重放 unknown/failed/canceled；succeeded 不可重放", "errors": ["E_CONFLICT"]}
+    {
+      "method": "GET",
+      "path": "/api/live",
+      "kind": "probe",
+      "auth_in_enterprise": true,
+      "description": "存活：不碰 DB、不进业务 SLI",
+      "response": {
+        "ok": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "kind": "probe",
+      "auth_in_enterprise": true,
+      "description": "存活探针别名"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ready",
+      "kind": "probe",
+      "auth_in_enterprise": true,
+      "description": "就绪：DB/审计不满足返回 503",
+      "response": {
+        "ready": "bool",
+        "checks": {},
+        "audit": {}
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "kind": "diagnostic",
+      "auth_in_enterprise": true,
+      "description": "诊断信息（保留原字段）",
+      "response": {
+        "ok": true,
+        "version": "string",
+        "mode": "string",
+        "tenant": "string"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/metrics",
+      "kind": "business",
+      "auth_in_enterprise": true,
+      "description": "前端唯一 JSON 数字来源；缺失返回 404",
+      "errors": [
+        "E_NOT_FOUND"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/metrics/prometheus",
+      "kind": "metrics",
+      "auth_in_enterprise": true,
+      "description": "Prometheus 文本",
+      "content_type": "text/plain; version=0.0.4; charset=utf-8"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "kind": "metrics",
+      "auth_in_enterprise": true,
+      "description": "Prometheus 抓取根路径",
+      "content_type": "text/plain; version=0.0.4; charset=utf-8"
+    },
+    {
+      "method": "GET",
+      "path": "/api/meta",
+      "kind": "business",
+      "auth_in_enterprise": true,
+      "description": "Agent/故障/任务/组合元数据"
+    },
+    {
+      "method": "GET",
+      "path": "/api/real-model",
+      "kind": "business",
+      "auth_in_enterprise": true,
+      "description": "真实模型评测进度；不用 mtime 冒充完成"
+    },
+    {
+      "method": "GET",
+      "path": "/api/taxonomy",
+      "kind": "business",
+      "auth_in_enterprise": true,
+      "description": "故障分类法 Markdown"
+    },
+    {
+      "method": "GET",
+      "path": "/api/report",
+      "kind": "business",
+      "auth_in_enterprise": true,
+      "description": "实验报告 Markdown"
+    },
+    {
+      "method": "GET",
+      "path": "/api/skills",
+      "kind": "business",
+      "auth_in_enterprise": true,
+      "description": "技能库列表"
+    },
+    {
+      "method": "GET",
+      "path": "/api/experiences",
+      "kind": "business",
+      "auth_in_enterprise": true,
+      "description": "经验库列表"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs",
+      "kind": "business",
+      "auth_in_enterprise": true,
+      "description": "运行历史（游标分页）",
+      "pagination": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs/{rid}",
+      "kind": "business",
+      "auth_in_enterprise": true,
+      "description": "单次运行详情：steps/diagnoses/recoveries/faults"
+    },
+    {
+      "method": "POST",
+      "path": "/api/run",
+      "kind": "business",
+      "auth_in_enterprise": true,
+      "roles_required": [
+        "executor"
+      ],
+      "description": "触发一次实验运行（同步，兼容期保留）；企业模式还需审批后端",
+      "request": {
+        "agent_type": "string",
+        "task_id": "string",
+        "fault_type": "string",
+        "mode": "baseline|A|B|C|D|R",
+        "fault_chain": "optional array"
+      },
+      "errors": [
+        "E_BAD_REQUEST",
+        "E_FORBIDDEN",
+        "E_NOT_READY"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs",
+      "kind": "job",
+      "auth_in_enterprise": true,
+      "roles_required": [
+        "executor"
+      ],
+      "description": "提交持久作业；只写一行即返回，单 worker 顺序执行",
+      "idempotency": "Idempotency-Key 头或 idempotency_key 字段；同租户同键返回原作业（200），不重复产生副作用",
+      "request": {
+        "payload": "与 /api/run 相同的对象",
+        "idempotency_key": "optional string"
+      },
+      "response": {
+        "job": "作业对象",
+        "created": "bool"
+      },
+      "status_codes": {
+        "202": "新作业",
+        "200": "幂等命中已有作业"
+      },
+      "errors": [
+        "E_BAD_REQUEST",
+        "E_OVERLOADED"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs",
+      "kind": "job",
+      "auth_in_enterprise": true,
+      "description": "按租户列出作业（limit 上限 200）"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/{job_id}",
+      "kind": "job",
+      "auth_in_enterprise": true,
+      "description": "轮询单个作业状态",
+      "states": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "canceled",
+        "unknown"
+      ],
+      "errors": [
+        "E_NOT_FOUND"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/cancel",
+      "kind": "job",
+      "auth_in_enterprise": true,
+      "description": "取消仍在排队的作业；已运行的不能假装没跑过",
+      "response": {
+        "canceled": "bool",
+        "job_id": "string"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/retry",
+      "kind": "job",
+      "auth_in_enterprise": true,
+      "description": "人工对账后显式重放 unknown/failed/canceled；succeeded 不可重放",
+      "errors": [
+        "E_CONFLICT"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/react/run",
+      "kind": "agent",
+      "auth_in_enterprise": true,
+      "description": "驱动真实多轮 ReAct Agent；每次工具调用强制走 execution.preflight，越权/契约不通过时不执行（executed=false）",
+      "request": {
+        "goal": "string",
+        "agent_type": "string?",
+        "max_steps": "int?",
+        "tools": "[{name,schema}]?",
+        "executor": "none|stub?"
+      },
+      "response": {
+        "answer": "string|null",
+        "stopped_by": "string|null",
+        "contract": "{detected,decision,attempted,executed,effect,reason}",
+        "steps": "[{seq,kind,tool,executed,result_codes}]"
+      },
+      "errors": [
+        "E_BAD_REQUEST"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/skills/synthesize",
+      "kind": "skill",
+      "auth_in_enterprise": true,
+      "description": "从失败轨迹做通用根因诊断并合成候选 Skill，过 conditional_skill 沙箱门禁；不自动晋升（晋升需独立验证集 A/B）",
+      "request": {
+        "steps": "[{seq,logical,name,status,error_type,output}]",
+        "task_type": "string?",
+        "expected_total": "number?",
+        "policy": "object?"
+      },
+      "response": {
+        "diagnosis": "{root_cause,first_bad_step,confidence}",
+        "accepted": "{accepted,fingerprint?,errors?}",
+        "skill": "{id,name,status}|null"
+      },
+      "errors": [
+        "E_BAD_REQUEST"
+      ]
+    }
   ],
   "static_routes": [
-    {"method": "GET", "path": "/", "description": "前端首页"},
-    {"method": "GET", "path": "/index.html", "description": "前端首页"},
-    {"method": "GET", "path": "/static/{path}", "description": "静态资源；路径穿越一律 404"}
+    {
+      "method": "GET",
+      "path": "/",
+      "description": "前端首页"
+    },
+    {
+      "method": "GET",
+      "path": "/index.html",
+      "description": "前端首页"
+    },
+    {
+      "method": "GET",
+      "path": "/static/{path}",
+      "description": "静态资源；路径穿越一律 404"
+    }
   ],
   "jobs": {
     "store": "每租户独立 jobs.db（与业务库分开，避免抢同一把 sqlite 写锁）",
@@ -123,7 +470,10 @@
     "lease_seconds": 120,
     "recovery": "进程重启时过期租约标 unknown，**不自动重放**（副作用可能已发生）；需人工对账后调用 retry",
     "idempotency": "UNIQUE(tenant_id, idempotency_key)",
-    "known_limits": ["单进程单 worker；多副本需共享队列与分布式租约", "runtime.FORCED_SKILL 是进程级全局，用执行锁串行化但未改 runtime 本身"]
+    "known_limits": [
+      "单进程单 worker；多副本需共享队列与分布式租约",
+      "runtime.FORCED_SKILL 是进程级全局，用执行锁串行化但未改 runtime 本身"
+    ]
   },
   "audit": {
     "store": "AGENTLAB_AUDIT_DB（sqlite）",
@@ -134,12 +484,30 @@
     "probe_exclusion": "探针请求不写业务审计行"
   },
   "six_field_contract": [
-    {"field": "detected", "meaning": "检测器是否命中"},
-    {"field": "decision", "meaning": "守卫给出的建议"},
-    {"field": "attempted", "meaning": "是否尝试调用工具"},
-    {"field": "executed", "meaning": "工具是否真的执行（真实副作用）"},
-    {"field": "effect", "meaning": "产生了什么效果"},
-    {"field": "reason", "meaning": "判定原因"}
+    {
+      "field": "detected",
+      "meaning": "检测器是否命中"
+    },
+    {
+      "field": "decision",
+      "meaning": "守卫给出的建议"
+    },
+    {
+      "field": "attempted",
+      "meaning": "是否尝试调用工具"
+    },
+    {
+      "field": "executed",
+      "meaning": "工具是否真的执行（真实副作用）"
+    },
+    {
+      "field": "effect",
+      "meaning": "产生了什么效果"
+    },
+    {
+      "field": "reason",
+      "meaning": "判定原因"
+    }
   ],
   "known_gaps": [
     "持久作业已提供（/api/jobs），但同步 /api/run 仍在兼容期；单进程单 worker，多副本需共享队列与分布式租约（EG-009 部分完成）。",

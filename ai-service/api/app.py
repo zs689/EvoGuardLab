@@ -89,6 +89,73 @@ VERSION = _read_version()
 # 单一全局实例：限流窗口需要在多线程间共享（check_rate 内用 Lock 保护）。
 CONTROLS = service_controls.ServiceControls.from_env()
 
+
+# ---- INT-01-T1：可选分布式后端装配（按 env 真实切换，不悬空）-------------
+# 默认全走进程内实现（零依赖）；只有显式配置才启用 Redis/JWT。
+# 启动时一次性装配并把失败原因记下来，供 /api/ready 如实上报。
+def _build_backends():
+    """返回 {limiter, breaker, queue, auth, redis, errors}。
+
+    **不静默降级**：配了 EVOGUARD_REDIS_URL 但连不上时，
+    limiter 保持 None 并记录 error，/api/ready 会因此 503 ——
+    比悄悄退回内存限流（多副本配额翻倍）安全。
+    """
+    import distributed as _dist
+    b = {"limiter": None, "breaker": None, "queue": None,
+         "auth": None, "redis_url": "", "errors": [],
+         "auth_mode": (os.environ.get("EVOGUARD_AUTH_MODE") or "").strip().lower()}
+    url = (os.environ.get("EVOGUARD_REDIS_URL") or "").strip()
+    if url:
+        b["redis_url"] = url
+        try:
+            import redis_backend as _rb
+            if not _rb.health(url):
+                b["errors"].append("redis_unhealthy")
+            else:
+                b["limiter"] = _rb.RedisLimiter(url=url)
+                b["breaker"] = _rb.RedisCircuitBreaker(url=url)
+                b["queue"] = _rb.RedisJobQueue(url=url)
+        except Exception as exc:                       # noqa: BLE001
+            b["errors"].append("redis_init:%s" % type(exc).__name__)
+    mode = b["auth_mode"]
+    if mode in ("jwt_hs256", "jwt_rs256"):
+        try:
+            if mode == "jwt_hs256":
+                import jwt_hs256 as _jwt
+                secret = os.environ.get("EVOGUARD_JWT_SECRET") or ""
+                if not secret:
+                    b["errors"].append("jwt_secret_missing")
+                else:
+                    b["auth"] = _dist.TenantResolver(
+                        verifier=_jwt.tenant_verifier(
+                            secret,
+                            issuer=os.environ.get("EVOGUARD_JWT_ISSUER") or None,
+                            audience=os.environ.get("EVOGUARD_JWT_AUDIENCE") or None))
+            else:
+                import jwt_rs256 as _rs
+                b["auth"] = _dist.TenantResolver(
+                    verifier=_rs.oidc_verifier(
+                        issuer=os.environ.get("EVOGUARD_OIDC_ISSUER") or None,
+                        jwks_uri=os.environ.get("EVOGUARD_JWKS_URL") or None,
+                        audience=os.environ.get("EVOGUARD_JWT_AUDIENCE") or None))
+        except Exception as exc:                       # noqa: BLE001
+            b["errors"].append("auth_init:%s" % type(exc).__name__)
+    elif mode:
+        b["errors"].append("unknown_auth_mode:%s" % mode)
+    return b
+
+
+BACKENDS = _build_backends()
+
+
+def _check_rate(actor):
+    """限流：配了 Redis 就走跨副本共享，否则退回进程内（原有行为）。"""
+    lim = BACKENDS.get("limiter")
+    if lim is not None:
+        return lim.check(actor, CONTROLS.config.rate_limit,
+                         CONTROLS.config.rate_window)
+    return CONTROLS.check_rate(actor)
+
 # AgentWatch 入口防护。**默认 enforce** —— 与 security.DEFAULT_MODE=audit
 # 相反：这里命中高危直接拒绝，不是只记账。
 #   AGENTLAB_AGENT_WATCH=off    → 完全关闭
@@ -290,6 +357,9 @@ ROUTES = [
     ("GET", r"^/api/jobs/([\w\-]+)$", "h_job_get"),
     ("POST", r"^/api/jobs/([\w\-]+)/cancel$", "h_job_cancel"),
     ("POST", r"^/api/jobs/([\w\-]+)/retry$", "h_job_retry"),
+    # INT-01-T2：ReAct 与 Skill 合成走主入口
+    ("POST", r"^/api/react/run$", "h_react_run"),
+    ("POST", r"^/api/skills/synthesize$", "h_skill_synthesize"),
 ]
 
 
@@ -725,7 +795,7 @@ class Handler(BaseHTTPRequestHandler):
             ok, reason, actor = CONTROLS.authorize(self.headers)
             if not ok:
                 return self._reject(401, rid, method, path, actor, reason)
-        allowed, retry_after = CONTROLS.check_rate(actor)
+        allowed, retry_after = _check_rate(actor)
         if not allowed:
             return self._reject(429, rid, method, path, actor,
                                 "rate_limited", retry_after)
@@ -813,12 +883,26 @@ class Handler(BaseHTTPRequestHandler):
             "audit": audit["ok"] if MODE == "enterprise"
                      else (AUDIT is None or audit["ok"]),
         }
+        # INT-01-T1：配了外部后端就必须真的连得上，否则摘流量。
+        backend = {"redis_url": BACKENDS.get("redis_url", ""),
+                   "limiter": (BACKENDS.get("limiter").kind()
+                               if BACKENDS.get("limiter") else "memory"),
+                   "auth_mode": BACKENDS.get("auth_mode") or "off",
+                   "errors": list(BACKENDS.get("errors") or [])}
+        if BACKENDS.get("redis_url"):
+            try:
+                import redis_backend as _rb
+                checks["redis"] = bool(_rb.health(BACKENDS["redis_url"]))
+            except Exception:                          # noqa: BLE001
+                checks["redis"] = False
+        checks["backends"] = not BACKENDS.get("errors")
         ready = all(checks.values())
         self._send(200 if ready else 503, {
             "ready": ready,
             "mode": MODE,
             "checks": checks,
             "audit": audit,
+            "backends": backend,
             "version": VERSION,
         })
 
@@ -902,6 +986,97 @@ class Handler(BaseHTTPRequestHandler):
 
     def h_report(self):
         self._send(200, {"markdown": _read_text(REPORT, "（未生成报告）")})
+
+    def h_react_run(self):
+        """INT-01-T2：驱动真实多轮 ReAct Agent（工具走 tool_registry + preflight）。
+
+        body: {"goal": str, "agent_type": str, "max_steps": int,
+               "tools": [{"name":..., "schema":{...}}]?, "executor":"none|stub"}
+        默认不执行任何真实副作用：executor=none 时工具调用一律 executed=False，
+        只有显式 "stub" 才用只读桩执行器（用于演示/集成测试）。
+        """
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+        except Exception:
+            return self._err("E_BAD_REQUEST", "请求体不是合法 JSON")
+        if not isinstance(body, dict):
+            return self._err("E_BAD_REQUEST", "payload 必须是对象")
+        goal = str(body.get("goal") or "").strip()
+        if not goal:
+            return self._reject(400, self._rid, "POST", "/api/react/run",
+                                "anonymous", "goal_required")
+        try:
+            import autonomous_agent as AA
+            import tool_registry as TR
+            reg = TR.ToolRegistry()
+            for t in (body.get("tools") or []):
+                if isinstance(t, dict) and t.get("name"):
+                    reg.from_json_schema(str(t["name"]), t.get("schema") or {},
+                                         source="api")
+            if not (body.get("tools") or []):
+                # 未提供工具时用内置注册表快照（只读模拟工具）
+                reg = TR.REGISTRY
+            agent_type = str(body.get("agent_type") or "react")
+            mode = str(body.get("executor") or "none").lower()
+            executor = None
+            if mode == "stub":
+                calls = []
+
+                def executor(tool, args):
+                    calls.append({"tool": tool, "args": args})
+                    return {"ok": True, "stub": True,
+                            "docs": ["stub-doc"]}
+            out = AA.ReActAgent(
+                agent_type=agent_type, goal=goal, registry=reg,
+                executor=executor,
+                max_steps=int(body.get("max_steps") or 4)).run()
+            self._send(200, {
+                "answer": out["answer"], "stopped_by": out["stopped_by"],
+                "contract": out["contract"],
+                "steps": [{"seq": s.get("seq"), "kind": s.get("kind"),
+                           "tool": s.get("tool"),
+                           "executed": bool(s.get("executed")),
+                           "result_codes": s.get("result_codes")}
+                          for s in out["steps"]]})
+        except Exception as exc:                        # noqa: BLE001
+            self._send(500, {"error": "react_failed",
+                             "detail": type(exc).__name__})
+
+    def h_skill_synthesize(self):
+        """INT-01-T2：从失败轨迹合成候选 Skill 并跑沙箱门禁（不自动晋升）。"""
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+        except Exception:
+            return self._err("E_BAD_REQUEST", "请求体不是合法 JSON")
+        if not isinstance(body, dict):
+            return self._err("E_BAD_REQUEST", "payload 必须是对象")
+        steps = body.get("steps") or []
+        if not isinstance(steps, list):
+            return self._reject(400, self._rid, "POST",
+                                "/api/skills/synthesize", "anonymous",
+                                "steps_must_be_list")
+        try:
+            import skill_synthesis as SS
+            out = SS.synthesize(
+                get_store(self._tenant_id), steps,
+                task_type=str(body.get("task_type") or "newdomain"),
+                expected_total=body.get("expected_total"),
+                policy=body.get("policy"))
+            diag = out["diagnosis"]
+            self._send(200, {
+                "diagnosis": {"root_cause": diag.get("root_cause"),
+                              "first_bad_step": diag.get("first_bad_step"),
+                              "confidence": diag.get("confidence")},
+                "accepted": out["accepted"],
+                "skill": ({"id": out["skill"]["id"],
+                           "name": out["skill"]["name"],
+                           "status": out["skill"]["status"]}
+                          if out["skill"] else None)})
+        except Exception as exc:                        # noqa: BLE001
+            self._send(500, {"error": "synthesize_failed",
+                             "detail": type(exc).__name__})
 
     def h_skills(self):
         store = get_store(self._tenant_id)

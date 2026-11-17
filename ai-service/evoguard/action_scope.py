@@ -29,6 +29,8 @@ except ImportError:                                    # sys.path 直插的旧�
 TOOL_SCOPE = {
     "kb.search": READ_ONLY,
     "kb.search_all": READ_ONLY,
+    # INT-01-T2：带证据核验的检索（输出侧 evidence_grounding 的宿主工具）
+    "kb.answer_grounded": READ_ONLY,
     "order.get_order": READ_ONLY,
     "order.get_quote_order": READ_ONLY,
     "pricing.calc_total": READ_ONLY,
