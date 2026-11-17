@@ -68,21 +68,33 @@
 - T2 `evidence_grounding` 输出侧扫描器：正确数字放行、错误数字 error、无引用 warn。
   修了「payload 整包转文本导致篡改数字被证据原文洗白」的真 bug。
 
-## WS-06（接口层完成，生产压测未做）
+## WS-06（Redis 真压测通过；PG/RLS 受环境限制）
 
-已实现（零依赖）：RateLimiter 协议 + MemoryLimiter + SQLiteLimiter
-（跨进程共享）、CircuitBreakerState（修了自死锁）、TenantResolver
-（JWT 验签回调注入，无 verifier 时 fail-closed）、WebhookApprovalNotifier
-（HMAC 幂等回执）。
+已实现并真实验证（零依赖）：
 
-**未实现并如实列在 describe().not_implemented**：RedisLimiter（跨主机）、
-PostgresStore + RLS、OIDC discovery、RedisJobQueue、Docker Compose 双副本压测
-——本机无外部环境，不假称完成。修了 SQLiteLimiter 两个真 bug：
-:memory: 每次新建连接导致 no such table、with 不关闭连接导致泄漏/SIGTERM。
+- 基础层：RateLimiter 协议 + MemoryLimiter + SQLiteLimiter、
+  CircuitBreakerState（修了自死锁）、TenantResolver、WebhookApprovalNotifier
+  （HMAC 幂等回执）。
+- Redis 后端：`redis_backend.py` 用**纯标准库 socket 手搓 RESP2**（不装 redis-py，
+  守住 `dependencies=[]`）：RedisLimiter（Lua 原子滑动窗口）、
+  RedisCircuitBreaker、RedisJobQueue（LPOP+ZSET 租约抢占）。
+- JWT：`jwt_hs256.py` 标准库 HMAC 验签，alg=none/算法混淆/篡改/exp/nbf/iss/aud
+  全部 fail-closed。
+- **真双副本压测**（`scripts/distributed_stress.py`，自起自停临时 redis-server
+  5.0.9 + multiprocessing）：跨副本限流 10+10=20 不倍增；40 个作业 A21/B19
+  恰好各消费一次、0 重复 0 丢失；A 进程写熔断 B 进程可见。全通过，产物
+  `probes/distributed_stress.json`。
+
+**未实现并如实列在 describe().not_implemented**：PostgresStore + RLS、
+OIDC discovery / RS256（需 cryptography，核心零依赖故走 verifier 注入）、
+Docker Compose 全套压测——`docker info` rc=1 daemon 未起、无 psql 客户端，
+不假称完成。修过 SQLiteLimiter 两个真 bug（:memory: 每次新建连接导致
+no such table、with 不关闭连接导致泄漏/SIGTERM）与熔断自死锁。
 
 ## 验收数字
 
-最终：1053 tests OK / 29-29 gate / build-context PASS / wheel manifest PASS。
+最终：1062 tests OK / 29-29 gate / build-context PASS / wheel manifest PASS /
+真 Redis 双进程压测 passed。
 
 ## 诚实边界
 
