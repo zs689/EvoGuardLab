@@ -19,18 +19,19 @@
 | EVG-GEN-001 | P1 | 新增 `tokenize_weighted()`（bigram 1.0 + unigram 0.5）；corpus 支持 `###` 三级标题 | `住酒店` vs `住宿` 从 0 交集→0.143；门禁仍 12/12、Recall@1 86% |
 | EVG-CODE-001 | P2 | 去掉硬编码私人文案 | `grep 阿光` 为空 |
 | WS-HYG-002 | P2 | `labels.json` **复制**归档到 `experiments/labels/`（原件保留） | 文件存在 |
+| **AL-BUG-001** | P0 | **真实现恢复**：故障不再被 `suppress` 关掉；`fallback_tool`/`cross_verify` 换影子工具（`order.get_order_snapshot`/`pricing.quote`/`kb.search_cache`），`retry` 不降级 | 6 用例：**B 4/6 失败、C 6/6 成功**，差距是真的 |
+| **AL-GEN-001** | P2 | `SIDE_EFFECT_COUNT` 加锁；`_overlap` 英文查询不再恒 True（剥空中文后退回原文 n-gram） | agentlab 21 tests OK |
+| **AL-CFG-001** | P2 | `.env.example` 与 `gateway.py` 对齐：`mock | local`（无 `ollama`），地址**必须带 `/v1`** | 配置项一致 |
 
-## 未完成（8 条，附真实原因与工期）
+## 未完成（5 条，附真实原因与工期）
 
 | ID | 严重度 | 状态 | 为什么没做完 | 预计 |
 |---|---|---|---|---|
-| AL-BUG-001 | P0 | 只标了 `DEPRECATED.md` + 修 0ms 延迟，**恢复策略仍未真实实现** | 要让 `fallback_tool`/`cross_verify`/`replay_checkpoint` 真有执行分支，等于重写 agentlab 的恢复层 | 半天 |
 | EG-SEC-003 | P1 | v3 实验未跑 | 预注册要求「未参与调参的一方复跑」，我自证不算；中文 L1 召回 0.029 是已归档负结果 | 1 天（且需独立复跑者） |
 | EG-ARC-001 | P1 | 未动 | 限流/熔断/指标/作业队列要换 Redis+PG；本机没有，只能先做「接口 + SQLite 共享实现」 | 2 天 |
+| AL-GEN-001 剩余 | P2 | `diagnose()` 仍写死 `order.get_order`/`pricing.calc_total` | agentlab 只有订单 agent，通用化要先有第二个域的 agent；已加锁与 `_overlap` 修复，这一项属设计层面 | 半天（需第二个域） |
 | EVG-ARC-001 | P1 | 未动 | DESIGN.md 规划的 6 个模块（条款依赖图/混合检索/受约束生成/原子事实门禁/服务层）都没实现 | 2–3 天 |
 | REF-ORG-001 | P2 | 未动 | `github/` 10 个仓库的 commit SHA + 许可证清单要逐个核对；Benchmark Adapter 要对接各框架轨迹格式 | 半天 |
-| AL-GEN-001 | P2 | 未动 | agentlab 的 `SIDE_EFFECT_COUNT` 无锁、`_overlap` 对英文恒 True、`diagnose` 写死订单 | 半天 |
-| AL-CFG-001 | P2 | 未动 | `.env.example` 写 `ollama` 但代码要 `local` + `/v1`；DESIGN 路由不存在 | 2 小时 |
 | WS-HYG-001 | P1 | 只删了无改善的 `model_ft.onnx*`（−700MB） | **其余没删**：`_enterprise_review_*` 等 165MB 不是本轮产物，按你的规矩先讨论 | 你确认后 10 分钟 |
 
 ## 需要你决定的两件事
@@ -41,6 +42,23 @@
 2. **`_pi_venv` (1.0GB) + `_pi_model` (1.4GB)** —— 这是 ONNX 判官运行所需的
    隔离环境与模型。删了判官自动降级（`available()` 返回 False），主流程不受影响。
    要省空间就删，要保留能力就别删。
+
+## 本轮新增的关键证据（agentlab）
+
+真实现前，B 和 C 的"差距"来自「C 跳过故障注入」；改完后：
+
+```
+order A1001 tool_timeout      baseline=SUCCEEDED A=FAILED B=SUCCEEDED C=SUCCEEDED
+order A1001 tool_exception    baseline=SUCCEEDED A=FAILED B=SUCCEEDED C=SUCCEEDED
+order A1001 invalid_json      baseline=SUCCEEDED A=FAILED B=FAILED    C=SUCCEEDED
+order A1001 missing_field     baseline=SUCCEEDED A=FAILED B=FAILED    C=SUCCEEDED
+order A1001 silent_corruption baseline=SUCCEEDED A=FAILED B=FAILED    C=SUCCEEDED
+order A1001 retrieval_failure baseline=SUCCEEDED A=FAILED B=FAILED    C=SUCCEEDED
+```
+
+`tool_timeout`/`tool_exception` 的 B 成功是合理的（一次性故障，重试即恢复）；
+`invalid_json`/`missing_field`/`silent_corruption`/`retrieval_failure` 是持久故障，
+盲目重试必然再犯 —— 这四类才真正区分 B 和 C。
 
 ## 诚实说明
 
