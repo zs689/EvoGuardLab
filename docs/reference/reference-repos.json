@@ -1,0 +1,138 @@
+{
+  "generated_by": "scripts/build_reference_manifest.py",
+  "note": "快照：权威版在 github/SOURCE_MANIFEST.json，由 build_reference_manifest.py 生成",
+  "purpose": "参考实现对照清单：锁定 commit 与许可证，保证可复现",
+  "repos": [
+    {
+      "branch": "main",
+      "commit": "f775b5101e62fe92976831adf4a21a38fcc0a767",
+      "commit_date": "2026-07-10T16:54:01+09:00",
+      "dirty_files": 0,
+      "is_git": true,
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "name": "Agent0",
+      "remote": "https://github.com/aiming-lab/Agent0.git",
+      "subject": "update code of Agent0-VL"
+    },
+    {
+      "branch": "main",
+      "commit": "8182b531e31b66722a644f67c0a721d60acfea8c",
+      "commit_date": "2026-03-29T20:46:26+08:00",
+      "dirty_files": 0,
+      "is_git": true,
+      "license": "NO_LICENSE_FILE",
+      "license_file": null,
+      "name": "AgentChaos",
+      "remote": "https://github.com/IntelligentDDS/AgentChaos.git",
+      "subject": "update(all)"
+    },
+    {
+      "branch": "main",
+      "commit": "a5a8db8689d6493b028107dcb4c27415441581dc",
+      "commit_date": "2026-03-28T12:58:20+08:00",
+      "dirty_files": 0,
+      "is_git": true,
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "name": "AgentEvolver",
+      "remote": "https://github.com/modelscope/AgentEvolver.git",
+      "subject": "Merge pull request #42 from modelscope/docs/seeupo-readme-news"
+    },
+    {
+      "branch": "main",
+      "commit": "8488c564eea0525aaff5dea189bb03a9b529546e",
+      "commit_date": "2026-10-05T20:06:52-04:00",
+      "dirty_files": 0,
+      "is_git": true,
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "name": "AgentLab",
+      "remote": "https://github.com/ServiceNow/AgentLab.git",
+      "subject": "Merge pull request #336 from farhanishmam/add-knows-benchmark"
+    },
+    {
+      "branch": "main",
+      "commit": "7a18c79708e7671be15124460f4f7296107c2a55",
+      "commit_date": "2026-09-14T15:18:36-07:00",
+      "dirty_files": 0,
+      "is_git": true,
+      "license": "MIT",
+      "license_file": "LICENSE.txt",
+      "name": "AgentRx",
+      "remote": "https://github.com/microsoft/AgentRx.git",
+      "subject": "Merge pull request #38 from danfiedler-msft/danfiedler/pin-actions"
+    },
+    {
+      "branch": "main",
+      "commit": "e3df900662443e94dd92141be5633b040a69a70a",
+      "commit_date": "2026-10-31T09:49:52+08:00",
+      "dirty_files": 0,
+      "is_git": true,
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "name": "EvoAgentX",
+      "remote": "https://github.com/ANative-Lab/EvoAgentX.git",
+      "subject": "Update Twitter link in README.md"
+    },
+    {
+      "branch": "main",
+      "commit": "36f6f04952293d7054145550c2b9f0b0411bff1c",
+      "commit_date": "2026-07-06T13:02:44+05:30",
+      "dirty_files": 0,
+      "is_git": true,
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "name": "EvoSkill",
+      "remote": "https://github.com/sentient-agi/EvoSkill.git",
+      "subject": "Merge pull request #51 from sentient-agi/fix/opencode-structured-output-refetch"
+    },
+    {
+      "branch": "main",
+      "commit": "68d996a4588210aacb39cf79a4974d2743316e64",
+      "commit_date": "2026-11-06T08:42:44+08:00",
+      "dirty_files": 0,
+      "is_git": true,
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "name": "GenericAgent",
+      "remote": "https://github.com/lsdefine/GenericAgent.git",
+      "subject": "Merge pull request #858 from Fwind43/fix/claude-stream-thinking"
+    },
+    {
+      "branch": "main",
+      "commit": "32beff46a28ca043e252095e6cc62ffe2010e645",
+      "commit_date": "2026-01-02T16:14:55+05:30",
+      "dirty_files": 0,
+      "is_git": true,
+      "license": "Apache-2.0",
+      "license_file": "LICENSE",
+      "name": "agent-chaos",
+      "remote": "https://github.com/deepankarm/agent-chaos.git",
+      "subject": "feat: add pydantic-evals integration (#2)"
+    },
+    {
+      "branch": "main",
+      "commit": "31b0691acd97ba18878019312e646f1f2d970d43",
+      "commit_date": "2026-09-05T00:25:04+08:00",
+      "dirty_files": 0,
+      "is_git": true,
+      "license": "GPL-3.0",
+      "license_file": "LICENSE",
+      "name": "evolver",
+      "remote": "https://github.com/EvoMap/evolver.git",
+      "subject": "feat(skill-store): report Hub install-success after local fetch commit (#622)"
+    }
+  ],
+  "root": "<workspace>/github",
+  "summary": {
+    "dirty_worktrees": {},
+    "missing_or_unknown_license": [
+      "AgentChaos"
+    ],
+    "not_git": [],
+    "total": 10,
+    "with_commit": 10
+  },
+  "version": 1
+}

@@ -21,9 +21,10 @@
 | WS-HYG-002 | P2 | `labels.json` **复制**归档到 `experiments/labels/`（原件保留） | 文件存在 |
 | **AL-BUG-001** | P0 | **真实现恢复**：故障不再被 `suppress` 关掉；`fallback_tool`/`cross_verify` 换影子工具（`order.get_order_snapshot`/`pricing.quote`/`kb.search_cache`），`retry` 不降级 | 6 用例：**B 4/6 失败、C 6/6 成功**，差距是真的 |
 | **AL-GEN-001** | P2 | `SIDE_EFFECT_COUNT` 加锁；`_overlap` 英文查询不再恒 True（剥空中文后退回原文 n-gram） | agentlab 21 tests OK |
+| **REF-ORG-001** | P2 | `github/` 10 个参考仓库统一清单（commit/许可证/remote/脏工作树）；新增 `bench_adapter.py` 对接 LangSmith / OpenAI / 本项目三种轨迹 | 清单 10/10 锁到 commit（`AgentChaos` 许可证识别不出，已报）；适配器 9 tests OK，注入轨迹被拦 |
 | **AL-CFG-001** | P2 | `.env.example` 与 `gateway.py` 对齐：`mock | local`（无 `ollama`），地址**必须带 `/v1`** | 配置项一致 |
 
-## 未完成（5 条，附真实原因与工期）
+## 未完成（4 条，附真实原因与工期）
 
 | ID | 严重度 | 状态 | 为什么没做完 | 预计 |
 |---|---|---|---|---|
@@ -31,7 +32,6 @@
 | EG-ARC-001 | P1 | 未动 | 限流/熔断/指标/作业队列要换 Redis+PG；本机没有，只能先做「接口 + SQLite 共享实现」 | 2 天 |
 | AL-GEN-001 剩余 | P2 | `diagnose()` 仍写死 `order.get_order`/`pricing.calc_total` | agentlab 只有订单 agent，通用化要先有第二个域的 agent；已加锁与 `_overlap` 修复，这一项属设计层面 | 半天（需第二个域） |
 | EVG-ARC-001 | P1 | 未动 | DESIGN.md 规划的 6 个模块（条款依赖图/混合检索/受约束生成/原子事实门禁/服务层）都没实现 | 2–3 天 |
-| REF-ORG-001 | P2 | 未动 | `github/` 10 个仓库的 commit SHA + 许可证清单要逐个核对；Benchmark Adapter 要对接各框架轨迹格式 | 半天 |
 | WS-HYG-001 | P1 | 只删了无改善的 `model_ft.onnx*`（−700MB） | **其余没删**：`_enterprise_review_*` 等 165MB 不是本轮产物，按你的规矩先讨论 | 你确认后 10 分钟 |
 
 ## 需要你决定的两件事
