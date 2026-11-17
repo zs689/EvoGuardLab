@@ -41,7 +41,9 @@ evoguard = "evoguard_cli:main"
 # Inspector、前端、配置与演示脚本全都不在 wheel 里，装完只剩一个
 # 跑不起来的 CLI。这里显式列出**实际承诺分发**的模块与只读资产。
 py-modules = ["evoguard_cli"]
-packages = ["evoguard", "evoguard.enterprise", "evoguard_inspect"]
+packages = ["evoguard", "evoguard.enterprise", "evoguard_inspect",
+            "evoguard_inspect.loaders", "evoguard_inspect.rules",
+            "evoguard_inspect.static"]
 package-dir = { "" = ".", "evoguard" = "ai-service/evoguard", "evoguard_inspect" = "ai-service/evoguard_inspect" }
 include-package-data = false
 

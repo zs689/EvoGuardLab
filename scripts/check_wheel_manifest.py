@@ -25,6 +25,10 @@ REQUIRED = [
     "evoguard/enterprise/jobs.py",
     "evoguard/v3_gate.py",
     "evoguard_inspect/__init__.py",
+    "evoguard_inspect/static/__init__.py",
+    "evoguard_inspect/static/rules.py",
+    "evoguard_inspect/rules/__init__.py",
+    "evoguard_inspect/loaders/__init__.py",
 ]
 REQUIRED_DATA = [
     "share/evoguardlab/api/app.py",

@@ -166,5 +166,53 @@ class TestDetectorBypassRegression(unittest.TestCase):
             AW._scan_strict("请结算订单 A1001，折扣 15%", "tool_output"), [])
 
 
+class TestOnnxJudgeSafety(unittest.TestCase):
+    """红队审查 EG-GEN-002：读管道必须带超时，否则持锁死锁。"""
+
+    def test_readline_timeout_does_not_block_forever(self):
+        import io as _io
+        import time as _time
+        import agent_watch as _AW
+
+        class HungProc:
+            """stdin 正常、stdout 永远读不到东西（模拟子进程卡死）。"""
+
+            def __init__(self):
+                self.stdin = _io.StringIO()
+
+            @property
+            def stdout(self):
+                return self
+
+            def readline(self):
+                _time.sleep(5)
+                return ""
+
+            def poll(self):
+                return None
+
+            def kill(self):
+                pass
+
+        j = _AW.OnnxInjectionJudge(timeout=0.3)
+        j._proc = HungProc()
+        t0 = _time.time()
+        r = j.judge("test")
+        elapsed = _time.time() - t0
+        self.assertLess(elapsed, 2.0, "读超时未生效，调用被永久阻塞")
+        self.assertIn("timeout", r["error"])
+        self.assertFalse(r["manipulative"])
+        self.assertTrue(j._broken)
+
+    def test_python_path_probe_is_cross_platform(self):
+        import agent_watch as _AW
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        p = _AW.OnnxInjectionJudge._find_python(root)
+        self.assertTrue(p == "" or os.path.isfile(p), p)
+        if p:
+            self.assertTrue(p.replace("\\", "/").endswith(
+                ("python.exe", "/python", "python")), p)
+
+
 if __name__ == "__main__":
     unittest.main()

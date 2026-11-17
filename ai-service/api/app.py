@@ -41,6 +41,14 @@ import skills     # noqa: E402
 import experience # noqa: E402
 import service_controls  # noqa: E402  —— 服务层工程基线（纯标准库）
 import agent_watch       # noqa: E402  —— 外部 agent 监测/入口防护
+import env as evo_env    # noqa: E402  —— EVOGUARD_* 前缀兼容
+
+# EVOGUARD_* 先于 AGENTLAB_* 生效（向下兼容旧配置名）
+_EV_ALIASED = evo_env.alias_env()
+import env as evo_env    # noqa: E402  —— EVOGUARD_* 前缀兼容
+
+# EVOGUARD_* 先于 AGENTLAB_* 生效（向下兼容旧配置名）
+_EV_ALIASED = evo_env.alias_env()
 
 try:                                    # 企业形态模块：缺失也不能拖垮服务
     from enterprise import audit as ent_audit          # noqa: E402

@@ -157,6 +157,26 @@ def main():
     problems_extra = ["pyproject 声明但 Dockerfile 未 COPY：%s" % p
                       for p in missing_declared]
 
+    # 反向校验：源码树里每个含 __init__.py 的目录都必须是声明的包。
+    # 以前只查「声明的有没有 COPY」，查不出「有子包没声明」——
+    # evoguard_inspect 下 loaders/rules/static 三个子包就是这样漏进 wheel 的。
+    declared_packages = set(re.findall(r'"([A-Za-z0-9_.]+)"',
+                                       (re.search(r"^packages\s*=\s*\[([^\]]*)\]",
+                                                  pyproj, re.M | re.S) or
+                                        type("", (), {"group": lambda self, n: ""})()).group(1)))
+    src_root = os.path.join(ROOT, "ai-service")
+    undeclared = []
+    for dirpath, dirnames, filenames in os.walk(src_root):
+        if "__pycache__" in dirpath or "egg-info" in dirpath:
+            continue
+        if "__init__.py" in filenames:
+            rel = os.path.relpath(dirpath, src_root).replace(os.sep, ".")
+            if rel not in declared_packages:
+                undeclared.append(rel)
+    undeclared = sorted(set(undeclared))
+    problems_extra += ["子包未在 pyproject packages 声明：%s" % u
+                       for u in undeclared]
+
     ok = (not any(x["leaked_count"] for x in sensitive_check)
           and not missing_copy and not problems_extra)
     report = {
@@ -171,6 +191,7 @@ def main():
         "declared_package_dirs": declared_pkg_dirs,
         "declared_data_sources": data_sources,
         "missing_declared": missing_declared,
+        "undeclared_subpackages": undeclared,
         "intentional_includes": sorted(INTENTIONAL),
         "sensitive": sensitive_check,
         "passed": ok,
@@ -188,9 +209,9 @@ def main():
     print("COPY 源缺失: %s" % (missing_copy or "无"))
     for p in problems_extra:
         print("  [!] %s" % p)
-    print("pyproject 声明包/资产: %d 个目录 + %d 个文件，漏拷 %d"
+    print("pyproject 声明包/资产: %d 个目录 + %d 个文件，漏拷 %d，未声明子包 %d"
           % (len(declared_pkg_dirs), len(data_sources),
-             len(missing_declared)))
+             len(missing_declared), len(undeclared)))
     print("== %s ==（上下文 %d 文件 / %.1f MiB）"
           % ("PASS" if ok else "FAIL", len(files),
              report["included_bytes"] / 1048576.0))

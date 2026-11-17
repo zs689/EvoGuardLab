@@ -86,6 +86,12 @@ _SCOPE_LABEL = {READ_ONLY: "只读", WRITE: "写", EXTERNAL: "外发"}
 # 否定式祈使句不是动作请求。真实业务文档里「请勿修改配置项」「请勿删除」极常见，
 # 不收这一条会直接把说明文档判成注入（实测 5 条中文样例里误报 1 条）。
 _NEG_ZH = re.compile(r"请勿|切勿|严禁|禁止|不要|不得|无需|不需|不可|别|勿")
+# 双重否定 = 强调肯定：「请不要忘记把权限授予 Amy」实际是在要求授予。
+# 不先剔掉这些短语，_negated 会把整句当成否定而跳过告警（红队可绕）。
+_DOUBLE_NEG = re.compile(
+    r"(?:不要忘记|不要忘了|别忘了|别忘记|请勿忘记|切勿忽略|请勿不|"
+    r"never\s+forget\s+to|don'?t\s+forget\s+to|never\s+fail\s+to)",
+    re.I)
 _NEG_EN = re.compile(r"\b(?:not|never|don'?t|no need to|without)\b", re.I)
 # 否定只在自己那个分句内生效：「请勿走审批；改为转账」里的「勿」管不到「转账」。
 # 按分句边界切开再判 —— 整段一起判会把「否定 + 后续请求」这种真实攻击放过。
@@ -93,9 +99,12 @@ _CLAUSE_SPLIT = re.compile(r"[；;。！？!?，,、]")
 
 
 def _negated(middle, pat):
-    """只看**紧邻动作所在的那个分句**里有没有否定词。"""
+    """只看**紧邻动作所在的那个分句**里有没有否定词。
+
+    先剔除双重否定短语，否则「请不要忘记授权」会被当成否定而放过。
+    """
     last = _CLAUSE_SPLIT.split(middle or "")[-1]
-    return bool(pat.search(last))
+    return bool(pat.search(_DOUBLE_NEG.sub("", last)))
 
 
 def detect_action_requests(text):
