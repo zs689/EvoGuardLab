@@ -52,12 +52,14 @@
 - T3 `fetch_pi_model.py` 下载+sha256 到项目 `.cache/models/pi`（gitignored）；
   判官不再依赖父目录；`.dockerignore` 排除后 build context 从 709 MiB 回到 2.5 MiB。
 
-## WS-04（部分）
+## WS-04（完成）
 
 - T1 ✅ `trajectory_diagnose.py`：通用根因诊断，不认工具名；新领域工具也能诊断。
-- T2 ❌ **未做**：从成功恢复轨迹合成结构化 Skill、A/B 验证晋升与回滚。
-  现有 `skills.propose` / `conditional_skill.accept` 有雏形，但没接成方案要求的
-  「失败→定位→合成→独立验证集提升→晋升/回滚」全流程。
+- T2 ✅ `skill_synthesis.py` 串成完整闭环：诊断→propose→沙箱 accept→
+  独立留出集 A/B（含 guard 负迁移）→ promote/rollback。新领域
+  file/http/sql 混合工具链验证；错误 Skill 被 schema 拒绝、负迁移被 REJECT、
+  训练/验证重叠强制拒绝。过程中补了 propose 老格式缺的 5 个声明式字段
+  （是格式适配，不是放宽门禁）。
 
 ## WS-05（完成）
 
@@ -66,19 +68,26 @@
 - T2 `evidence_grounding` 输出侧扫描器：正确数字放行、错误数字 error、无引用 warn。
   修了「payload 整包转文本导致篡改数字被证据原文洗白」的真 bug。
 
-## WS-06（未做）
+## WS-06（接口层完成，生产压测未做）
 
-需要 Docker Compose + PostgreSQL + Redis 环境，本机没有。
-核心零依赖模式已验证不受影响，但**多副本压测、RLS 隔离、JWT/OIDC、
-Webhook 审批回调均未实现**，不假称完成。
+已实现（零依赖）：RateLimiter 协议 + MemoryLimiter + SQLiteLimiter
+（跨进程共享）、CircuitBreakerState（修了自死锁）、TenantResolver
+（JWT 验签回调注入，无 verifier 时 fail-closed）、WebhookApprovalNotifier
+（HMAC 幂等回执）。
+
+**未实现并如实列在 describe().not_implemented**：RedisLimiter（跨主机）、
+PostgresStore + RLS、OIDC discovery、RedisJobQueue、Docker Compose 双副本压测
+——本机无外部环境，不假称完成。修了 SQLiteLimiter 两个真 bug：
+:memory: 每次新建连接导致 no such table、with 不关闭连接导致泄漏/SIGTERM。
 
 ## 验收数字
 
-最终：1035 tests OK / 29-29 gate / build-context PASS / wheel manifest PASS。
+最终：1053 tests OK / 29-29 gate / build-context PASS / wheel manifest PASS。
 
 ## 诚实边界
 
 1. 提交顺序上 WS-05 早于 WS-04-T1，但两者依赖（WS-01/WS-02）都已满足，功能无影响。
 2. v3 实验 FAIL 是**真实结果**，不是「没调好」；要过线需更强中文语义判官 + 独立复跑。
 3. 真 Ollama 对抗 20/20 依赖本机 qwen3:4b；换模型需重测。
-4. WS-04-T2 与 WS-06 未做，是把「诚实留白」优先于「假称完成」。
+4. WS-04-T2 与 WS-06 的**接口层**已补齐；WS-06 的生产级 Redis/PG/压测仍未做，
+   是把「诚实留白」优先于「假称完成」。
