@@ -98,7 +98,11 @@ def main():
                        "自建集不等于外部公开语料，结论需按 provenance 分别看。"),
               "sets": {}}
     for name, spec in sets.items():
-        rows = spec["rows"][:a.limit] if a.limit else spec["rows"]
+        rows = spec["rows"]
+        # 只对大集限流：直接截前 N 条会引入采样偏差（文件开头是 benign，
+        # 中文小集的召回会被算歪）。中文集一律全量跑。
+        if a.limit and name.startswith("injecagent"):
+            rows = rows[:a.limit]
         t0 = time.perf_counter()
         hits, labels, lat = [], [], []
         for r in rows:
