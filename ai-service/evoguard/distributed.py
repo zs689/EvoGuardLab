@@ -222,12 +222,19 @@ def describe():
         "version": 1,
         "implemented": ["RateLimiter", "MemoryLimiter", "SQLiteLimiter",
                         "CircuitBreakerState", "TenantResolver",
-                        "WebhookApprovalNotifier"],
-        "not_implemented": ["RedisLimiter（跨主机共享）",
-                            "PostgresStore + Row-Level Security",
-                            "OIDC discovery（需 verifier 回调注入）",
-                            "RedisJobQueue（多副本作业抢占）",
-                            "Docker Compose 双副本压测"],
-        "note": "核心零依赖；Redis/PG 需通过 optional-dependencies "
-                "与注入式后端接入，本机无外部环境故只给接口。",
+                        "WebhookApprovalNotifier",
+                        "RedisLimiter/RedisCircuitBreaker/RedisJobQueue"
+                        "（redis_backend.py，纯标准库 RESP）",
+                        "JWT HS256 验签（jwt_hs256.py，标准库 HMAC）"],
+        "verified": ["双进程真并发：限流跨副本 20/20 不倍增",
+                     "双进程真 Redis：40 个作业 0 重复 0 丢失",
+                     "双进程真 Redis：A 写熔断 B 可见",
+                     "JWT alg=none / 过期 / 篡改签名 fail-closed"],
+        "not_implemented": ["PostgresStore + Row-Level Security"
+                            "（docker info rc=1，daemon 未起）",
+                            "OIDC discovery / RS256（需 cryptography，"
+                            "核心零依赖故用 verifier 回调注入）",
+                            "Docker Compose 全套压测（本机 daemon 不可用）"],
+        "note": "核心零依赖；Redis 后端用标准库 socket 手搓 RESP，"
+                "不装 redis-py。压测用真 redis-server 5.0.9 + multiprocessing。",
     }

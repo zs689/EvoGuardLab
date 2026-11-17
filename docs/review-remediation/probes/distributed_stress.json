@@ -1,0 +1,32 @@
+{
+  "backend": "redis-5.x (RESP over stdlib socket)",
+  "circuit_breaker": {
+    "note": "B 进程不写任何失败，只读到 A 的状态才算共享",
+    "ok": true,
+    "other_process_sees_open": true,
+    "writer_sees_open": true
+  },
+  "job_queue": {
+    "claimed": 40,
+    "expected": 40,
+    "note": "每个作业恰好被一个 worker 消费一次",
+    "ok": true,
+    "per_worker": {
+      "A": 40,
+      "B": 0
+    },
+    "unique": 40
+  },
+  "passed": true,
+  "processes": 2,
+  "rate_limit": {
+    "limit": 20,
+    "note": "跨副本总和必须等于 limit；大于即配额翻倍",
+    "ok": true,
+    "per_process": {
+      "A": 11,
+      "B": 9
+    },
+    "total_allowed": 20
+  }
+}

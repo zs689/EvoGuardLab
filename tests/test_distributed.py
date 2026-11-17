@@ -107,9 +107,18 @@ class TestWebhook(unittest.TestCase):
 
 class TestHonesty(unittest.TestCase):
     def test_describe_lists_not_implemented(self):
+        """诚实性：已实现的不再列未实现；缺的仍如实列出。"""
         d = D.describe()
         self.assertTrue(d["not_implemented"])
-        self.assertIn("RedisLimiter（跨主机共享）", d["not_implemented"])
+        # Redis 后端已真实现并压测过（redis_backend.py），不能再列为未实现
+        self.assertFalse(any("RedisLimiter" in x
+                             for x in d["not_implemented"]))
+        self.assertTrue(any("RedisLimiter" in x for x in d["implemented"]))
+        # PG/RLS 与 OIDC discovery 确实没做，必须还在未实现列表
+        self.assertTrue(any("PostgresStore" in x
+                            for x in d["not_implemented"]))
+        self.assertTrue(any("OIDC discovery" in x
+                            for x in d["not_implemented"]))
 
 
 if __name__ == "__main__":
