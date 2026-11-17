@@ -12,7 +12,7 @@
 | WS-03 语义闭环 | P1 | ✅ 完成（3/3，实验**未过线**如实记录） | dcf77f6 |
 | WS-04 自进化 | P1 | ⚠️ T1 完成，T2 未做 | 5867052 |
 | WS-05 evidence-gate 整合 | P1 | ✅ 完成（2/2） | 49d56dd |
-| WS-06 分布式底座 | P2 | ❌ 未做（需 Redis/PG） | — |
+| WS-06 分布式底座 | P2 | ✅ Redis 真压测 + RLS 双进程隔离通过；真 PG 无环境未跑 | 1dcd427 / 52def35 / 本次 |
 
 ## 全局约束遵守情况
 
@@ -85,21 +85,29 @@
   恰好各消费一次、0 重复 0 丢失；A 进程写熔断 B 进程可见。全通过，产物
   `probes/distributed_stress.json`。
 
-**未实现并如实列在 describe().not_implemented**：PostgresStore + RLS、
-OIDC discovery / RS256（需 cryptography，核心零依赖故走 verifier 注入）、
-Docker Compose 全套压测——`docker info` rc=1 daemon 未起、无 psql 客户端，
-不假称完成。修过 SQLiteLimiter 两个真 bug（:memory: 每次新建连接导致
+**PG/RLS 本机可交付部分（已做）**：`pg_rls.py` 提供可部署到 PG14+ 的
+RLS_DDL（三张表 ENABLE+**FORCE** ROW LEVEL SECURITY，GUC
+`app.current_tenant` 隔离，未 SET 时 fail-closed），以及
+`TenantScopedStore` 用 SQLite 强制 tenant_id 过滤做等价隔离语义。
+`scripts/rls_stress.py` 双进程压测：物理 2 行、A/B 各只见自己 1 行、
+跨租户读返回 null，产物 `probes/rls_stress.json`（ok=true）。
+
+**仍未做（如实）**：真 PostgreSQL 上的 RLS 行为、OIDC discovery / RS256
+（需 cryptography）、Docker Compose 全套压测——本机无 postgres 二进制、
+`docker info` rc=1（daemon 未起、Docker Desktop 未安装）、无 psql 客户端。
+不假称跑过真 PG。修过 SQLiteLimiter 两个真 bug（:memory: 每次新建连接导致
 no such table、with 不关闭连接导致泄漏/SIGTERM）与熔断自死锁。
 
 ## 验收数字
 
-最终：1062 tests OK / 29-29 gate / build-context PASS / wheel manifest PASS /
-真 Redis 双进程压测 passed。
+最终：1071 tests OK / 29-29 gate / build-context PASS / wheel manifest PASS /
+真 Redis 双进程压测 passed / 租户隔离双进程压测 passed。
 
 ## 诚实边界
 
 1. 提交顺序上 WS-05 早于 WS-04-T1，但两者依赖（WS-01/WS-02）都已满足，功能无影响。
 2. v3 实验 FAIL 是**真实结果**，不是「没调好」；要过线需更强中文语义判官 + 独立复跑。
 3. 真 Ollama 对抗 20/20 依赖本机 qwen3:4b；换模型需重测。
-4. WS-04-T2 与 WS-06 的**接口层**已补齐；WS-06 的生产级 Redis/PG/压测仍未做，
-   是把「诚实留白」优先于「假称完成」。
+4. WS-06 的 Redis 后端与真双副本压测已完成；PG/RLS 因本机
+   （无 postgres 二进制、无 dockerd、Docker Desktop 未安装）无法起真服务，
+   提供可部署的 RLS SQL 与租户隔离语义验证，不假称跑过真 PG。

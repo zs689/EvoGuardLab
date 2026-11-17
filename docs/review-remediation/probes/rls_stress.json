@@ -1,0 +1,25 @@
+{
+  "backend": "SQLite forced tenant filter (NOT real PostgreSQL)",
+  "note": "PostgreSQL RLS 未在真库跑；RLS_DDL 可供部署",
+  "ok": true,
+  "physical_rows": 2,
+  "probes": [
+    {
+      "cross_read": null,
+      "own": "A-secret",
+      "tenant": "A",
+      "visible_rows": [
+        "a1"
+      ]
+    },
+    {
+      "cross_read": null,
+      "own": "B-secret",
+      "tenant": "B",
+      "visible_rows": [
+        "b1"
+      ]
+    }
+  ],
+  "processes": 2
+}
