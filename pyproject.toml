@@ -43,7 +43,7 @@ evoguard = "evoguard_cli:main"
 py-modules = ["evoguard_cli"]
 packages = ["evoguard", "evoguard.enterprise", "evoguard_inspect",
             "evoguard_inspect.loaders", "evoguard_inspect.rules",
-            "evoguard_inspect.static"]
+            "evoguard_inspect.static", "evoguard.evidence_gate"]
 package-dir = { "" = ".", "evoguard" = "ai-service/evoguard", "evoguard_inspect" = "ai-service/evoguard_inspect" }
 include-package-data = false
 

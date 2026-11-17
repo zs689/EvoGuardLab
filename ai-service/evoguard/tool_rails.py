@@ -50,6 +50,7 @@ def _builtin_scanners():
         "regex": _scan_regex,
         "hidden_ascii": _scan_hidden,
         "action_scope": _scan_action_scope,
+        "evidence_grounding": _scan_evidence_grounding,
         "code": _scan_code,
         "schema": _scan_schema,
     }
@@ -75,6 +76,35 @@ def _scan_action_scope(tool, payload, fields=None):
     import action_scope
     f = action_scope.check_output_scope(tool, _pick(payload, fields))
     return [(f["code"], f["severity"])] if f else []
+
+
+def _scan_evidence_grounding(tool, payload, fields=None):
+    """输出侧事实核验（WS-05-T2）：句级原子事实 + 证据池数值对齐。
+
+    payload 需带 `evidence_sections`（`{"doc#sec": "正文"}`）；
+    没有证据源时不硬判失败，返回 info 级「无可核验证据」——
+    宁可提示也不把「没证据」当成「通过」。
+    """
+    import evidence_gate.gate as G
+    # 不能把整个 dict 转文本：那样会把 evidence_sections 的正文混进答案，
+    # 篡改数字会被证据原文“洗白”。只取答案字段。
+    if fields and isinstance(payload, dict):
+        text = _pick(payload, fields)
+    elif isinstance(payload, dict):
+        text = _as_text(payload.get("answer") or payload.get("text") or payload)
+    else:
+        text = _as_text(payload)
+    sections = payload.get("evidence_sections") if isinstance(payload, dict) else None
+    if not sections:
+        return [("evidence_no_source", "info")]
+    r = G.check(text, sections)
+    label = str(r.get("label") or "")
+    if label in ("PASS", "pass", "allow", "可核验"):
+        return []
+    # 只有「有引用但对不上」才是 error；「没引用」是可疑但未必造假，记 warn。
+    severe = ("MISMATCH" in label or "NOT_FOUND" in label
+              or "数字对不上" in label or "引用不存在" in label)
+    return [("evidence_grounding", "error" if severe else "warn")]
 
 
 def _scan_code(tool, payload, fields=None):
