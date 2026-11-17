@@ -36,7 +36,9 @@ ALTER TABLE skills      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE skills      FORCE  ROW LEVEL SECURITY;
 
 -- 策略：只允许读写 current_tenant 匹配的行。
--- FORCE 保证表 owner 也受约束（否则 owner 连接可绕过隔离）。
+-- FORCE 让**表 owner** 也受约束；但 **superuser 和带 BYPASSRLS 的角色
+-- 永远绕过 RLS**（FORCE 管不住）。因此应用必须以普通角色连接，
+-- 绝不能用 postgres 超级用户 —— 否则测出来的「全部可见」是假结论。
 CREATE POLICY tenant_isolation_runs ON runs
   USING (tenant_id = current_setting('app.current_tenant', true))
   WITH CHECK (tenant_id = current_setting('app.current_tenant', true));

@@ -27,9 +27,21 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "ai-service", "evoguard"))
 import pg_rls as P                                          # noqa: E402
 
+# RLS_DDL 覆盖 runs / audit_events / skills 三张表，验证时三张都要存在，
+# 否则「relation does not exist」会让整个 DDL 失败（这也是真实部署的
+# 前置条件：先建表再开 RLS）。
 SCHEMA = """
+DROP TABLE IF EXISTS runs;
+DROP TABLE IF EXISTS audit_events;
+DROP TABLE IF EXISTS skills;
 CREATE TABLE runs(id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, body TEXT);
+CREATE TABLE audit_events(id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
+                          path TEXT);
+CREATE TABLE skills(id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
+                    name TEXT);
 INSERT INTO runs VALUES ('a1','A','A-secret'),('b1','B','B-secret');
+INSERT INTO audit_events VALUES ('e1','A','/x'),('e2','B','/y');
+INSERT INTO skills VALUES ('s1','A','skill-a'),('s2','B','skill-b');
 """
 
 
@@ -60,9 +72,13 @@ def _psql(pg_root, port, sql, *, env_tenant=None, db="evo"):
     return _run(cmd, env=env)
 
 
+_PSQL_CMD = ["psql"]          # 可被 --psql-cmd 覆盖（如 docker exec ... psql）
+
+
 def _psql_dsn(dsn, sql):
-    """直连已有 PostgreSQL（CI services 场景），用系统 psql。"""
-    return _run(["psql", dsn, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql])
+    """直连已有 PostgreSQL：默认用系统 psql，也可指定容器内 psql。"""
+    return _run(_PSQL_CMD + [dsn, "-t", "-A", "-v", "ON_ERROR_STOP=1",
+                             "-c", sql])
 
 
 def run_dsn(dsn):
@@ -73,14 +89,32 @@ def run_dsn(dsn):
     if r.returncode != 0:
         print("RLS DDL 失败：", (r.stderr or r.stdout)[-400:])
         return None
+    # **必须以非超级用户连接**：superuser / BYPASSRLS 角色永远绕过 RLS，
+    # 用 postgres 超级用户测「RLS 生效」永远会得到「全部可见」的假结论。
+    _psql_dsn(dsn, "DROP ROLE IF EXISTS evoguard_app")
+    r = _psql_dsn(dsn, "CREATE ROLE evoguard_app LOGIN PASSWORD 'app'")
+    if r.returncode != 0:
+        print("建角色失败：", (r.stderr or r.stdout)[-300:])
+        return None
+    _psql_dsn(dsn, "GRANT SELECT, INSERT, UPDATE, DELETE "
+                   "ON runs, audit_events, skills TO evoguard_app")
+    app_dsn = dsn.replace("postgres:evo@", "evoguard_app:app@")
+    if app_dsn == dsn:
+        # DSN 不是 postgres:evo 形式时，改成显式用户名
+        import re as _re
+        app_dsn = _re.sub(r"//[^@]*@", "//evoguard_app:app@", dsn)
+
     def count(tenant=None):
         prefix = ("BEGIN; SET LOCAL app.current_tenant='%s'; " % tenant
                   if tenant else "BEGIN; ")
-        res = _psql_dsn(dsn, prefix + "SELECT count(*) FROM runs; COMMIT;")
-        try:
-            return int((res.stdout or "").strip().splitlines()[0])
-        except Exception:
-            return None
+        res = _psql_dsn(app_dsn, prefix + "SELECT count(*) FROM runs; COMMIT;")
+        # 多语句 -c 的输出里有 BEGIN/SET/COMMIT 等命令行，
+        # 取「纯数字的那一行」才是 SELECT 结果。
+        for line in (res.stdout or "").splitlines():
+            t = line.strip()
+            if t.isdigit():
+                return int(t)
+        return None
     ca, cb, cn = count("A"), count("B"), count(None)
     rep = {"backend": "real PostgreSQL via DSN (CI services)",
            "rows_visible": {"tenant_A": ca, "tenant_B": cb, "no_guc": cn},
@@ -96,10 +130,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pg-root", default="", help="解压后的 pgsql 目录（自起实例）")
     ap.add_argument("--dsn", default="", help="已有实例的 DSN（CI 用，不自起）")
+    ap.add_argument("--psql-cmd", default="",
+                    help='psql 命令，如 "docker exec evoguard-pg-test psql"')
     ap.add_argument("--out", default="")
     ap.add_argument("--keep", action="store_true")
     a = ap.parse_args()
 
+    global _PSQL_CMD
+    if a.psql_cmd:
+        _PSQL_CMD = a.psql_cmd.split()
     if a.dsn:
         rep = run_dsn(a.dsn)
         if rep is None:
@@ -150,10 +189,11 @@ def main():
         total = _psql(pg, port, "SELECT count(*) FROM runs;", env_tenant="A")
         # owner 绕过检查：superuser 也受 FORCE 约束（postgres 是 owner）
         def n(res):
-            try:
-                return int((res.stdout or "").strip().splitlines()[0])
-            except Exception:
-                return None
+            for line in (res.stdout or "").splitlines():
+                t = line.strip()
+                if t.isdigit():
+                    return int(t)
+            return None
         ca, cb, cn = n(a_rows), n(b_rows), n(none_rows)
         rep = {
             "backend": "real PostgreSQL (zip, trust local, temp instance)",

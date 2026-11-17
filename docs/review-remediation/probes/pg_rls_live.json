@@ -1,0 +1,15 @@
+{
+  "backend": "real PostgreSQL via DSN (CI services)",
+  "checks": {
+    "A_sees_only_own": true,
+    "B_sees_only_own": true,
+    "no_tenant_context_sees_nothing": true,
+    "owner_also_restricted": true
+  },
+  "passed": true,
+  "rows_visible": {
+    "no_guc": 0,
+    "tenant_A": 1,
+    "tenant_B": 1
+  }
+}
