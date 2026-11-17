@@ -137,7 +137,8 @@ class ToolRegistry:
         return n
 
     # ---------------- 适配器 ----------------
-    def from_json_schema(self, name, schema, scope=None, source="json_schema"):
+    def from_json_schema(self, name, schema, scope=None, source="json_schema",
+                         identities=None):
         """从 JSON Schema 生成契约。
 
         能从 schema 拿到的：参数键（→ URL/PATH/AMOUNT/RESOURCE 归类）、
@@ -148,6 +149,9 @@ class ToolRegistry:
         props = schema.get("properties") or {}
         keys = list(props.keys())
         contract = {
+            # 身份白名单必须显式声明：留空会让 tool_contract.authorize
+            # 把每个调用判成「身份不合规」（fail-closed 到不可用）。
+            "identities": list(identities or []),
             "allowed_resource_pattern": None,
             "additional_properties": bool(schema.get("additionalProperties", True)),
             "required": list(schema.get("required") or ()),

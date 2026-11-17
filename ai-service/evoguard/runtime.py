@@ -123,13 +123,17 @@ class Ctx:
 
     def __init__(self, store, run_id, exp, start_seq=1, cache=None,
                  suppress=None, recovering=False, attempt=1, strategy=None,
-                 round_root_cause=None, approval_gate=None):
+                 round_root_cause=None, approval_gate=None,
+                 forced_skill=None):
         self.store = store
         self.run_id = run_id
         self.exp = exp
         # 可恢复审批状态机（S04）。默认 None：历史实验行为完全不变，
         # 294 项回归与冻结数字仍然可比；只有真实副作用任务才显式挂上。
         self.approval_gate = approval_gate
+        # WS-02-T2：候选技能是**本次执行**的状态，不再是进程级全局。
+        # 全局 FORCED_SKILL 仅为旧脚本/测试保留（见 plan_recovery 的回退）。
+        self.forced_skill = forced_skill
         self.seq = start_seq - 1
         self.cache = dict(cache or {})
         self.suppress = set(suppress or [])
@@ -1003,7 +1007,8 @@ STRATEGY_BY_CAUSE = {
 }
 
 
-def plan_recovery(store, agent_type, root_cause, mode, scope="single"):
+def plan_recovery(store, agent_type, root_cause, mode, scope="single",
+                  forced_skill=None):
     """产出一条**策略链** list[str]，不再是一个孤立字符串。
 
     为什么必须是链：一次运行里可以同时存在多个故障点，
@@ -1035,7 +1040,8 @@ def plan_recovery(store, agent_type, root_cause, mode, scope="single"):
         return pack(["retry"], {"max_retry": MAX_RETRY, "chain": ["retry"]},
                     "固定规则：一律重试", "fixed_rule")
 
-    forced = FORCED_SKILL
+    # 实例状态优先；全局仅作向后兼容回退（旧脚本/测试仍在用）。
+    forced = forced_skill if forced_skill is not None else FORCED_SKILL
     # 候选技能只在**它自己声称的故障类型**上生效。
     # 不限制的话，评测时它会被强行套到同一个 Agent 的所有故障上，
     # guard 用例全被污染 -> 负迁移虚高 -> 真正有效的技能也会被拒。
@@ -1114,7 +1120,7 @@ def run_once(store, exp, mode):
                    fault_chain=specs)
     store.set_state(rid, RUNNING)
 
-    ctx = Ctx(store, rid, run_exp)
+    ctx = Ctx(store, rid, run_exp, forced_skill=run_exp.get("forced_skill"))
     ctx.task = {"task_id": exp["task_id"], "goal": exp["task_id"]}
 
     # ---- 安全层：进入 Agent 之前的输入校验 ----
@@ -1205,7 +1211,9 @@ def _recover(store, exp, run_exp, rid, ctx, mode):
              "root_cause": "unknown", "confidence": 0.0, "evidence": {}}
         did = None
 
-    plan = plan_recovery(store, exp["agent_type"], d["root_cause"], mode, scope=scope)
+    plan = plan_recovery(store, exp["agent_type"], d["root_cause"], mode,
+                         scope=scope,
+                         forced_skill=exp.get("forced_skill"))
     chain = plan["strategy_chain"]
     if chain[0] == "human_takeover":
         store.add_recovery(rid, did, "human_takeover", plan["params"],
@@ -1249,6 +1257,7 @@ def _recover(store, exp, run_exp, rid, ctx, mode):
         rctx = None
         try:
             rctx = Ctx(store, rid, run_exp, start_seq=start_seq,
+                       forced_skill=run_exp.get("forced_skill"),
                        cache=cache, suppress=suppress,
                        recovering=True, attempt=idx + 2, strategy=strategy,
                        round_root_cause=cur_d["root_cause"])
