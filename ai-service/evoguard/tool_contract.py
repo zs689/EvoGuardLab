@@ -366,3 +366,13 @@ def authorize(agent, tool, args, *, mode="audit", contracts=None,
     result["note"] = ("授权由结构化契约决定；正则命中只是附加信号，"
                       "不承担授权决策（推进计划 §5）")
     return result
+
+
+# ---- 把内置契约登记进动态注册表（外部工具可继续 register）----
+try:
+    from . import tool_registry as _registry
+except ImportError:                                    # sys.path 直插的旧用法
+    import tool_registry as _registry                  # type: ignore
+
+for _name, _contract in DEFAULT_CONTRACTS.items():
+    _registry.REGISTRY.register(_name, _contract, source="builtin")

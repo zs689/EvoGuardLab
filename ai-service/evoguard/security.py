@@ -586,15 +586,35 @@ def register_policy(agent_type, tools, append=False):
     """
     assert agent_type, "agent_type 不能为空"
     if append:
-        _POLICY_EXTRA[agent_type] = set(allowed_tools(agent_type)) | set(tools or ())
+        merged = set(allowed_tools(agent_type)) | set(tools or ())
+        _POLICY_EXTRA[agent_type] = merged
+        try:
+            from . import tool_registry as _reg
+        except ImportError:
+            import tool_registry as _reg                   # type: ignore
+        # 同步到注册表：两套白名单各记一份必然漂移
+        _reg.REGISTRY.declare_agent(agent_type, merged, replace=True)
     else:
         _POLICY_EXTRA[agent_type] = set(tools or ())
     return sorted(_POLICY_EXTRA[agent_type])
 
 
 def allowed_tools(agent_type):
+    """角色 → 工具白名单：动态注册表 → register_policy → 手写表，逐级兜底。
+
+    外部 Agent 用 `tool_registry.REGISTRY.declare_agent()` 声明自己的角色，
+    不必改硬编码表；`register_policy()` 追加的权限仍然生效（并集）。
+    """
+    try:
+        from . import tool_registry as _reg
+    except ImportError:
+        import tool_registry as _reg                       # type: ignore
+    extra = set(_POLICY_EXTRA.get(agent_type) or ())
+    dyn = _reg.REGISTRY.allowed_tools(agent_type)
+    if dyn:
+        return set(dyn) | extra
     if agent_type in _POLICY_EXTRA:
-        return set(_POLICY_EXTRA[agent_type])
+        return extra
     return set(AGENT_TOOLS.get(agent_type or "", ()))
 
 

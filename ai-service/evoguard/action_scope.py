@@ -18,7 +18,14 @@ READ_ONLY = "read_only"
 WRITE = "write"
 EXTERNAL = "external"
 
+try:
+    from . import tool_registry as _registry
+except ImportError:                                    # sys.path 直插的旧用法
+    import tool_registry as _registry                  # type: ignore
+
 # 工具职责表：只读工具不可能合法地「要求」调用方执行动作。
+# 这张表只是**内置工具的种子**；外部工具通过 tool_registry 动态登记，
+# 未登记的走 UNKNOWN_POLICY（默认 deny，见 check_output_scope）。
 TOOL_SCOPE = {
     "kb.search": READ_ONLY,
     "kb.search_all": READ_ONLY,
@@ -131,12 +138,21 @@ def detect_action_requests(text):
 
 def check_output_scope(tool, text):
     """按工具职责判断这段返回是否异常。返回 finding 或 None。"""
-    scope = TOOL_SCOPE.get(tool)
+    scope = scope_of(tool)
     hits = detect_action_requests(text)
     if not hits:
         return None
     if scope is None:
-        # 没登记职责：只报「出现了动作请求」，不判断越界（不猜）
+        # 没登记职责。以前一律 info 放行（等于没有约束），现在按策略：
+        # 默认 deny —— 外部工具没声明职责就不该悄悄放过动作请求。
+        if _registry.unknown_is_dangerous():
+            return {"code": "action_request_unscoped_denied", "severity": "error",
+                    "where": "tool_output",
+                    "match": "%s ×%d" % (hits[0]["verb"], len(hits)),
+                    "detail": "工具 %s 未在职责表登记，其返回里出现 %d 处动作请求；"
+                              "按 UNKNOWN_POLICY=deny 判越界（用 tool_registry "
+                              "登记职责可消除）" % (tool, len(hits)),
+                    "false_positive": "业务文档里对用户的指引也会命中"}
         return {"code": "action_request_unscoped", "severity": "info",
                 "where": "tool_output",
                 "match": "%s ×%d" % (hits[0]["verb"], len(hits)),
@@ -163,8 +179,16 @@ def check_output_scope(tool, text):
 
 
 def scope_of(tool):
+    """职责查询：动态注册表优先，内置表兜底。
+
+    返回 None 表示「未登记」——不是「没问题」。调用方必须按
+    UNKNOWN_POLICY 处理，不能当只读工具放过。
+    """
+    s = _registry.REGISTRY.scope_of(tool)
+    if s != _registry.UNKNOWN:
+        return s
     return TOOL_SCOPE.get(tool, None)
 
 
 def label_of(tool):
-    return _SCOPE_LABEL.get(TOOL_SCOPE.get(tool), "未登记")
+    return _SCOPE_LABEL.get(scope_of(tool), "未登记")
