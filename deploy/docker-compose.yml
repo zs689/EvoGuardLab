@@ -2,12 +2,10 @@
 #
 # 用法：
 #   docker compose -f deploy/docker-compose.yml up --build
-#   curl -s localhost:8080/api/ready | jq .backends
+#   curl -s localhost:18080/api/ready | jq .backends
 #
 # 本机未验证（无 docker daemon），配置按 compose v3 规范书写，
 # 在具备 Docker 的环境里可直接起来；`pg_rls_live.py` 另有独立入口。
-version: "3.9"
-
 x-common: &common
   build:
     context: ..
@@ -21,6 +19,17 @@ x-common: &common
     EVOGUARD_JWT_AUDIENCE: evoguard-api
     AGENTLAB_RATE_LIMIT: "120"
     AGENTLAB_RATE_WINDOW: "60"
+    # 企业模式的 fail-closed 校验项：缺一项服务就起不来（这是有意的）
+    AGENTLAB_API_TOKEN: ${AGENTLAB_API_TOKEN:-demo-token}
+    AGENTLAB_IDENTITY_MAP: '{"demo-token":{"tenant":"t1","actor":"alice","roles":["executor","reader"]}}'
+    AGENTLAB_AUDIT_DB: /data/audit.db
+    AGENTLAB_DB: /data/app.db
+    AGENTLAB_APPROVAL_BACKEND: file:/data/approvals.json
+    AGENTLAB_THRESHOLDS: /app/config/thresholds_v1.json
+    # 容器内必须绑 0.0.0.0，否则 nginx 连不上（默认 127.0.0.1 是给本机用的）
+    AGENTLAB_BIND: 0.0.0.0
+  volumes:
+    - evodata:/data
   depends_on:
     redis:
       condition: service_healthy
@@ -66,9 +75,10 @@ services:
       - evoguard-1
       - evoguard-2
     ports:
-      - "8080:80"
+      - "18080:80"   # 8080 常被 cvat 等占用，默认避开
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
 volumes:
   pgdata:
+  evodata:

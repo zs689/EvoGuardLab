@@ -133,3 +133,27 @@ def describe():
                          "PG 连接池 SET LOCAL 事务绑定",
                          "owner 绕过测试（DDL 里 FORCE 已覆盖，未在真库跑）"],
     }
+
+#: 幂等条件版：表不存在就跳过，不阻断容器初始化。
+#: `docker-entrypoint-initdb.d` 里执行时应用表还没建，直接用 RLS_DDL 会
+#: 因 "relation does not exist" 让 PostgreSQL 容器 exit 3（实测踩到）。
+#: 真实部署应「先建表再启用」，这个版本让执行顺序不再敏感。
+RLS_DDL_IF_EXISTS = """
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['runs', 'audit_events', 'skills'] LOOP
+    IF to_regclass(t) IS NOT NULL THEN
+      EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+      EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+      EXECUTE format('DROP POLICY IF EXISTS tenant_isolation_%s ON %I',
+                     t, t);
+      EXECUTE format(
+        'CREATE POLICY tenant_isolation_%s ON %I '
+        'USING (tenant_id = current_setting(''app.current_tenant'', true)) '
+        'WITH CHECK (tenant_id = current_setting(''app.current_tenant'', true))',
+        t, t);
+    END IF;
+  END LOOP;
+END $$;
+"""

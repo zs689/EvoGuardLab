@@ -1,0 +1,25 @@
+{
+  "auth": {
+    "forged_token": 401,
+    "no_token": 401,
+    "valid_token": 200
+  },
+  "cross_replica_rate_limit": "429 observed earlier under burst (Redis shared quota)",
+  "passed": true,
+  "ready": {
+    "backends": {
+      "auth_mode": "jwt_hs256",
+      "errors": [],
+      "limiter": "RedisLimiter",
+      "redis_url": "redis://redis:6379/0"
+    },
+    "checks": {
+      "audit": true,
+      "backends": true,
+      "db": true,
+      "redis": true
+    },
+    "status": 200
+  },
+  "topology": "2 x evoguard + redis:7 + postgres:16 + nginx (docker compose)"
+}
