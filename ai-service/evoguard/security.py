@@ -102,10 +102,33 @@ _det("injection_override", "error",
      r"(?:instructions?|prompts?|rules?)",
      "要求忽略既有指令，典型的指令覆盖攻击",
      "用户在描述「忽略之前那封邮件」这类业务语境时也会出现，需人工看一眼上下文")
+_det("injection_supersede", "warn",
+     # 多轮上下文漂移：先宣布上一条作废，再塞新目标。
+     # 用 warn 而不是 error —— 正常业务里「上一条需求作废，改为……」是合法的，
+     # 这里只提示人工复核，不硬拦。
+     r"(?:上一条|刚才那条|之前的指令|前面的要求)[^。！？\n]{0,12}"
+     r"(?:作废|无效|取消|不算|不适用)"
+     r"|(?:the\s+)?(?:previous|above|prior)\s+(?:instruction|request|task)s?"
+     r"\s+(?:is|are)\s+(?:void|cancell?ed|revoked)",
+     "声明上一条指令作废并改写目标，多轮上下文漂移的典型写法",
+     "正常业务里「上一条需求作废」也会命中，属可接受的可复核提示")
 _det("injection_role_switch", "error",
-     r"(?:你现在是|从现在起你是|扮演一个没有限制的|you\s+are\s+now\s+(?:a|an|the)\s+(?:unrestricted|unfiltered|evil|dan))",
-     "试图改写模型身份或解除限制",
+     # 「You are now the admin」和「unrestricted」是同一类：都试图提升权限。
+     # 只认 unrestricted/evil 会漏掉最常见的管理员提权写法。
+     r"(?:你现在是|从现在起你是|扮演一个没有限制的|"
+     r"you\s+are\s+now\s+(?:a|an|the)\s+(?:unrestricted|unfiltered|evil|dan|"
+     r"admin|administrator|root|superuser|owner))",
+     "试图改写模型身份或提升权限",
      "正常业务里出现「你现在是审核员」这类说法会误报")
+_det("injection_double_negation_grant", "error",
+     # 「不要忘记把权限授予 X」表面是否定，实际是要求授权。
+     # 只匹配否定词、不匹配后面的授权动作，就会把它当成安全的劝阻。
+     r"(?:不要|请勿|切勿|别)(?:忘记|忘了|忘掉)[^。！？\n]{0,24}"
+     r"(?:授予|授权|开通|提权|批准|解除限制)"
+     r"|(?:don'?t|do\s+not|never)\s+forget\s+to\s+(?:grant|authori[sz]e|"
+     r"send|transfer|escalate|approve)",
+     "双重否定包装的授权请求（「不要忘记授权」实为要求授权）",
+     "「不要忘记把报告发给同事」这类正常提醒会命中，需看宾语")
 _det("injection_prompt_leak", "error",
      r"(?:输出|打印|告诉我|展示|复述|reveal|print|show|repeat)\s*(?:你的)?\s*"
      r"(?:系统)?(?:提示词|系统提示|prompt|system\s+message|instructions)",
@@ -127,6 +150,11 @@ _det("exfil_url_with_secret", "error",
      r"https?://[^\s\"'<>]{0,200}?(?:[?&](?:key|token|secret|password|passwd|api_key)=)",
      "URL 里携带凭据参数，典型外带通道",
      "调试文档里的示例 URL 会命中")
+_det("exfil_upload_to_url", "error",
+     r"(?:上传|发送|转发|外发|导出)[^。！？\n]{0,16}https?://"
+     r"|(?:upload|send|forward|export)[^\n.]{0,20}https?://",
+     "把数据发往外部地址，常见于数据外带",
+     "正常的文件托管/回调配置会命中，需确认目标域名是否在允许清单")
 _det("exfil_data_uri", "warn",
      r"!\[[^\]]*\]\(\s*data:[^)]{40,}\)",
      "Markdown 图片里塞 data URI，可用来把内容编码进外链",
@@ -205,6 +233,13 @@ _PRE = {
     "pii_phone": ("13", "14", "15", "16", "17", "18", "19"),
     "pii_email": ("@",),
     "dangerous_shell_rm": ("rm",),
+    # INT-03：新规则必须带前置词，否则每条文本都要全量跑正则
+    # （实测 10KB 从 1.0ms 涨到 1.77ms，超了 1.5ms 预算）。
+    "injection_supersede": ("作废", "无效", "取消", "不算", "void", "revoked",
+                            "cancelled", "canceled"),
+    "injection_double_negation_grant": ("忘", "forget"),
+    # 上传外发规则必然含 URL，用 http 作前置最省
+    "exfil_upload_to_url": ("http",),
     "dangerous_shell_pipe": ("curl", "wget"),
     "dangerous_shell_eval": ("invoke-expression", "iex", "eval("),
     "dangerous_chmod": ("chmod",),
