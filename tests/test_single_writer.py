@@ -26,14 +26,24 @@ class FakeGate:
         self.released += 1
 
 
+_OPEN_CONNS = []          # WS-01-T3：登记后统一关闭，消除 8 条 ResourceWarning
+
+
 def _mem():
     raw = sqlite3.connect(":memory:")
     raw.execute("CREATE TABLE t(a INTEGER)")
     raw.commit()
+    _OPEN_CONNS.append(raw)
     return raw
 
 
 class TestWriteGuardConn(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls):
+        # 每个 _mem() 建一条连接，测试里没有 close（_WriteGuardConn 是代理，
+        # 不转发 close），以前跑完全量回归会留下 8 条 unclosed database 警告。
+        while _OPEN_CONNS:
+            _OPEN_CONNS.pop().close()
     def test_read_does_not_take_lock(self):
         raw, gate = _mem(), FakeGate()
         c = core._WriteGuardConn(raw, gate)

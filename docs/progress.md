@@ -1156,7 +1156,7 @@ Windows 写法在 POSIX 上会被当成普通文件名；盘符路径 `C:/evil.p
 
 ### 本地 Ollama
 
-- `ollama` 在 `F://ollama//ollama.exe`，模型在 `F://Qwen3`（`OLLAMA_MODELS` 已指向）。
+- `ollama` 在 `F://ollama//ollama.exe`，模型在 `<model-cache>/Qwen3`（`OLLAMA_MODELS` 已指向）。
   `ollama serve` 启动后 `qwen3:4b` 可用。
 - 之前 11434 的 502 是 **HTTP 代理拦截**：`NO_PROXY=127.0.0.1,localhost` 绕过即可，
   不是服务没起。`check_model.py` 与模型输出都验证通过。
@@ -1548,7 +1548,7 @@ CI 补 `pip install -e .`、config/demo/eval 冒烟、3.10/3.11/3.13 + 一个 Wi
 **提交后实测 clean clone：`Ran 802 tests ... OK (skipped=41)`**，
 从上一轮的 `FAILED (failures=3, errors=5)` 变成全绿；fixture sha 完全匹配。
 
-**元数据**：清 `C:/Users/zs`、`E:/agent/learn`、`F:\Qwen3` 等开发机路径；
+**元数据**：清 `<home>`、`<workspace>/learn`、`F:\Qwen3` 等开发机路径；
 删 `OWNER` / `<this-repo>` 占位；新建 `tests/fixtures/external/README.md`
 说明 12 条 InjecAgent 夹具的 MIT 许可；精确化 README「语料正文不入库」的例外。
 另修一次误提交：冒烟跑 `evoguard eval` 重写了两个冻结评测产物，

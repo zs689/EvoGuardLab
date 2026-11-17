@@ -83,7 +83,7 @@ CI 只跑这一条。本轮：
 
 ## 五、元数据与合规
 
-- 清掉 `C:/Users/zs/...`、`E:/agent/learn/...`、`F:\Qwen3`、`/f/ollama` 等
+- 清掉 `<home>/...`、`<workspace>/learn/...`、`F:\Qwen3`、`<model-cache>/ollama` 等
   开发机路径；文档命令改用相对路径与占位符。
 - `pyproject.toml` 删掉 `OWNER` 占位 URL、README 删掉 `<this-repo>` 占位。
 - 新建 `tests/fixtures/external/README.md`：说明 12 条 InjecAgent 夹具的

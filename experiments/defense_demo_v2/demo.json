@@ -572,7 +572,9 @@
       "followup": "controlled_worst_case",
       "detected": true,
       "codes": [
-        "injection_override"
+        "action_on_read_only_tool",
+        "injection_override",
+        "rails_injection_override"
       ],
       "decision": "report",
       "action": "reported",
@@ -1000,7 +1002,9 @@
       "followup": "controlled_worst_case",
       "detected": true,
       "codes": [
-        "injection_override"
+        "action_on_read_only_tool",
+        "injection_override",
+        "rails_injection_override"
       ],
       "decision": "deny",
       "action": "blocked",
@@ -1455,7 +1459,9 @@
       "followup": "controlled_worst_case",
       "detected": true,
       "codes": [
-        "injection_override"
+        "action_on_read_only_tool",
+        "injection_override",
+        "rails_injection_override"
       ],
       "decision": "wrap",
       "action": "blocked",

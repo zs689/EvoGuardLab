@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """为参考仓库生成统一清单：commit SHA / 许可证 / 来源 / 用途。
 
-    python scripts/build_reference_manifest.py --root E:/agent/github \
-        --out E:/agent/github/SOURCE_MANIFEST.json
+    python scripts/build_reference_manifest.py --root <workspace>/github \
+        --out <workspace>/github/SOURCE_MANIFEST.json
 
 为什么需要（外部审查 REF-ORG-001）：
 `learn/` 和 `github/` 下散着十几个参考实现，没有统一清单 ——

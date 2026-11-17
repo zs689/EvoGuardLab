@@ -1,6 +1,6 @@
 # 独立审查整改 · 修前证据
 
-来源：`E:/agent/EvoGuardLab_企业与高性能客观审查_2026-11-12.json`
+来源：`<workspace>/EvoGuardLab_企业与高性能客观审查_2026-11-12.json`
 （revision `793c6d1`，2026-11-12，独立克隆 + 独立 venv + 本机 HTTP 压测）
 
 本文件只记**我自己复现过**的差距。`scripts/review_checks.py` 是同一检查入口，
@@ -39,7 +39,7 @@ python scripts/review_checks.py --out docs/review-remediation/before
 复用审查留下的独立 venv，未在你机器上装任何东西：
 
 ```
-cd E:/agent/_enterprise_review_20261112/tmp
+cd <workspace>/_enterprise_review_20261112/tmp
 ../wheel_env_793c6d1/Scripts/evoguard.exe <cmd>
 ```
 
