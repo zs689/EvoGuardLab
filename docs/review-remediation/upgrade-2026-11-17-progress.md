@@ -111,3 +111,41 @@ no such table、with 不关闭连接导致泄漏/SIGTERM）与熔断自死锁。
 4. WS-06 的 Redis 后端与真双副本压测已完成；PG/RLS 因本机
    （无 postgres 二进制、无 dockerd、Docker Desktop 未安装）无法起真服务，
    提供可部署的 RLS SQL 与租户隔离语义验证，不假称跑过真 PG。
+
+---
+
+# 第二轮：INT-01 ~ INT-05（2026-11-17 晚）
+
+依据 `EvoGuardLab_下一轮核心补齐方案_2026-11-17.json`。
+
+| WS | 状态 | 证据 |
+|---|---|---|
+| INT-01 主路径总装接线 | ✅ 完成 | app.py `_build_backends()` 按 env 切 Redis/JWT；`/api/react/run`、`/api/skills/synthesize` 上线；CLI `react`/`synth` 可跑；`evidence_grounding` 进 DEFAULT_RAILS；`test_app_integration_ws.py` 8 项**真启 HTTP server** |
+| INT-02 发布卫生 | ✅ 完成 | `-W error::ResourceWarning` 全量 0 警告；历史邮箱二次清洗 0 命中；工作区干净 |
+| INT-03 v3 过线 | ✅ T1 PASS / T2 已做（负结果） | 8 条线全 OK（滑动窗口 + 判官 + 3 条真实 L1 缺口）；盲测：中文自建集 0.4389、中文越狱 0.0645、InjecAgent 0.8867 |
+| INT-04 沙箱 | ⚠️ T1 完成；长程记忆未接 | `sandbox_executor.py` + 13 项对抗测试；跨任务记忆注入未进 ReAct 上下文 |
+| INT-05 真 PG + 多副本 | ⚠️ 配置与 CI 就绪，**本机未实跑** | compose/Dockerfile/nginx/init-rls + CI workflow + `--dsn` 模式；本机无 daemon、PG 包下载 70% 后网络中断 |
+
+## INT-03：v3 PASS 与盲测负结果必须一起看
+
+v3 的 8 条线是在**模板化载荷**上过的（`payload_source=realized_templates`）。
+独立来源复核：
+
+| 数据集 | 来源 | n | 召回 |
+|---|---|---|---|
+| chinese_selfbuilt | 项目自建 | 413 | 0.4389 |
+| chinese_jailbreak | 项目自建 | 62 | 0.0645 |
+| injecagent_public | 公开数据集 | 2108 | 0.9032 |
+
+判官本身正常（英文注入 p=0.95 判 True），对中文越狱判 False ——
+qwen3-4b 判的是「是否在对 AI 下指令」，越狱集大量是「请求协助绕过防护」。
+**不是调用失败，是判据目标不同**；要提升需另设判官。
+
+## 未做/未验证（如实）
+
+1. INT-04 跨任务长程记忆注入：`experience.retrieve` 有，未接进 ReAct system prompt。
+2. INT-05 真 PG 与 compose 实跑：本机 docker daemon 未起、无 postgres 二进制；
+   免安装包下到 238/338MB 后反复中断（已清理 246MB 临时目录）。
+   `--dsn` 模式与 compose 拓扑**未在本机执行过**，只靠 CI workflow 覆盖。
+3. 符号链接逃逸测试在 Windows 非开发者模式 skip（2 项），
+   已用不依赖 symlink 的前缀规则测试补位。
