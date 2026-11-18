@@ -214,12 +214,59 @@ class NetworkSandbox:
                 "bytes": len(raw), "body": raw.decode("utf-8", "replace")}
 
 
+#: 纯 Python 内置只读动作：**不依赖任何外部二进制**，跨平台行为一致。
+#: 这是 Windows 原生环境唯一稳定的只读执行路径（该系统下没有 cat/echo
+#: 可执行文件，shell=False 调它们会 FileNotFoundError）。
+BUILTIN_ACTIONS = frozenset({"read_text", "list_dir", "count_lines"})
+
+
+def run_builtin_action(action, *, path=None, cwd=None, max_bytes=MAX_BYTES,
+                       root=None):
+    """内置只读动作。全部用标准库实现，无子进程、无 shell。
+
+    root 给定时，path 必须落在 root 之内（带分隔符的前缀判定，
+    与 SandboxExecutor 同一套防 /root2 绕过的规则）。
+    """
+    import os as _os
+    if action not in BUILTIN_ACTIONS:
+        raise SandboxError("builtin_not_allowlisted:%s" % action)
+    base = root or cwd or _os.getcwd()
+    target = path if path is not None else "."
+    if _os.path.isabs(str(target)):
+        full = _os.path.realpath(str(target))
+    else:
+        full = _os.path.realpath(_os.path.join(base, str(target)))
+    real_root = _os.path.realpath(base)
+    if not (full == real_root or full.startswith(real_root + _os.sep)):
+        raise SandboxError("builtin_path_outside_root:%s" % str(target)[:40])
+    if action == "list_dir":
+        names = sorted(_os.listdir(full))
+        return {"action": action, "path": full, "entries": names,
+                "bytes": len(names)}
+    if not _os.path.isfile(full):
+        raise SandboxError("builtin_not_a_file:%s" % str(target)[:40])
+    size = _os.path.getsize(full)
+    if size > max_bytes:
+        raise SandboxError("output_too_large:%d" % size)
+    with open(full, "rb") as f:
+        raw = f.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise SandboxError("output_too_large:%d" % len(raw))
+    text = raw.decode("utf-8", "replace")
+    if action == "count_lines":
+        lines = text.count("\n") + (0 if not text or text.endswith("\n") else 1)
+        return {"action": action, "path": full, "lines": lines,
+                "bytes": len(raw)}
+    return {"action": action, "path": full, "text": text, "bytes": len(raw)}
+
+
 def run_readonly_command(argv, *, cwd=None, timeout=5,
                          max_bytes=MAX_BYTES, popen=None):
     """受控只读命令：白名单精确匹配 + 无 shell + 无元字符 + 超时/输出上限。
 
     返回 {cmd, stdout, bytes}；任何违规抛 SandboxError（-> executed=False）。
     """
+    import shutil as _shutil
     import subprocess
     args = list(argv or [])
     if not args or str(args[0]) not in READONLY_COMMANDS:
@@ -229,6 +276,13 @@ def run_readonly_command(argv, *, cwd=None, timeout=5,
     for a in args:
         if any(ch in str(a) for ch in SHELL_METACHARS):
             raise SandboxError("shell_metachar_in_arg:%s" % str(a)[:30])
+    # 白名单只保证「名字允许」，不保证「本机存在」：Windows 原生环境没有
+    # cat/echo 可执行文件，直接 subprocess 会抛 FileNotFoundError 而不是
+    # 给出可读原因。这里显式判存在性，并提示改用内置动作。
+    if popen is None and _shutil.which(str(args[0])) is None:
+        raise SandboxError(
+            "command_not_available:%s（本机无此可执行文件；"
+            "跨平台只读请用 run_builtin_action）" % args[0])
     fn = popen or subprocess.run
     try:
         r = fn([str(x) for x in args], cwd=cwd, timeout=timeout,
@@ -253,6 +307,7 @@ def describe():
         "write_ext": sorted(WRITE_EXT),
         "max_bytes": MAX_BYTES,
         "readonly_commands": sorted(READONLY_COMMANDS),
+        "builtin_actions": sorted(BUILTIN_ACTIONS),
         "network": "domain allowlist + SSRF private-host block",
         "protections": ["absolute path", ".. traversal", "symlink escape",
                         "extension allowlist", "size cap"],

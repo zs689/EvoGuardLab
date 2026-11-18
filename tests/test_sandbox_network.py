@@ -2,6 +2,7 @@
 """PROD-04-T1：受限只读命令 + HTTP Fetch 的 SSRF/注入对抗。"""
 import io
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -13,10 +14,36 @@ import sandbox_executor as SB                               # noqa: E402
 
 
 class TestReadOnlyCommand(unittest.TestCase):
-    def test_allowed_command_runs(self):
-        r = SB.run_readonly_command(["echo", "hello"])
-        self.assertEqual(r["stdout"].strip(), "hello")
-        self.assertEqual(r["cmd"], "echo")
+    def test_builtin_actions_run_cross_platform(self):
+        """内置动作不依赖外部二进制，任何平台都必须真跑通。"""
+        d = tempfile.mkdtemp(prefix="sbox-")
+        # newline="" 保证各平台字节一致：否则 Windows 会把 \n 写成 \r\n，
+        # 断言字节数就成了「平台相关」的伪测试。
+        with open(os.path.join(d, "a.txt"), "w", encoding="utf-8",
+                  newline="") as f:
+            f.write("hello\nworld\n")
+        r = SB.run_builtin_action("read_text", path="a.txt", root=d)
+        self.assertIn("hello", r["text"])
+        self.assertEqual(r["bytes"], 12)
+        c = SB.run_builtin_action("count_lines", path="a.txt", root=d)
+        self.assertEqual(c["lines"], 2)
+        ls = SB.run_builtin_action("list_dir", path=".", root=d)
+        self.assertTrue(any("a.txt" in x for x in ls["entries"]))
+
+    def test_builtin_path_escape_blocked(self):
+        d = tempfile.mkdtemp(prefix="sbox-")
+        for bad in ("../etc/passwd", "..\\..\\windows"):
+            with self.assertRaises(SB.SandboxError, msg=bad):
+                SB.run_builtin_action("read_text", path=bad, root=d)
+
+    def test_missing_binary_is_readable_error(self):
+        """白名单内但本机不存在的命令：给可读原因，不能 TypeError/崩溃。"""
+        absent = [c for c in ("cat", "echo") if shutil.which(c) is None]
+        if not absent:
+            self.skipTest("本机 POSIX 命令均存在，无法构造缺失场景")
+        with self.assertRaises(SB.SandboxError) as cm:
+            SB.run_readonly_command([absent[0], "x"])
+        self.assertIn("command_not_available", str(cm.exception))
 
     def test_command_not_allowlisted(self):
         for cmd in ("rm", "bash", "python", "curl"):
@@ -33,20 +60,29 @@ class TestReadOnlyCommand(unittest.TestCase):
         """命令替换串被元字符防线挡掉，根本到不了 shell。"""
         with self.assertRaises(SB.SandboxError):
             SB.run_readonly_command(["echo", "$(whoami)"])
-        # 普通文本不经 shell，原样输出
-        r = SB.run_readonly_command(["echo", "literal text"])
-        self.assertIn("literal text", r["stdout"])
+        # 命令替换即使作为内置动作参数也原样保留，不解释（无 shell）
+        d = tempfile.mkdtemp(prefix="sbox-")
+        p = os.path.join(d, "t.txt")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("$(whoami)")
+        r = SB.run_builtin_action("read_text", path="t.txt", root=d)
+        self.assertEqual(r["text"], "$(whoami)")
 
     def test_output_cap(self):
+        d = tempfile.mkdtemp(prefix="sbox-")
+        p = os.path.join(d, "big.txt")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("x" * 100)
         with self.assertRaises(SB.SandboxError):
-            SB.run_readonly_command(["echo", "x" * 100], max_bytes=10)
+            SB.run_builtin_action("read_text", path="big.txt", root=d,
+                                  max_bytes=10)
 
     def test_cwd_confined(self):
         d = tempfile.mkdtemp(prefix="sbox-")
-        with open(os.path.join(d, "a.txt"), "w") as f:
+        with open(os.path.join(d, "a.txt"), "w", encoding="utf-8") as f:
             f.write("ok")
-        r = SB.run_readonly_command(["cat", "a.txt"], cwd=d)
-        self.assertIn("ok", r["stdout"])
+        r = SB.run_builtin_action("read_text", path="a.txt", cwd=d)
+        self.assertIn("ok", r["text"])
 
 
 class TestSSRF(unittest.TestCase):
