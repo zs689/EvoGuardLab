@@ -79,6 +79,21 @@ class TestMainPathWiring(Base):
         for s in body["steps"]:
             self.assertFalse(s.get("executed"),
                              "越权工具被执行了：%s" % s)
+    def test_react_reports_memory_audit(self):
+        """主路径必须回报记忆注入审计（否则又是「模块绿但入口没调」）。"""
+        code, body = self.req("POST", "/api/react/run", {
+            "goal": "核对订单金额", "agent_type": "react",
+            "max_steps": 1, "executor": "none"})
+        self.assertEqual(code, 200)
+        self.assertIn("memory", body)
+        self.assertIn("injected", body["memory"])
+
+    def test_react_can_disable_memory(self):
+        code, body = self.req("POST", "/api/react/run", {
+            "goal": "核对订单金额", "use_memory": False,
+            "max_steps": 1, "executor": "none"})
+        self.assertEqual(code, 200)
+        self.assertEqual(body["memory"]["injected"], 0)
 
     def test_react_requires_goal(self):
         code, body = self.req("POST", "/api/react/run", {"goal": ""})

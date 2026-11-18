@@ -991,7 +991,8 @@ class Handler(BaseHTTPRequestHandler):
         """INT-01-T2：驱动真实多轮 ReAct Agent（工具走 tool_registry + preflight）。
 
         body: {"goal": str, "agent_type": str, "max_steps": int,
-               "tools": [{"name":..., "schema":{...}}]?, "executor":"none|stub"}
+               "tools": [{"name":..., "schema":{...}}]?, "executor":"none|stub","use_memory":"bool?",
+             "memory_task_type":"string?"}
         默认不执行任何真实副作用：executor=none 时工具调用一律 executed=False，
         只有显式 "stub" 才用只读桩执行器（用于演示/集成测试）。
         """
@@ -1027,13 +1028,17 @@ class Handler(BaseHTTPRequestHandler):
                     calls.append({"tool": tool, "args": args})
                     return {"ok": True, "stub": True,
                             "docs": ["stub-doc"]}
+            memory_store = None
+            if body.get("use_memory") is not False:
+                memory_store = get_store(self._tenant_id)
             out = AA.ReActAgent(
                 agent_type=agent_type, goal=goal, registry=reg,
-                executor=executor,
+                executor=executor, memory_store=memory_store,
+                memory_task_type=body.get("memory_task_type"),
                 max_steps=int(body.get("max_steps") or 4)).run()
             self._send(200, {
                 "answer": out["answer"], "stopped_by": out["stopped_by"],
-                "contract": out["contract"],
+                "contract": out["contract"], "memory": out.get("memory"),
                 "steps": [{"seq": s.get("seq"), "kind": s.get("kind"),
                            "tool": s.get("tool"),
                            "executed": bool(s.get("executed")),

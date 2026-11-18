@@ -19,6 +19,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 EVO = os.path.join(ROOT, "ai-service", "evoguard")
@@ -143,9 +144,20 @@ def cmd_react(a):
         calls.append({"tool": tool, "args": args})
         return {"ok": True, "stub": True}
 
-    out = AA.ReActAgent(agent_type=a.agent_type, goal=a.goal, registry=reg,
-                        executor=executor if a.executor == "stub" else None,
-                        max_steps=a.max_steps).run()
+    mem_store = None
+    if not a.no_memory:
+        import core
+        mem_store = core.Store(a.memory_db or
+                               os.path.join(tempfile.gettempdir(),
+                                            "evoguard-memory.db"))
+    try:
+        out = AA.ReActAgent(agent_type=a.agent_type, goal=a.goal, registry=reg,
+                            executor=executor if a.executor == "stub" else None,
+                            max_steps=a.max_steps, memory_store=mem_store,
+                            memory_task_type=a.memory_task_type).run()
+    finally:
+        if mem_store is not None:
+            mem_store.close()
     if a.json:
         print(json.dumps({"answer": out["answer"],
                           "stopped_by": out["stopped_by"],
@@ -336,6 +348,10 @@ def main(argv=None):
     p.add_argument("--executor", default="none", choices=["none", "stub"],
                    help="none=不执行真实副作用；stub=只读桩")
     p.add_argument("--max-steps", type=int, default=4)
+    p.add_argument("--no-memory", action="store_true",
+                   help="禁用跨任务记忆注入")
+    p.add_argument("--memory-db", default="", help="经验库路径")
+    p.add_argument("--memory-task-type", default="", help="任务类型（检索用）")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_react)
 

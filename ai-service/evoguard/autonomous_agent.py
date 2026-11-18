@@ -101,7 +101,8 @@ class ReActAgent:
     def __init__(self, *, agent_type="react", goal="", provider=None,
                  registry=None, executor=None, cfg=None, rails=None,
                  max_steps=8, max_same_call=2, enforce=True,
-                 has_approval_backend=False):
+                 has_approval_backend=False,
+                 memory_store=None, memory_task_type=None):
         self.agent_type = agent_type
         self.goal = goal
         self.provider = provider or _gw.get_provider()
@@ -111,6 +112,12 @@ class ReActAgent:
         self.max_steps = max(1, int(max_steps))
         self.max_same_call = max(1, int(max_same_call))
         self.enforce = bool(enforce)
+        # INT-04-T1：跨任务长程记忆（可选）。没有 store 时行为完全不变。
+        self.memory_store = memory_store
+        # 不传时用 None：agent_type（react）与 task_type（order）是两个维度，
+        # 拿 agent_type 当任务类型会把所有跨任务经验过滤掉。
+        self.memory_task_type = memory_task_type
+        self.memory_stats = {"injected": 0, "ids": []}
         tools = sorted(build_tools_prompt(self.registry, agent_type))
         writes = [t for t in tools
                   if (self.registry.get(t) or {}).get("side_effect") == "write"]
@@ -153,9 +160,24 @@ class ReActAgent:
         steps, observations, seen = [], [], {}
         limit = int(max_steps or self.max_steps)
         tools = build_tools_prompt(self.registry, self.agent_type)
+        memory_text = ""
+        if self.memory_store is not None:
+            try:
+                import memory_context as _mc
+                memory_text, self.memory_stats = _mc.build_context(
+                    self.memory_store, self.goal,
+                    agent_type=self.agent_type,
+                    task_type=self.memory_task_type)
+            except Exception as exc:                    # noqa: BLE001
+                # 记忆检索失败不能让整轮挂掉，但必须如实记下来（不静默）
+                self.memory_stats = {"injected": 0, "error":
+                                     type(exc).__name__}
+        system = SYSTEM + "\n\ntools=" + json.dumps(
+            tools, ensure_ascii=False, sort_keys=True)
+        if memory_text:
+            system += "\n\n" + memory_text
         messages = [
-            {"role": "system", "content": SYSTEM + "\n\ntools=" +
-             json.dumps(tools, ensure_ascii=False, sort_keys=True)},
+            {"role": "system", "content": system},
             {"role": "user", "content": self.goal},
         ]
         total_tokens = 0
@@ -303,7 +325,8 @@ class ReActAgent:
         )
         return {"answer": final_answer, "steps": steps,
                 "contract": contract, "stopped_by": stopped_by,
-                "tokens": total_tokens, "tools": tools}
+                "tokens": total_tokens, "tools": tools,
+                "memory": dict(self.memory_stats)}
 
 
 def run_react(**kwargs):
