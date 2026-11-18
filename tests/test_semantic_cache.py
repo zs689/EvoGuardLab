@@ -44,6 +44,26 @@ class TestSemanticCache(unittest.TestCase):
         self.assertNotEqual(a, b)
         self.assertNotEqual(a, S.canonical("tool_output", "hello"))
 
+    def test_model_version_isolates_cache_keys(self):
+        """EG-027：换模型必须换缓存键，否则 A 的判定被 B 命中。"""
+        default = S.canonical("tool_output", "hello")  # 不传 -> MODEL
+        self.assertEqual(default,
+                         S.canonical("tool_output", "hello", model=S.MODEL))
+        other = S.canonical("tool_output", "hello", model="qwen3:8b")
+        self.assertNotEqual(default, other)
+        self.assertNotEqual(other,
+                            S.canonical("tool_output", "hello", model="llama3"))
+
+    def test_guard_uses_its_model_in_cache_key(self):
+        """SemanticGuard.judge 传自己的 model，非默认模型之间不串缓存。"""
+        ga = Guard(model="model-a", ttl_s=999)
+        gb = Guard(model="model-b", ttl_s=999)
+        ra = ga.judge("tool_output", "same text")
+        rb = gb.judge("tool_output", "same text")
+        self.assertNotEqual(ra["key"], rb["key"])
+        self.assertEqual(ga.calls, 1)
+        self.assertEqual(gb.calls, 1)
+
     def test_cache_is_bounded_lru(self):
         now = [1000.0]
         g = Guard(max_entries=3, ttl_s=999, clock=lambda: now[0])

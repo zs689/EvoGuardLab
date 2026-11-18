@@ -82,14 +82,20 @@ def prompt_hash(mode):
     return _sha(PROMPTS[mode])
 
 
-def canonical(mode, text, scope=""):
-    """缓存键：模式 + prompt 版本 + 文本（可选授权作用域）。
+def canonical(mode, text, scope="", model=None):
+    """缓存键：模式 + prompt 版本 + 文本（可选授权作用域）+ 模型版本。
 
-    `scope` 默认空，键与历史完全一致 —— 离线零依赖的既有多组复现证据
-    不能被这次改动弄脏。企业模式可传 tenant/策略作用域，避免跨租户复用
-    同一条判定结果（EG-001 / EG-027）。
+    - `scope` 默认空、`model` 默认 MODEL：键与历史**字节级一致** —— 离线
+      零依赖的既有多组复现证据不能被这次改动弄脏。
+    - 换模型（EG-027）：不同模型对同一文本的判定不同，键必须隔离，否则
+      缓存串味 —— A 模型的判定被 B 模型命中。
+    - 企业模式可传 tenant/策略 scope，避免跨租户复用判定（EG-001/EG-027）。
     """
+    model = model or MODEL
     base = "%s|%s|%s" % (VERSION, prompt_hash(mode), text)
+    # 默认模型不进键（向后兼容历史缓存）；非默认模型显式编入，实现隔离。
+    if model != MODEL:
+        base = "model:%s|%s" % (model, base)
     return _sha(base if not scope else "scope:%s|%s" % (scope, base))
 
 
@@ -161,7 +167,7 @@ class SemanticGuard:
         """
         if mode not in PROMPTS:
             raise ValueError("未知落点：%s" % mode)
-        key = canonical(mode, text, scope)
+        key = canonical(mode, text, scope, model=self.model)
         now = self._clock()
         if key in self.cache:
             entry = self.cache[key]
