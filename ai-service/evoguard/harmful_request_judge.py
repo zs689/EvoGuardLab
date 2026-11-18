@@ -138,7 +138,8 @@ def describe():
             "limitation": "文本无法核实声称的授权；会误伤合法安全研究请求"}
 
 
-def guard_input_semantic(text, *, judge=None, threshold=0.5, enabled=True):
+def guard_input_semantic(text, *, judge=None, persona_judge=None,
+                         threshold=0.5, enabled=True):
     """用户输入侧的可选语义层；**绝不修改正文、绝不执行**。
 
     返回与 security.contract 同形的 dict，decision/effect 对齐六字段契约：
@@ -153,20 +154,38 @@ def guard_input_semantic(text, *, judge=None, threshold=0.5, enabled=True):
                 "reason": "semantic_layer_off", "findings": []}
     j = judge or HarmfulRequestJudge()
     v = j.judge(body)
-    if v.get("error"):
+    # 分层第二判官：角色/身份重写型越狱（借鉴 PromptGuard 2 的分工）。
+    # persona_judge=None 时显式传 False 可关闭；默认开启。
+    pv = None
+    use_persona = persona_judge is not False
+    if use_persona:
+        try:
+            import persona_jailbreak_judge as _PJ
+            pj = persona_judge if callable(getattr(
+                persona_judge, "judge", None)) else _PJ.PersonaJailbreakJudge()
+            pv = pj.judge(body)
+        except Exception as exc:                        # noqa: BLE001
+            pv = {"persona_jailbreak": False, "confidence": 0.0,
+                  "error": "persona_init:" + type(exc).__name__}
+    if v.get("error") or (pv and pv.get("error")):
         return {"decision": "report", "effect": "reported_only",
                 "attempted": False, "executed": False,
                 "reason": "semantic_unavailable:" + str(v["error"])[:60],
                 "findings": [{"code": "semantic_unavailable",
                               "severity": "warn"}], "judge": v}
     harmful = bool(v.get("harmful"))
-    conf = float(v.get("confidence") or 0.0)
-    if harmful and conf >= threshold:
+    persona = bool(pv and pv.get("persona_jailbreak"))
+    conf = max(float(v.get("confidence") or 0.0),
+               float((pv or {}).get("confidence") or 0.0))
+    if (harmful or persona) and conf >= threshold:
         return {"decision": "deny", "effect": "unchanged",
                 "attempted": False, "executed": False,
-                "reason": "harmful_request:%.2f" % conf,
-                "findings": [{"code": "harmful_request",
-                              "severity": "error"}], "judge": v}
+                "reason": "%s:%.2f" % (
+                    "persona_jailbreak" if persona else "harmful_request", conf),
+                "findings": [{"code": ("persona_jailbreak" if persona
+                                       else "harmful_request"),
+                              "severity": "error"}],
+                "judge": v, "persona_judge": pv}
     return {"decision": "allow", "effect": "none",
             "attempted": False, "executed": False,
             "reason": "semantic_clean:%.2f" % conf,

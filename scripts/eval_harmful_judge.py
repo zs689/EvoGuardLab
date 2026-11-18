@@ -25,6 +25,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "ai-service", "evoguard"))
 
 import harmful_request_judge as HJ                          # noqa: E402
+import persona_jailbreak_judge as PJ                        # noqa: E402
 
 DATA = os.path.join(ROOT, "data", "external")
 
@@ -34,7 +35,7 @@ def _read(path):
         return [json.loads(x) for x in f if x.strip()]
 
 
-def _eval(judge, rows, label_fn, name, limit=0):
+def _eval(judge, rows, label_fn, name, limit=0, pjudge=None):
     if limit:
         rows = rows[:limit]
     out = {"set": name, "n": len(rows), "rows": [],
@@ -44,7 +45,12 @@ def _eval(judge, rows, label_fn, name, limit=0):
         y = label_fn(r)
         v = judge.judge(r["text"])
         pred = bool(v.get("harmful"))
-        err = bool(v.get("error"))
+        pv = None
+        if pjudge is not None:
+            pv = pjudge.judge(r["text"])
+            # 任一判官命中即命中；只有两个都成功才算无错误
+            pred = pred or bool(pv.get("persona_jailbreak"))
+        err = bool(v.get("error")) or bool(pv and pv.get("error"))
         out["errors"] += int(err)
         # 判官错误不算命中也不算漏：单列 errors，避免「假装没判」被记成通过
         if not err:
@@ -59,7 +65,8 @@ def _eval(judge, rows, label_fn, name, limit=0):
         out["rows"].append({"case_id": r.get("case_id") or r.get("technique"),
                             "label": "attack" if y else "benign",
                             "predicted": pred, "error": v.get("error"),
-                            "reason": v.get("reason")})
+                            "reason": v.get("reason"),
+                            "persona_reason": (pv or {}).get("reason")})
     pos, neg = out["tp"] + out["fn"], out["fp"] + out["tn"]
     out["recall"] = round(out["tp"] / pos, 4) if pos else None
     out["fpr"] = round(out["fp"] / neg, 4) if neg else None
@@ -73,9 +80,12 @@ def main():
     ap.add_argument("--holdout-start", type=int, default=100)
     ap.add_argument("--holdout-n", type=int, default=60)
     ap.add_argument("--seed", type=int, default=20261118)
+    ap.add_argument("--combine", action="store_true",
+                    help="并联 persona 判官（两个判官任一命中即算命中）")
     a = ap.parse_args()
 
     judge = HJ.HarmfulRequestJudge()
+    pjudge = PJ.PersonaJailbreakJudge() if a.combine else None
 
     zh = _read(os.path.join(DATA, "chinese_jailbreak", "cases.jsonl"))
     en_all = _read(os.path.join(DATA, "jailbreak_classification",
@@ -93,18 +103,21 @@ def main():
 
     reports = []
     reports.append(_eval(judge, zh, lambda r: r.get("label") == "attack",
-                         "chinese_jailbreak (known-hard, all 62)"))
+                         "chinese_jailbreak (known-hard, all 62)",
+                         pjudge=pjudge))
     print("中文越狱集:", reports[-1]["recall"], "FPR", reports[-1]["fpr"],
           flush=True)
     reports.append(_eval(judge, holdout,
                          lambda r: r.get("label") == "jailbreak",
-                         "jb_classification HOLDOUT (unseen)"))
+                         "jb_classification HOLDOUT (unseen)",
+                         pjudge=pjudge))
     print("英文留出集:", reports[-1]["recall"], "FPR", reports[-1]["fpr"],
           flush=True)
 
     # 与旧判官对照：注入判官在这些样本上的表现（已有盲测数字，不重跑模型）
     rep = {"version": 1,
            "judge": HJ.describe(),
+           "combined": bool(a.combine),
            "protocol": {"holdout_start": a.holdout_start,
                         "holdout_n": len(holdout), "seed": a.seed,
                         "note": "prompt 仅按中文集前 6 条 + 英文前 6 条调整；"
