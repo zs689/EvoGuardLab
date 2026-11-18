@@ -167,6 +167,9 @@ compose 拓扑（2 副本 + redis + postgres + nginx，5 容器全部 Up）：
 
 ## 仍未做（如实）
 
-1. INT-04 跨任务长程记忆注入：`experience.retrieve` 有，未接进 ReAct system prompt。
+1. ~~INT-04 跨任务长程记忆注入~~ 已完成（提交 96393f5）：
+   `memory_context.py` 只取 validated 经验，中文 2-gram 相关性排序，
+   注入块标不可信；ReAct 与 /api/react/run、CLI react 都接了，
+   `memory` 审计字段随结果返回。
 2. 符号链接逃逸测试在 Windows 非开发者模式 skip（2 项），
    已用不依赖 symlink 的前缀规则测试补位。
