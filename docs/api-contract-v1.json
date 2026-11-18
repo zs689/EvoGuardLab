@@ -465,6 +465,34 @@
         "E_NOT_READY",
         "E_BAD_REQUEST"
       ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/skills/monitor",
+      "kind": "action",
+      "auth_in_enterprise": true,
+      "description": "线上退化监控：用上线后真实运行指标(runs/security_effects)对比晋升时基线，超阈值则从不可变快照真实回滚并写审计；dry_run 只报告不动作",
+      "request": {
+        "skill_id": "string",
+        "online_runs": "object?",
+        "thresholds": "object?",
+        "since": "number?",
+        "dry_run": "bool?"
+      },
+      "response": {
+        "skill_id": "string",
+        "degraded": "bool",
+        "rolled_back": "bool",
+        "version_before": "int",
+        "version_after": "int",
+        "reasons": "[string]",
+        "baseline": "object",
+        "online": "object"
+      },
+      "errors": [
+        "E_BAD_REQUEST",
+        "E_INTERNAL"
+      ]
     }
   ],
   "static_routes": [

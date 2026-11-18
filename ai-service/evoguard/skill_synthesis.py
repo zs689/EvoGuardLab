@@ -25,10 +25,12 @@ try:
     from . import skills as _sk
     from . import conditional_skill as _cs
     from . import trajectory_diagnose as _td
+    from . import security as _sec
 except ImportError:
     import skills as _sk                                    # type: ignore
     import conditional_skill as _cs                         # type: ignore
     import trajectory_diagnose as _td                       # type: ignore
+    import security as _sec                                 # type: ignore
 
 
 #: 新领域工具链：文件 / HTTP / SQL 混合，**不在 evolution_bench 里硬编码**
@@ -95,11 +97,10 @@ def evaluate_and_promote(store, skill, target_cases, guard_cases,
         _sk.promote(store, skill["id"], evaluation_id=ev["id"])
         out["promoted"] = True
         out["status"] = "active"
-        # 晋升后做一次线上指标复核：模拟退化 → 必须回滚
-        if auto_rollback_on_regression and _detect_regression(ev):
-            _sk.rollback(store, skill["id"])
-            out["rolled_back"] = True
-            out["status"] = "rolled_back"
+        # 注意：这里**不做**「线上退化检查」。
+        # 旧实现在此处拿本次晋升所依据的那份评估结果当「线上指标」，
+        # 但能 PROMOTE 就说明负迁移为 0、增益为正，判据恒假 —— 回滚分支是死代码。
+        # 线上退化必须用**上线后的真实运行指标**，见 monitor_and_rollback()。
     elif ev["verdict"] == "REJECT" and auto_rollback_on_regression:
         # 被拒绝的候选不该留下 active 状态；若库里已有同名 active 则回滚
         try:
@@ -110,12 +111,184 @@ def evaluate_and_promote(store, skill, target_cases, guard_cases,
     return out
 
 
-def _detect_regression(ev):
-    """模拟「验证通过后线上指标退化」的判据：负迁移越过 0 或增益转负。"""
-    neg = ev.get("neg_transfer_rate")
-    gain = ev.get("gain_pp")
-    return bool((neg is not None and float(neg) > 0)
-                or (gain is not None and float(gain) < 0))
+#: 线上监控默认阈值。改这里等于改「什么算退化」，必须有测试兜着。
+MONITOR_DEFAULTS = {
+    "min_runs": 5,            # 样本太少不判，避免 1 条失败就回滚
+    "success_drop_pp": 15.0,  # 成功率比晋升基线低多少算退化
+    "max_unauthorized": 0,    # 越权副作用：出现一次就不容忍
+    "max_false_positive_rate": 0.25,
+}
+
+
+def collect_online_stats(store, skill, *, since=None):
+    """从 runs / experiments / security_effects 汇总**上线后**的真实指标。
+
+    **关联方式的诚实说明**：`runs` 表没有 skill_id 列，因此这里用
+    「上线时间窗 + task_type(agent_type)」做近似关联 —— 它统计的是
+    「该技能上线后、同类任务」的运行，不是「严格只跑了该技能」的运行。
+    这个近似会稀释信号（无关运行混进来），所以阈值不能定得太敏感。
+    要做精确关联，需要在 runs 上加 skill_id 列并改写入路径，属于更大的改动。
+    """
+    task_type = skill.get("task_type")
+    start = since if since is not None else (skill.get("promoted_at") or 0)
+    _sk.ensure_schema(store)
+    # security_effects / security_events 由 security 模块建；不确保存在
+    # 会让监控在「从未跑过扫描」的库上直接抛错。
+    _sec.ensure_schema(store)
+    with store.conn() as c:
+        rows = c.execute(
+            "SELECT r.id, r.success FROM runs r "
+            "LEFT JOIN experiments e ON e.id=r.experiment_id "
+            "WHERE r.started_at >= ? AND (e.agent_type IS NULL OR e.agent_type=?) "
+            "AND r.success IS NOT NULL", (start, task_type)).fetchall()
+        run_ids = [r["id"] for r in rows]
+        n = len(rows)
+        ok = sum(1 for r in rows if r["success"])
+        unauthorized = 0
+        if run_ids:
+            q = ("SELECT COUNT(*) AS n FROM security_effects WHERE executed=1 "
+                 "AND tool IS NOT NULL AND effect!='unchanged' "
+                 "AND run_id IN (%s)" % ",".join("?" * len(run_ids)))
+            unauthorized = int(c.execute(q, run_ids).fetchone()["n"])
+        fp = 0
+        if run_ids:
+            q = ("SELECT COUNT(*) AS n FROM security_events WHERE "
+                 "severity='warn' AND run_id IN (%s)"
+                 % ",".join("?" * len(run_ids)))
+            fp = int(c.execute(q, run_ids).fetchone()["n"])
+    return {"n": n, "success": ok,
+            "success_rate": round(ok / n, 4) if n else None,
+            "unauthorized": unauthorized, "warnings": fp,
+            "since": start, "task_type": task_type,
+            "association": "time_window+task_type (runs 无 skill_id 列)"}
+
+
+def baseline_from_evaluation(store, skill_id):
+    """取晋升时绑定的评估作为基线（after_rate 就是上线前的目标域成功率）。"""
+    with store.conn() as c:
+        r = c.execute(
+            "SELECT after_rate, gain_pp FROM skill_evaluations "
+            "WHERE skill_id=? ORDER BY created_at DESC LIMIT 1",
+            (skill_id,)).fetchone()
+    if not r or r["after_rate"] is None:
+        return None
+    return {"success_rate": float(r["after_rate"]),
+            "gain_pp": float(r["gain_pp"] or 0.0)}
+
+
+def _judge_degradation(baseline, online, thresholds=None):
+    """退化判定。返回 (degraded, reasons[]) —— 每条理由都可核对。"""
+    t = dict(MONITOR_DEFAULTS)
+    t.update(thresholds or {})
+    reasons = []
+    if online["n"] < t["min_runs"]:
+        return False, ["样本不足(%d<%d)，不判退化"
+                       % (online["n"], t["min_runs"])]
+    if online["unauthorized"] > t["max_unauthorized"]:
+        reasons.append("越权副作用 %d 次 > %d"
+                       % (online["unauthorized"], t["max_unauthorized"]))
+    if baseline and baseline.get("success_rate") is not None \
+            and online.get("success_rate") is not None:
+        drop = (baseline["success_rate"] - online["success_rate"]) * 100
+        if drop > t["success_drop_pp"]:
+            reasons.append("成功率下降 %.1fpp > %.1fpp（基线 %.3f → 线上 %.3f）"
+                           % (drop, t["success_drop_pp"],
+                              baseline["success_rate"], online["success_rate"]))
+    if online["n"]:
+        rate = online["warnings"] / float(online["n"])
+        if rate > t["max_false_positive_rate"]:
+            reasons.append("告警率 %.3f > %.3f"
+                           % (rate, t["max_false_positive_rate"]))
+    return bool(reasons), reasons
+
+
+def monitor_and_rollback(store, skill_id, online_runs=None, *,
+                         thresholds=None, since=None, dry_run=False):
+    """线上退化监控 → 真实回滚。
+
+    `online_runs` 为 None 时从 store 的 runs/security_effects 汇总
+    （见 collect_online_stats 的关联近似说明）；显式传入时用它做指标，
+    便于外部监控系统回灌。
+
+    返回 {skill_id, baseline, online, degraded, reasons, rolled_back, status}。
+    """
+    sk = None
+    for row in _sk.list_skills(store):
+        if row["id"] == skill_id:
+            sk = row
+            break
+    out = {"skill_id": skill_id, "baseline": None, "online": None,
+           "degraded": False, "reasons": [], "rolled_back": False,
+           "status": None}
+    if sk is None:
+        out["error"] = "skill_not_found"
+        return out
+    out["status"] = sk.get("status")
+    if sk.get("status") != _sk.ACTIVE:
+        out["reasons"].append("技能未处于 active（%s），不监控" % sk.get("status"))
+        return out
+
+    baseline = baseline_from_evaluation(store, skill_id)
+    out["baseline"] = baseline
+    if online_runs is None:
+        online = collect_online_stats(store, sk, since=since)
+    else:
+        online = dict(online_runs)
+        online.setdefault("association", "caller_supplied")
+    out["online"] = online
+
+    degraded, reasons = _judge_degradation(baseline, online, thresholds)
+    out["degraded"] = degraded
+    out["reasons"] = reasons
+    if not degraded:
+        return out
+    if dry_run:
+        out["reasons"] = reasons + ["dry_run：未执行回滚"]
+        return out
+
+    before_version = int(sk.get("active_version") or sk.get("version") or 0)
+    try:
+        _sk.rollback(store, skill_id)
+    except (KeyError, ValueError) as exc:
+        # 只有 v1（首次晋升）时「没有更旧的快照可退」——这是真实约束，
+        # 必须如实报出，不能假装回滚成功。
+        out["error"] = "rollback_unavailable:" + str(exc)[:100]
+        out["degraded"] = True
+        out["rolled_back"] = False
+        return out
+
+    # **回读确认**：rollback 的语义是「恢复旧版本正文并重新启用」，
+    # 库里 status 仍会是 active；不能靠自己写个 'rolled_back' 字符串冒充。
+    # 真正的证据是 active_version 退回了更旧的快照。
+    after = None
+    for row in _sk.list_skills(store):
+        if row["id"] == skill_id:
+            after = row
+            break
+    after_version = int((after or {}).get("active_version")
+                        or (after or {}).get("version") or 0)
+    out["status"] = (after or {}).get("status")
+    out["version_before"] = before_version
+    out["version_after"] = after_version
+    out["rolled_back"] = after_version < before_version
+    if not out["rolled_back"]:
+        out["error"] = "rollback_noop:版本未退回(%d->%d)" % (
+            before_version, after_version)
+    out["rolled_back_at"] = (after or {}).get("rolled_back_at")
+    # 回滚是副作用，必须留痕（谁因什么把技能退了）
+    try:
+        with store.conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO skill_rollback_audit("
+                "id,skill_id,ts,reasons,baseline,online) VALUES(?,?,?,?,?,?)",
+                ("rb_" + str(skill_id) + "_" + str(int(__import__("time").time())),
+                 skill_id, __import__("time").time(),
+                 json.dumps(reasons, ensure_ascii=False),
+                 json.dumps(baseline, ensure_ascii=False),
+                 json.dumps(online, ensure_ascii=False)))
+    except Exception:                                       # noqa: BLE001
+        out.setdefault("audit_error", True)
+    return out
 
 
 def closed_loop(store, steps, *, target_cases, guard_cases, run_case,

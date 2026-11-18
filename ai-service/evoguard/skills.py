@@ -34,6 +34,10 @@ CREATE TABLE IF NOT EXISTS skills(
 CREATE TABLE IF NOT EXISTS skill_versions(
   id TEXT PRIMARY KEY, skill_id TEXT, version INTEGER, snapshot TEXT, created_at REAL);
 
+CREATE TABLE IF NOT EXISTS skill_rollback_audit(
+  id TEXT PRIMARY KEY, skill_id TEXT, ts REAL, reasons TEXT,
+  baseline TEXT, online TEXT);
+
 CREATE TABLE IF NOT EXISTS skill_evaluations(
   id TEXT PRIMARY KEY, skill_id TEXT, target_n INTEGER, before_rate REAL, after_rate REAL,
   gain_pp REAL, guard_n INTEGER, neg_transfer_rate REAL, verdict TEXT, created_at REAL,

@@ -104,6 +104,15 @@ class TestMainPathWiring(Base):
         import app as A
         importlib.reload(A)
         self.assertFalse(A._HARMFUL_JUDGE_ON)
+    def test_skill_monitor_requires_id(self):
+        code, body = self.req("POST", "/api/skills/monitor", {})
+        self.assertEqual(code, 400)
+
+    def test_skill_monitor_unknown_skill(self):
+        code, body = self.req("POST", "/api/skills/monitor",
+                              {"skill_id": "sk_nonexistent"})
+        self.assertEqual(code, 409)
+        self.assertEqual(body.get("error"), "skill_not_found")
 
     def test_skill_synthesize_route(self):
         code, body = self.req("POST", "/api/skills/synthesize", {

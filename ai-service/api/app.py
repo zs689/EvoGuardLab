@@ -367,6 +367,7 @@ ROUTES = [
     ("POST", r"^/api/react/run$", "h_react_run"),
     ("POST", r"^/v1/chat/completions$", "h_openai_chat"),
     ("POST", r"^/api/skills/synthesize$", "h_skill_synthesize"),
+    ("POST", r"^/api/skills/monitor$", "h_skill_monitor"),
 ]
 
 
@@ -1117,6 +1118,37 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:                        # noqa: BLE001
             self._send(500, {"error": "react_failed",
                              "detail": type(exc).__name__})
+
+    def h_skill_monitor(self):
+        """FIX-C1：线上退化监控。用**上线后真实运行指标**判定是否回滚。
+
+        与 /api/skills/synthesize 的分工：那条是「离线验证后晋升」，
+        这条是「上线后变差了要退回去」。两者判据不同，不能互相顶替。
+        """
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+        except Exception:
+            return self._err("E_BAD_REQUEST", "请求体不是合法 JSON")
+        if not isinstance(body, dict):
+            return self._err("E_BAD_REQUEST", "payload 必须是对象")
+        skill_id = str(body.get("skill_id") or "").strip()
+        if not skill_id:
+            return self._reject(400, self._rid, "POST",
+                                "/api/skills/monitor", "anonymous",
+                                "skill_id_required")
+        try:
+            import skill_synthesis as SS
+            out = SS.monitor_and_rollback(
+                get_store(self._tenant_id), skill_id,
+                online_runs=body.get("online_runs"),
+                thresholds=body.get("thresholds"),
+                since=body.get("since"),
+                dry_run=bool(body.get("dry_run")))
+            code = 200 if not out.get("error") else 409
+            self._send(code, out)
+        except Exception as exc:                        # noqa: BLE001
+            self._err("E_INTERNAL", type(exc).__name__, 500)
 
     def h_skill_synthesize(self):
         """INT-01-T2：从失败轨迹合成候选 Skill 并跑沙箱门禁（不自动晋升）。"""
