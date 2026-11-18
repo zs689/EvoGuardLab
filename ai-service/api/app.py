@@ -212,7 +212,19 @@ def agent_watch_text(body):
     return None
 
 # 企业形态：租户、配额、指标、追踪、审计。默认全部「可用但不落盘」。
-TENANT_RESOLVER = ent_tenancy.HeaderResolver() if _ENT_OK else None
+# 红队 P0-2：demo 模式绝不允许匿名客户端自报任意租户读数据/建库文件。
+# 默认只允许 default 租户；本地多租户演示可显式配白名单，或彻底放行旧行为。
+def _demo_header_resolver():
+    if (os.environ.get("EVOGUARD_DEMO_ALLOW_ANY_TENANT") or "").strip() \
+            in ("1", "true", "on"):
+        return ent_tenancy.HeaderResolver()          # 旧行为，显式逃生舱
+    raw = (os.environ.get("EVOGUARD_DEMO_TENANT_WHITELIST") or "").strip()
+    allowed = [x.strip() for x in raw.split(",") if x.strip()] or ["default"]
+    return ent_tenancy.HeaderResolver(default_tenant="default",
+                                      allowed_tenants=allowed)
+
+
+TENANT_RESOLVER = _demo_header_resolver() if _ENT_OK else None
 TENANT_REGISTRY = ent_tenancy.TenantRegistry() if _ENT_OK else None
 TENANT_QUOTA = (ent_tenancy.TenantQuota(TENANT_REGISTRY)
                 if _ENT_OK else None)
