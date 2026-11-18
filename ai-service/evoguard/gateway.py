@@ -340,7 +340,10 @@ class ResilientProvider(Provider):
         self._sem = threading.Semaphore(max(1, int(max_concurrency)))
         self.queue_timeout = float(queue_timeout)
         self.stats = {"ok": 0, "failed": 0,
-                      "rejected_open": 0, "rejected_busy": 0}
+                      "rejected_open": 0, "rejected_busy": 0,
+                      # EG-014：HALF_OPEN 只放 1 个探测，单独计数可观测，
+                      # 便于确认「惊群被挡住」而非熔断失效。
+                      "probe_admitted": 0}
 
     def complete(self, messages, temperature=0.0, max_tokens=256):
         if not self._sem.acquire(timeout=self.queue_timeout):
@@ -349,11 +352,16 @@ class ResilientProvider(Provider):
                            "模型调用并发已满，排队 %.1fs 超时"
                            % self.queue_timeout)
         try:
+            was_half_open = (self.breaker.state == self.breaker.HALF_OPEN \
+                             if hasattr(self.breaker, "HALF_OPEN")
+                             else self.breaker.state == "half_open")
             if not self.breaker.allow():
                 self.stats["rejected_open"] += 1
                 raise LLMError("E_CIRCUIT_OPEN",
                                "下游连续失败，熔断打开（%s）"
                                % self.breaker.state)
+            if was_half_open:
+                self.stats["probe_admitted"] += 1
             try:
                 out = self.inner.complete(
                     messages, temperature=temperature,

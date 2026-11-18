@@ -92,6 +92,20 @@ class TestResilientProvider(unittest.TestCase):
                          % len(allowed))
         self.assertTrue(b.snapshot()["probe_in_flight"])
 
+    def test_half_open_probe_is_counted_separately(self):
+        """EG-014：半开放行的探测单独计数，惊群被拒不计入。"""
+        now = [100.0]
+        b = R.CircuitBreaker(failure_threshold=1, cooldown_s=5,
+                             clock=lambda: now[0])
+        inner = FakeProvider(fail_times=1)
+        p = gateway.ResilientProvider(inner, breaker=b)
+        with self.assertRaises(RuntimeError):
+            p.complete([])                     # 失败 -> 打开
+        now[0] = 106.0                         # 冷却 -> 半开
+        self.assertEqual(p.complete([]), "ok") # 探测成功 -> 闭合
+        self.assertEqual(p.stats["probe_admitted"], 1)
+        self.assertEqual(p.snapshot()["probe_admitted"], 1)
+
     def test_bounded_concurrency_rejects_instead_of_queueing_forever(self):
         inner = FakeProvider(delay=0.5)
         p = gateway.ResilientProvider(inner, max_concurrency=1,
