@@ -225,16 +225,20 @@ def describe():
                         "WebhookApprovalNotifier",
                         "RedisLimiter/RedisCircuitBreaker/RedisJobQueue"
                         "（redis_backend.py，纯标准库 RESP）",
-                        "JWT HS256 验签（jwt_hs256.py，标准库 HMAC）"],
+                        "JWT HS256 验签（jwt_hs256.py，标准库 HMAC）",
+                        "PostgresStore + Row-Level Security"
+                        "（pg_store.py，需 EVOGUARD_PG_DSN + pg8000，"
+                        "普通角色连接，事务内 SET LOCAL 绑租户）"],
         "verified": ["双进程真并发：限流跨副本 20/20 不倍增",
                      "双进程真 Redis：40 个作业 0 重复 0 丢失",
                      "双进程真 Redis：A 写熔断 B 可见",
-                     "JWT alg=none / 过期 / 篡改签名 fail-closed"],
-        "not_implemented": ["PostgresStore + Row-Level Security"
-                            "（docker info rc=1，daemon 未起）",
-                            "OIDC discovery / RS256（需 cryptography，"
-                            "核心零依赖故用 verifier 回调注入）",
-                            "Docker Compose 全套压测（本机 daemon 不可用）"],
+                     "JWT alg=none / 过期 / 篡改签名 fail-closed",
+                     "真 Postgres 16：跨副本读写一致（副本1写、副本2读）",
+                     "真 Postgres 16：租户 B 读不到租户 A（RLS + GUC）",
+                     "真 5 容器 Compose：/api/ready=200，RedisLimiter 生效",
+                     "真 Compose：鉴权三态 401/200/401，突发请求 429"],
+        "not_implemented": ["OIDC discovery / RS256（需 cryptography，"
+                            "核心零依赖故用 verifier 回调注入）"],
         "note": "核心零依赖；Redis 后端用标准库 socket 手搓 RESP，"
                 "不装 redis-py。压测用真 redis-server 5.0.9 + multiprocessing。",
     }

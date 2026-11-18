@@ -10,13 +10,19 @@
 「谁在什么时候调了什么接口、结果如何」。两者都不含请求正文。
 """
 import hashlib
+import hmac
 import json
 import os
 import sqlite3
 import threading
 import time
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
+
+#: 审计链 HMAC 密钥环境变量。配置后每行额外附 HMAC-SHA256 签名 —— 持有
+#: DB 写权的人即使重算整条 prev_hash/row_hash 链，也无法伪造签名，verify()
+#: 会捕获。密钥不落库，由部署方通过环境变量注入（见 enterprise-readiness）。
+HMAC_KEY_ENV = "EVOGUARD_AUDIT_HMAC_KEY"
 
 
 def _migrate_1(conn):
@@ -88,8 +94,18 @@ def _migrate_4(conn):
                  "ON audit_anchors(after_id)")
 
 
+def _migrate_5(conn):
+    """FIX-ENT-T2：每行附加可选 HMAC 签名列。
+
+    无密钥部署该列恒为 NULL，行为与旧版完全一致（向后兼容）。
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(audit_events)")}
+    if "hmac_sig" not in cols:
+        conn.execute("ALTER TABLE audit_events ADD COLUMN hmac_sig TEXT")
+
+
 MIGRATIONS = [(1, _migrate_1), (2, _migrate_2), (3, _migrate_3),
-              (4, _migrate_4)]
+              (4, _migrate_4), (5, _migrate_5)]
 
 
 def _canonical(ts, tenant, request_id, actor, method, path, status, decision,
@@ -111,16 +127,25 @@ def _canonical(ts, tenant, request_id, actor, method, path, status, decision,
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _sign(key, row_hash):
+    """用部署方密钥对 row_hash 签名。密钥不落库，持 DB 写权者无法重算。"""
+    return hmac.new(key.encode("utf-8"), row_hash.encode("utf-8"),
+                    hashlib.sha256).hexdigest()
+
+
 class AuditSink:
     def emit(self, event):                 # pragma: no cover - 接口
         raise NotImplementedError
 
 
 class AuditStore(AuditSink):
-    def __init__(self, path=":memory:", clock=None):
+    def __init__(self, path=":memory:", clock=None, hmac_key=None):
         self.path = path
         self._clock = clock or time.time
         self._lock = threading.Lock()
+        # 显式参数优先；未传则读环境变量。空串视为未启用（保持零配置兼容）。
+        key = hmac_key if hmac_key is not None else os.environ.get(HMAC_KEY_ENV)
+        self.hmac_key = key or None
         if path not in (":memory:", ""):
             os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
         self._conn = sqlite3.connect(path, check_same_thread=False,
@@ -203,12 +228,13 @@ class AuditStore(AuditSink):
                 row_hash = _canonical(ts, tenant, request_id, actor, method,
                                       path, status, decision, detail,
                                       latency_ms, prev_hash)
+                sig = _sign(self.hmac_key, row_hash) if self.hmac_key else None
                 cur = conn.execute(
                     "INSERT INTO audit_events(ts,tenant_id,request_id,actor,"
                     "method,path,status,decision,detail,latency_ms,"
-                    "prev_hash,row_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "prev_hash,row_hash,hmac_sig) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (ts, tenant, request_id, actor, method, path, status,
-                     decision, detail, latency_ms, prev_hash, row_hash))
+                     decision, detail, latency_ms, prev_hash, row_hash, sig))
                 rid = cur.lastrowid
                 conn.commit()
                 return rid
@@ -233,7 +259,7 @@ class AuditStore(AuditSink):
         # EG-008：流式分批，大表校验的峰值内存不随总行数线性增长。
         # 以前一次性 fetchall()，几百万行会直接把内存吃满。
         sql = ("SELECT id,ts,tenant_id,request_id,actor,method,path,status,"
-               "decision,detail,latency_ms,prev_hash,row_hash "
+               "decision,detail,latency_ms,prev_hash,row_hash,hmac_sig "
                "FROM audit_events ORDER BY id ASC" + (
                    " LIMIT %d" % int(limit) if limit else ""))
         with self._lock:
@@ -249,7 +275,8 @@ class AuditStore(AuditSink):
                     break
                 for r in batch:
                     (rid, ts, tenant, request_id, actor, method, path, status,
-                     decision, detail, latency_ms, stored_prev, stored_hash) = r
+                     decision, detail, latency_ms, stored_prev, stored_hash,
+                     stored_sig) = r
                     if not stored_hash:
                         unhashed += 1
                         prev_hash = ""
@@ -275,6 +302,17 @@ class AuditStore(AuditSink):
                             "reason": "hash_mismatch", "first_bad_id": rid,
                             "checked": checked, "unhashed": unhashed,
                             "archived_gaps": archived}
+                    # FIX-ENT-T2：启用密钥后，逐行校验 HMAC。持 DB 写权者
+                    # 可以重算 prev_hash/row_hash 让哈希链自洽，但没有密钥
+                    # 就无法重算签名 —— 这里会捕获整链重写。
+                    if self.hmac_key:
+                        want_sig = _sign(self.hmac_key, stored_hash)
+                        if not stored_sig or not hmac.compare_digest(
+                                want_sig, str(stored_sig)):
+                            return False, {
+                                "reason": "hmac_mismatch", "first_bad_id": rid,
+                                "checked": checked, "unhashed": unhashed,
+                                "archived_gaps": archived}
                     prev_hash = stored_hash
                     checked += 1
         return True, {"reason": "ok", "first_bad_id": None,

@@ -18,13 +18,17 @@ CLOSED, OPEN, HALF_OPEN = "closed", "open", "half_open"
 class CircuitBreaker:
     """失败达到阈值就打开；冷却后放一个探测请求，成功则闭合。线程安全。"""
 
-    def __init__(self, failure_threshold=5, cooldown_s=30.0, clock=None):
+    def __init__(self, failure_threshold=5, cooldown_s=30.0, clock=None,
+                 probe_timeout_s=30.0):
         self.failure_threshold = max(1, int(failure_threshold))
         self.cooldown_s = float(cooldown_s)
+        self.probe_timeout_s = float(probe_timeout_s)
         self._clock = clock or time.monotonic
         self._state = CLOSED
         self._failures = 0
         self._opened_at = None
+        self._probe_in_flight = False
+        self._probe_at = None
         self._lock = threading.Lock()
 
     @property
@@ -39,12 +43,31 @@ class CircuitBreaker:
             self._state = HALF_OPEN
 
     def allow(self):
+        """是否放行。HALF_OPEN 时**只放一个探测请求**（单飞）。
+
+        原实现 HALF_OPEN 对并发全放行：恢复中的下游会被同批请求再次打垮，
+        熔断等于没起作用（典型惊群）。这里用探测标志 + 超时兜底：
+        调用方 allow() 后若一直不 record()，超时自动释放，不会永久卡死。
+        """
         with self._lock:
             self._maybe_half_open()
-            return self._state in (CLOSED, HALF_OPEN)
+            if self._state == CLOSED:
+                return True
+            if self._state != HALF_OPEN:
+                return False
+            now = self._clock()
+            if self._probe_in_flight:
+                if now - (self._probe_at or 0) < self.probe_timeout_s:
+                    return False            # 已有探测在飞，其余快速拒绝
+                self._probe_in_flight = False   # 探测超时，允许换一个
+            self._probe_in_flight = True
+            self._probe_at = now
+            return True
 
     def record(self, ok):
         with self._lock:
+            self._probe_in_flight = False
+            self._probe_at = None
             if ok:
                 if self._state == HALF_OPEN:
                     self._state = CLOSED
@@ -65,6 +88,7 @@ class CircuitBreaker:
             self._maybe_half_open()
             return {"state": self._state, "failures": self._failures,
                     "opened_at": self._opened_at,
+                    "probe_in_flight": self._probe_in_flight,
                     "failure_threshold": self.failure_threshold,
                     "cooldown_s": self.cooldown_s}
 

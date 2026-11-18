@@ -31,6 +31,18 @@ class TestDialect(unittest.TestCase):
         self.assertEqual(P.translate("SELECT 'it''s ?', ?"),
                          "SELECT 'it''s ?', %s")
 
+    def test_question_mark_in_line_comment_untouched(self):
+        """FIX-ENT-T1：-- 行注释里的 ? 不能翻译成 %s。"""
+        self.assertEqual(P.translate("SELECT ? -- what? here\n WHERE x=?"),
+                         "SELECT %s -- what? here\n WHERE x=%s")
+
+    def test_question_mark_in_block_comment_untouched(self):
+        """FIX-ENT-T1：/* */ 块注释（含跨行）里的 ? 不能翻译。"""
+        self.assertEqual(P.translate("SELECT ? /* why? still? */ , ?"),
+                         "SELECT %s /* why? still? */ , %s")
+        self.assertEqual(P.translate("SELECT ? /* a?\n b? */ , ?"),
+                         "SELECT %s /* a?\n b? */ , %s")
+
     def test_autoincrement_stripped(self):
         self.assertEqual(P.translate("id INTEGER AUTOINCREMENT, x"),
                          "id INTEGER, x")

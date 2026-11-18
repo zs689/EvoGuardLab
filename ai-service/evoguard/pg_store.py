@@ -19,6 +19,7 @@
 4. `describe()` 明示边界：这是应用级适配，不承诺 100% 方言等价。
 """
 import contextlib
+import os
 import re
 import threading
 
@@ -65,27 +66,47 @@ def parse_dsn(dsn):
 def translate(sql):
     """SQLite → PG 最小方言翻译。
 
-    只替换**字面量之外**的 `?`。用有限状态机逐字符扫，避免把
-    `'what?'` 里的问号也换掉（这类 bug 极难查）。
+    只替换**字面量之外、注释之外**的 `?`。用有限状态机逐字符扫：
+    - `'...'` / `"..."` 字符串字面量（含 SQL 标准的 '' 转义）
+    - `-- ...` 行注释（到行尾）
+    - `/* ... */` 块注释（可跨行）
+
+    这三种都要跳过，否则 `-- what?` 会被换成 `-- what%s`，参数个数与实际
+    占位符不符（pg8000 会报错；若驱动容错则可能把参数塞错位置）。
+    这是实测发现的真实缺口，不是理论问题。
     """
     s = str(sql)
-    out, quote, i = [], None, 0
-    while i < len(s):
+    out, quote, i, n = [], None, 0, len(s)
+    while i < n:
         ch = s[i]
         if quote:
             out.append(ch)
             if ch == quote:
-                # SQL 标准里 '' 是转义的引号
-                if i + 1 < len(s) and s[i + 1] == quote:
+                if i + 1 < n and s[i + 1] == quote:      # '' 转义
                     out.append(s[i + 1]); i += 2; continue
                 quote = None
+            i += 1
+            continue
+        # 行注释
+        if s.startswith("--", i):
+            j = s.find("\n", i)
+            j = n if j < 0 else j
+            out.append(s[i:j])
+            i = j
+            continue
+        # 块注释
+        if s.startswith("/*", i):
+            j = s.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append(s[i:j])
+            i = j
+            continue
+        if ch in ("'", '"'):
+            quote = ch; out.append(ch)
+        elif ch == "?":
+            out.append("%s")
         else:
-            if ch in ("'", '"'):
-                quote = ch; out.append(ch)
-            elif ch == "?":
-                out.append("%s")
-            else:
-                out.append(ch)
+            out.append(ch)
         i += 1
     t = "".join(out)
     # AUTOINCREMENT 在 PG 不存在；本 schema 的 id 都是 TEXT PRIMARY KEY，
@@ -230,10 +251,14 @@ class PostgresStore:
         self.path = dsn                         # 让依赖 store.path 的代码不炸
         self.fast = False
         self.conn_opened = 0
-        self._pool = None
         self._write_gate_obj = None
         self._conn_lock = threading.Lock()
         self._local = threading.local()
+        import queue as _queue
+        # 小池即可：每个请求独立事务，池只为省掉反复握手
+        self._pool = _queue.Queue(maxsize=int(
+            os.environ.get("EVOGUARD_PG_POOL_SIZE") or 8))
+        self.reconnects = 0
         self._dbapi = _load_driver()
         self._conn_kwargs = parse_dsn(dsn)
         self.init()
@@ -249,23 +274,76 @@ class PostgresStore:
         role = env.get("EVOGUARD_PG_ROLE") or "evoguard_app"
         return PostgresStore(dsn, tenant_id=tenant_id, role=role)
 
+    def _new_conn(self):
+        return self._dbapi.connect(**self._conn_kwargs)
+
+    def _acquire(self):
+        """取一条可用连接：优先复用池里的，失效则重建。
+
+        「断线重连」只做一次：先试池中/新建连接执行 `SELECT 1` 探活，
+        失败就丢弃并重建。不做无限重试 —— 数据库真的挂了要快速失败，
+        而不是把请求线程挂在这里。
+        """
+        while True:
+            raw = None
+            try:
+                raw = self._pool.get_nowait() if not self._pool.empty() else None
+            except Exception:                                # noqa: BLE001
+                raw = None
+            try:
+                if raw is None:
+                    raw = self._new_conn()
+                cur = raw.cursor()
+                cur.execute("SELECT 1")
+                cur.close()
+                return raw
+            except Exception:                                # noqa: BLE001
+                if raw is not None:
+                    try:
+                        raw.close()
+                    except Exception:                        # noqa: BLE001
+                        pass
+                raw = None
+                self.reconnects += 1
+                if self.reconnects > 3:
+                    raise PGStoreError("PG 连接不可用（重连 3 次仍失败）")
+                continue
+
+    def _release(self, raw, broken=False):
+        if broken:
+            try:
+                raw.close()
+            except Exception:                                # noqa: BLE001
+                pass
+            return
+        try:
+            self._pool.put_nowait(raw)
+        except Exception:                                    # noqa: BLE001
+            try:
+                raw.close()
+            except Exception:                                # noqa: BLE001
+                pass
+
     @contextlib.contextmanager
     def conn(self):
         with self._conn_lock:
             self.conn_opened += 1
-        raw = self._dbapi.connect(**self._conn_kwargs)
+        raw = self._acquire()
         c = _PGConnection(raw, self.tenant_id, self.role)
+        broken = False
         try:
             yield c
             c.commit()
         except Exception:
+            broken = True
             try:
                 c.rollback()
             except Exception:
                 pass
             raise
         finally:
-            c.close()
+            # 归还原始连接（不能塞代理），出错则丢弃
+            self._release(raw, broken=broken)
 
     #: core.SCHEMA 的表原本没有 tenant_id（SQLite 模式靠「每租户一个文件」
     #: 做物理隔离）。PG 模式共享一套表，必须在 **PG 库里**加列做 RLS。
@@ -312,7 +390,16 @@ class PostgresStore:
                     % (table, table))
 
     def close(self):
-        return None                              # 每次操作独立连接，无长连接可关
+        while True:
+            try:
+                raw = self._pool.get_nowait()
+            except Exception:                                # noqa: BLE001
+                break
+            try:
+                raw.close()
+            except Exception:                                # noqa: BLE001
+                pass
+        return None
 
     def journal_mode(self):
         return "pg"
@@ -340,6 +427,8 @@ class PostgresStore:
 
 def describe():
     return {"backend": "postgresql via pg8000 (optional, isolated venv)",
+            "pool": "queue-based, EVOGUARD_PG_POOL_SIZE (default 8)",
+            "reconnect": "SELECT 1 probe, up to 3 rebuilds per acquire",
             "core_dependency": "none (lazy import)",
             "tenant_binding": "SET LOCAL app.current_tenant every transaction",
             "require_non_superuser": True,

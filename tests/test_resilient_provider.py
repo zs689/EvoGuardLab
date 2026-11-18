@@ -64,6 +64,34 @@ class TestResilientProvider(unittest.TestCase):
         self.assertEqual(p.complete([]), "ok")
         self.assertEqual(b.state, "closed")
 
+    def test_half_open_allows_only_one_probe_under_concurrency(self):
+        """FIX-ENT-T2：HALF_OPEN 只放行 1 个探测请求，其余惊群快速拒绝。"""
+        b = R.CircuitBreaker(failure_threshold=1, cooldown_s=5,
+                             clock=lambda: 100.0)
+        b.record(False)             # 打开熔断
+        self.assertEqual(b.state, "open")
+        b._opened_at = 90.0         # 冷却已过 -> 下一次 allow 进入 HALF_OPEN
+
+        gate = threading.Barrier(12)
+        allowed = []
+        lock = threading.Lock()
+
+        def worker():
+            gate.wait()
+            if b.allow():
+                with lock:
+                    allowed.append(1)
+
+        threads = [threading.Thread(target=worker) for _ in range(12)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(2.0)
+        self.assertEqual(len(allowed), 1,
+                         "HALF_OPEN 并发放行了 %d 个探测（应为 1）"
+                         % len(allowed))
+        self.assertTrue(b.snapshot()["probe_in_flight"])
+
     def test_bounded_concurrency_rejects_instead_of_queueing_forever(self):
         inner = FakeProvider(delay=0.5)
         p = gateway.ResilientProvider(inner, max_concurrency=1,

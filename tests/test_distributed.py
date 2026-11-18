@@ -117,9 +117,11 @@ class TestHonesty(unittest.TestCase):
         self.assertFalse(any("RedisLimiter" in x
                              for x in d["not_implemented"]))
         self.assertTrue(any("RedisLimiter" in x for x in d["implemented"]))
-        # PG/RLS 与 OIDC discovery 确实没做，必须还在未实现列表
-        self.assertTrue(any("PostgresStore" in x
-                            for x in d["not_implemented"]))
+        # FIX-ENT-T1：PG/RLS 已真实现并实测（pg_store.py），不能再列未实现
+        self.assertFalse(any("PostgresStore" in x
+                             for x in d["not_implemented"]))
+        self.assertTrue(any("PostgresStore" in x for x in d["implemented"]))
+        # OIDC discovery / RS256 确实没做，必须还在未实现列表
         self.assertTrue(any("OIDC discovery" in x
                             for x in d["not_implemented"]))
 
