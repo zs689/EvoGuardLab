@@ -137,6 +137,10 @@ def _live_facts(root):
         "AGENTLAB_KILL_SWITCH": "",
         "AGENTLAB_LOG_QUIET": "1",
         "AGENTLAB_AUDIT_DB": audit_db,
+        # P0-2：demo 默认不再信任客户端自报租户。这里显式授权探针用的
+        # acme 演示租户，才能验证「租户头进入上下文」这一项；生产默认
+        # 不配白名单时只有 default，匿名无法自报任意租户读数据。
+        "EVOGUARD_DEMO_TENANT_WHITELIST": "acme",
     })
     proc = None
     try:

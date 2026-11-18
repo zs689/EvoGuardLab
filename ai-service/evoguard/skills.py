@@ -816,12 +816,23 @@ def rollback(store, skill_id, to_version=None):
     return ver
 
 
-def list_skills(store, status=None):
+def list_skills(store, status=None, limit=None, cursor=None):
+    """列出技能。EG-012：limit/cursor 可选，默认 None 保持原全量行为
+    （内部诊断/进化基准调用不传，语义不变）；API 层传值做有界分页。"""
     ensure_schema(store)
-    sql = "SELECT * FROM skills"
-    args = []
+    clauses, args = [], []
     if status:
-        sql += " WHERE status=?"
+        clauses.append("status=?")
         args.append(status)
+    if cursor is not None:
+        clauses.append("created_at < ?")
+        args.append(cursor)
+    sql = "SELECT * FROM skills"
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY created_at DESC, id DESC"
+    if limit is not None:
+        sql += " LIMIT ?"
+        args.append(int(limit))
     with store.conn() as c:
-        return [dict(r) for r in c.execute(sql + " ORDER BY created_at DESC", args).fetchall()]
+        return [dict(r) for r in c.execute(sql, args).fetchall()]

@@ -220,6 +220,10 @@ def _demo_header_resolver():
         return ent_tenancy.HeaderResolver()          # 旧行为，显式逃生舱
     raw = (os.environ.get("EVOGUARD_DEMO_TENANT_WHITELIST") or "").strip()
     allowed = [x.strip() for x in raw.split(",") if x.strip()] or ["default"]
+    # default 必须始终可用：探针/健康检查不带租户头时落到默认租户，
+    # 不能因为配了其它白名单租户就把默认租户锁死在外面。
+    if "default" not in allowed:
+        allowed.append("default")
     return ent_tenancy.HeaderResolver(default_tenant="default",
                                       allowed_tenants=allowed)
 
@@ -285,6 +289,9 @@ FRONTEND = os.path.join(ASSET_ROOT, "frontend")
 
 # ---- 硬上限（EG-005 / EG-012）-------------------------------------------
 MAX_BODY_BYTES = int(os.environ.get("AGENTLAB_MAX_BODY_BYTES", 65536))
+# EG-005：单连接的读/写 socket 超时，防慢客户端（slowloris）长期占住线程。
+# 0 表示不设置（退回系统默认，供特殊压测）。默认 30s 足够正常请求。
+SOCKET_TIMEOUT_S = float(os.environ.get("AGENTLAB_SOCKET_TIMEOUT", "30"))
 MAX_PAGE_SIZE = int(os.environ.get("AGENTLAB_MAX_PAGE_SIZE", 200))
 # 单次运行详情的每类轨迹上限（EG-012）：不传 limit 的内部诊断调用不受影响。
 MAX_DETAIL_ITEMS = int(os.environ.get("AGENTLAB_MAX_DETAIL_ITEMS", 500))
@@ -683,6 +690,16 @@ def _read_text(path, default=""):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "EvoGuard/" + VERSION
+
+    def setup(self):
+        # EG-005：连接级读写超时。BaseHTTPRequestHandler 的 setup 建立
+        # rfile/wfile 后再设超时才生效；0 表示保持系统默认。
+        super().setup()
+        if SOCKET_TIMEOUT_S > 0:
+            try:
+                self.connection.settimeout(SOCKET_TIMEOUT_S)
+            except OSError:                              # noqa: BLE001
+                pass
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[api] " + (fmt % args) + "\n")
@@ -1263,23 +1280,45 @@ class Handler(BaseHTTPRequestHandler):
                              "detail": type(exc).__name__})
 
     def h_skills(self):
+        # EG-012：技能列表有界分页 + created_at 游标。
         store = get_store(self._tenant_id)
-        rows = skills.list_skills(store)
+        qs = self.path.split("?", 1)[1] if "?" in self.path else ""
+        m = re.search(r"(?:^|&)limit=(\d+)", qs)
+        limit = min(MAX_PAGE_SIZE, max(1, int(m.group(1)) if m else 60))
+        cm = re.search(r"(?:^|&)cursor=([0-9]+(?:\.[0-9]+)?)", qs)
+        cursor = float(cm.group(1)) if cm else None
+        rows = skills.list_skills(store, limit=limit, cursor=cursor)
         for r in rows:
             r["chain"] = core.as_chain(r["strategy"])
-        self._send(200, {"n": len(rows), "items": rows})
+        next_cursor = rows[-1]["created_at"] if len(rows) == limit else None
+        self._send(200, {"n": len(rows), "items": rows,
+                         "limit": limit, "next_cursor": next_cursor})
 
     def h_experiences(self):
+        # EG-012：经验列表也走有界分页 + created_at 游标，和 runs 一致，
+        # 不再固定 LIMIT 200 且无游标（大库无法翻页/一次拉满内存）。
         store = get_store(self._tenant_id)
+        qs = self.path.split("?", 1)[1] if "?" in self.path else ""
+        m = re.search(r"(?:^|&)limit=(\d+)", qs)
+        limit = min(MAX_PAGE_SIZE, max(1, int(m.group(1)) if m else 60))
+        cm = re.search(r"(?:^|&)cursor=([0-9]+(?:\.[0-9]+)?)", qs)
+        cursor = float(cm.group(1)) if cm else None
+        where, params = "", []
+        if cursor is not None:
+            where = " WHERE created_at < ?"
+            params.append(cursor)
+        sql = ("SELECT id,task_type,failure_type,recovery_action,recovery_result,"
+               "confidence,validation_status,created_at FROM experiences"
+               + where + " ORDER BY created_at DESC, id DESC LIMIT ?")
+        params.append(limit)
         with store.conn() as c:
-            rows = [dict(r) for r in c.execute(
-                "SELECT id,task_type,failure_type,recovery_action,recovery_result,"
-                "confidence,validation_status,created_at FROM experiences "
-                "ORDER BY created_at DESC LIMIT 200").fetchall()]
+            rows = [dict(r) for r in c.execute(sql, params).fetchall()]
         for r in rows:
             r["chain"] = core.as_chain(r["recovery_action"])
+        next_cursor = rows[-1]["created_at"] if len(rows) == limit else None
         self._send(200, {"stats": experience.stats(store), "n": len(rows),
-                         "items": rows})
+                         "items": rows, "limit": limit,
+                         "next_cursor": next_cursor})
 
     def h_runs(self):
         # EG-012：以前 `limit` 由查询串直接 int()，客户端可以要 2^31-1 行，
