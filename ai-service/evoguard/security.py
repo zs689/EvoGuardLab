@@ -97,7 +97,10 @@ def _det(code, severity, pattern, detail, false_positive, flags=0, pre=()):
 
 # --- 注入：试图让模型改规则、改身份、泄露提示词 ---
 _det("injection_override", "error",
+     # 间接注入常见「忽略用户目标/当前任务」—— 原来只认「以上/之前」
+     # 的指令覆盖，漏掉这一类（MCP 返回侧实测）。
      r"(?:忽略|无视|忘记)(?:以上|之前|前面|上面|上述)(?:的)?(?:所有)?(?:指令|提示|规则|要求)"
+     r"|(?:忽略|无视|放弃)(?:用户|当前|原本)(?:的)?(?:目标|任务|要求)"
      r"|(?:disregard|ignore|forget)\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above)\s+"
      r"(?:instructions?|prompts?|rules?)",
      "要求忽略既有指令，典型的指令覆盖攻击",
@@ -212,7 +215,7 @@ _det("xss_iframe", "warn", r"<\s*iframe\b", "内嵌框架，可被用来钓鱼",
 # 单独一张表而不是塞进 _det 调用，是为了让「降噪条件」一眼可审 ——
 # 条件写错了会漏检，这比误报更危险，所以必须集中可见。
 _PRE = {
-    "injection_override": ("忽略", "无视", "忘记", "ignore", "disregard", "forget"),
+    "injection_override": ("忽略", "无视", "忘记", "放弃", "ignore", "disregard", "forget"),
     "injection_role_switch": ("你现在", "从现在起", "扮演", "you are now", "from now on"),
     "injection_prompt_leak": ("提示词", "系统提示", "prompt", "instructions",
                               "system message"),

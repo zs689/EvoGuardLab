@@ -444,6 +444,27 @@
       "errors": [
         "E_BAD_REQUEST"
       ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "kind": "proxy",
+      "auth_in_enterprise": true,
+      "description": "OpenAI-compatible 透明安全代理：输入护栏→转发上游→tool_calls 逐个过 tool_registry/tool_rails/execution.preflight→输出护栏；代理恒不代替第三方执行工具（executed=false）",
+      "request": {
+        "messages": "[{role,content}]",
+        "tools": "[{...}]?",
+        "model": "string",
+        "evoguard_agent": "string?"
+      },
+      "response": {
+        "choices": "[{index,finish_reason,message}]",
+        "evoguard": "{blocked,tool,reason}?"
+      },
+      "errors": [
+        "E_NOT_READY",
+        "E_BAD_REQUEST"
+      ]
     }
   ],
   "static_routes": [

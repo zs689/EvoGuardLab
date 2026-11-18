@@ -123,6 +123,12 @@ def cmd_scan(a):
     return 0
 
 
+def cmd_mcp_proxy(_a):
+    """PROD-02-T2：MCP stdio 安全代理。"""
+    import mcp_proxy as MP
+    return MP.serve_stdio()
+
+
 def cmd_react(a):
     """INT-01-T2：CLI 驱动真实多轮 ReAct Agent。"""
     import autonomous_agent as AA
@@ -339,6 +345,10 @@ def main(argv=None):
     p.add_argument("--tool", help="工具名；给了就走完整返回值守卫（含职责判断）")
     p.add_argument("--json", action="store_true", help="输出 JSON")
     p.set_defaults(func=cmd_scan)
+
+    p = sub.add_parser("mcp-proxy",
+                       help="MCP stdio 安全代理（tools/call 强制门禁）")
+    p.set_defaults(func=cmd_mcp_proxy)
 
     p = sub.add_parser("react", help="多轮 ReAct Agent（INT-01 主路径）")
     p.add_argument("goal", help="任务目标")

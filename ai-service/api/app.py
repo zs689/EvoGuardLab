@@ -362,6 +362,7 @@ ROUTES = [
     ("POST", r"^/api/jobs/([\w\-]+)/retry$", "h_job_retry"),
     # INT-01-T2：ReAct 与 Skill 合成走主入口
     ("POST", r"^/api/react/run$", "h_react_run"),
+    ("POST", r"^/v1/chat/completions$", "h_openai_chat"),
     ("POST", r"^/api/skills/synthesize$", "h_skill_synthesize"),
 ]
 
@@ -998,6 +999,28 @@ class Handler(BaseHTTPRequestHandler):
 
     def h_report(self):
         self._send(200, {"markdown": _read_text(REPORT, "（未生成报告）")})
+
+    def h_openai_chat(self):
+        """PROD-02-T1：OpenAI-compatible 透明安全代理。
+
+        base_url 指向 /v1 即可；工具调用过 preflight，绝不代第三方执行。
+        """
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+        except Exception:
+            return self._err("E_BAD_REQUEST", "请求体不是合法 JSON")
+        try:
+            import openai_proxy as _op
+            code, resp, audit = _op.proxy(
+                body, use_semantic=_HARMFUL_JUDGE_ON,
+                agent_type=str(body.get("evoguard_agent") or "react"))
+        except ValueError as exc:
+            return self._err("E_NOT_READY", str(exc), 503)
+        if audit.get("decision") == "deny":
+            self._audit(self._rid, "POST", "/v1/chat/completions", code,
+                        getattr(self, "_actor", "anonymous"), "denied")
+        self._send(code, resp)
 
     def h_react_run(self):
         """INT-01-T2：驱动真实多轮 ReAct Agent（工具走 tool_registry + preflight）。
