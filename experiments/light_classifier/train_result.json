@@ -1,28 +1,97 @@
 {
-  "model": "char n-gram(2-4) TF-normalized + logistic regression",
-  "calibrated_threshold": 0.38,
-  "train_recall_at_threshold": 0.7918,
-  "train_n": 1731,
-  "holdout_n": 742,
-  "vocab": 12000,
-  "holdout": {
-    "n": 742,
-    "tp": 219,
-    "fn": 29,
+  "model": "per-language char n-gram(1-4) TF-IDF + semantic clusters + LR",
+  "routing": "文本含 CJK >= 1 个字符 -> zh 模型，否则 en 模型",
+  "thresholds": {
+    "zh": 0.81,
+    "en": 0.38
+  },
+  "vocab": {
+    "zh": 22712,
+    "en": 30000
+  },
+  "split": {
+    "train": 1280,
+    "calib": 349,
+    "holdout": 698,
+    "by_language": {
+      "zh": {
+        "train": 194,
+        "calib": 53,
+        "holdout": 106
+      },
+      "en": {
+        "train": 1086,
+        "calib": 296,
+        "holdout": 592
+      }
+    }
+  },
+  "zh_holdout": {
+    "n": 106,
+    "pos": 79,
+    "neg": 27,
+    "tp": 71,
+    "fn": 8,
+    "fp": 0,
+    "tn": 27,
+    "recall": 0.8987,
+    "fpr": 0.0
+  },
+  "en_holdout": {
+    "n": 592,
+    "pos": 195,
+    "neg": 397,
+    "tp": 184,
+    "fn": 11,
+    "fp": 16,
+    "tn": 381,
+    "recall": 0.9436,
+    "fpr": 0.0403
+  },
+  "zh_calib": {
+    "n": 53,
+    "pos": 39,
+    "neg": 14,
+    "tp": 37,
+    "fn": 2,
+    "fp": 0,
+    "tn": 14,
+    "recall": 0.9487,
+    "fpr": 0.0
+  },
+  "en_calib": {
+    "n": 296,
+    "pos": 98,
+    "neg": 198,
+    "tp": 95,
+    "fn": 3,
+    "fp": 9,
+    "tn": 189,
+    "recall": 0.9694,
+    "fpr": 0.0455
+  },
+  "zh_train": {
+    "n": 194,
+    "pos": 144,
+    "neg": 50,
+    "tp": 139,
+    "fn": 5,
+    "fp": 0,
+    "tn": 50,
+    "recall": 0.9653,
+    "fpr": 0.0
+  },
+  "en_train": {
+    "n": 1086,
+    "pos": 358,
+    "neg": 728,
+    "tp": 345,
+    "fn": 13,
     "fp": 11,
-    "tn": 483,
-    "recall": 0.8831,
-    "fpr": 0.0223
+    "tn": 717,
+    "recall": 0.9637,
+    "fpr": 0.0151
   },
-  "train": {
-    "n": 1731,
-    "tp": 563,
-    "fn": 148,
-    "fp": 35,
-    "tn": 985,
-    "recall": 0.7918,
-    "fpr": 0.0343
-  },
-  "train_seconds": 13.1,
-  "note": "留出集按行号后30%切分，未参与训练/调参"
+  "train_seconds": 256.5,
+  "note": "按 (language,label) 分层切分；阈值在 calib 集校准；holdout 未参与训练与调参；IDF 只在训练集统计"
 }

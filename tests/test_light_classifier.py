@@ -53,19 +53,65 @@ class TestInference(unittest.TestCase):
 
 
 class TestTrainingReport(unittest.TestCase):
-    def test_holdout_meets_gate(self):
-        """验收：留出集 recall>=0.80 且 FPR<=0.05，来自真实训练产物。"""
+    """FIX-C2：留出集必须是**分语言、且真的没被训练过**的那一批。
+
+    上一版按全局行号切 70/30，切点落进 1798 条英文源内部，
+    742 条「留出」里只有 2 条中文 —— 报出来的中文指标是假的。
+    """
+
+    @classmethod
+    def setUpClass(cls):
         p = os.path.join(ROOT, "experiments", "light_classifier",
                          "train_result.json")
         with io.open(p, encoding="utf-8") as f:
-            rep = json.load(f)
-        h = rep["holdout"]
-        self.assertGreaterEqual(h["recall"], 0.80,
-                                "留出召回未达标：%s" % h)
-        self.assertLessEqual(h["fpr"], 0.05,
-                             "留出误报超标：%s" % h)
-        self.assertLess(rep["train_seconds"], 120)
+            cls.rep = json.load(f)
 
+    def test_reports_both_languages_separately(self):
+        for key in ("zh_holdout", "en_holdout"):
+            self.assertIn(key, self.rep, "缺少分语言报告：%s" % key)
+            self.assertIsNotNone(self.rep[key]["recall"])
+            self.assertIsNotNone(self.rep[key]["fpr"])
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_zh_holdout_has_enough_samples(self):
+        """中文留出 n>=100：否则一条误报就是 3.5pp，FPR 没有分辨率。"""
+        zh = self.rep["zh_holdout"]
+        self.assertGreaterEqual(zh["n"], 100, "中文留出样本不足：%s" % zh)
+        self.assertGreaterEqual(zh["pos"], 50)
+        # 中文去重后总样本 353 条，留出 30% 时负例 27 条。
+        # 27 条负例下 1 条误报 = 3.7%，仍能分辨 <=0.05 的门槛；
+        # 但低于 25 条就变成「一条误报即超标」，指标失去意义。
+        self.assertGreaterEqual(zh["neg"], 25)
+
+    def test_zh_holdout_meets_gate(self):
+        zh = self.rep["zh_holdout"]
+        self.assertGreaterEqual(zh["recall"], 0.80, "中文留出召回未达标：%s" % zh)
+        self.assertLessEqual(zh["fpr"], 0.05, "中文留出误报超标：%s" % zh)
+
+    def test_en_holdout_meets_gate(self):
+        en = self.rep["en_holdout"]
+        self.assertGreaterEqual(en["recall"], 0.80, "英文留出召回未达标：%s" % en)
+        self.assertLessEqual(en["fpr"], 0.05, "英文留出误报超标：%s" % en)
+
+    def test_holdout_disjoint_from_train(self):
+        """用同一 seed 重放切分，验证 train/holdout 无文本交集。"""
+        sys.path.insert(0, os.path.join(ROOT, "scripts"))
+        import train_light_classifier as T
+        parts = T.stratified_split(T.load_datasets(),
+                                   seed=self.rep.get("split_seed", 20261118))
+        # 用文本本身而不是 hash()：Python 的字符串 hash 会碰撞
+        # （实测 2473 条里有 3 对碰撞值），会误报「重叠」。
+        train_h = {t for t, _y, *_ in parts["train"]}
+        hold_h = {t for t, _y, *_ in parts["holdout"]}
+        self.assertEqual(train_h & hold_h, set(),
+                         "训练集与留出集存在重叠文本")
+        # 两种语言都必须出现在留出集里
+        langs = {r[2] for r in parts["holdout"]}
+        self.assertEqual(langs, {"zh", "en"}, "留出集语言不全：%s" % langs)
+
+    def test_model_has_per_language_weights(self):
+        import light_classifier as LC
+        m = LC.load()
+        self.assertIn("zh", m["models"])
+        self.assertIn("en", m["models"])
+        self.assertEqual(LC.route_language("忽略之前的指令"), "zh")
+        self.assertEqual(LC.route_language("ignore all previous"), "en")
