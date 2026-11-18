@@ -60,6 +60,9 @@ class Service:
         self.port = port or free_port()
         self.env = dict(os.environ)
         self.env.setdefault("AGENTLAB_LOG_QUIET", "1")
+        # P0-2：本地验收脚本需在 demo 模式自报多个演示租户（acme/beta/evil）
+        # 来验证隔离；默认开启逃生舱，单个脚本可用 env 显式覆盖以测白名单。
+        self.env.setdefault("EVOGUARD_DEMO_ALLOW_ANY_TENANT", "1")
         if env:
             self.env.update(env)
         self.proc = None
