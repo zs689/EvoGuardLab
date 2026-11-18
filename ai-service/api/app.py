@@ -149,6 +149,9 @@ BACKENDS = _build_backends()
 # 有害请求语义层：默认关（本地小模型 0.5-5s/条，不能拖慢普通请求）
 _HARMFUL_JUDGE_ON = (os.environ.get("EVOGUARD_HARMFUL_JUDGE") or "").strip() in (
     "1", "true", "on", "yes")
+# PROD-03：轻量分类器分级路由（默认关，显式开才用）
+_LIGHT_GUARD_ON = (os.environ.get("EVOGUARD_LIGHT_GUARD") or "").strip() in (
+    "1", "true", "on", "yes")
 
 
 def _check_rate(actor):
@@ -1044,6 +1047,23 @@ class Handler(BaseHTTPRequestHandler):
                                 "anonymous", "goal_required")
         # INT-04 后续：直接越狱/有害请求语义层（**默认关**，显式开启才用）。
         # 判官不可用 -> 503 转人工，绝不静默放行；判有害 -> 400 拒绝。
+        if _LIGHT_GUARD_ON:
+            try:
+                import light_classifier as _LC
+                lg = _LC.guard_input_light(goal,
+                                           judge=None if _HARMFUL_JUDGE_ON
+                                           else (lambda t: {"harmful": False,
+                                                            "persona_jailbreak": False}))
+                if lg["decision"] == "block":
+                    return self._reject(400, self._rid, "POST", "/api/react/run",
+                                        "anonymous", "light_guard_blocked")
+                if lg["decision"] == "review":
+                    return self._reject(503, self._rid, "POST", "/api/react/run",
+                                        "anonymous", "light_guard_review")
+            except Exception as exc:                    # noqa: BLE001
+                return self._reject(503, self._rid, "POST", "/api/react/run",
+                                    "anonymous",
+                                    "light_guard_error:" + type(exc).__name__)
         if _HARMFUL_JUDGE_ON:
             try:
                 import harmful_request_judge as _HRJ
