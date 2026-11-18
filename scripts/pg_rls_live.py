@@ -91,13 +91,20 @@ def run_dsn(dsn):
         return None
     # **必须以非超级用户连接**：superuser / BYPASSRLS 角色永远绕过 RLS，
     # 用 postgres 超级用户测「RLS 生效」永远会得到「全部可见」的假结论。
-    _psql_dsn(dsn, "DROP ROLE IF EXISTS evoguard_app")
-    r = _psql_dsn(dsn, "CREATE ROLE evoguard_app LOGIN PASSWORD 'app'")
+    # 幂等：CI 的 bootstrap 步骤已经建过这个角色，直接 CREATE 会报
+    # "role already exists" 让整步失败（本地按 CI 顺序复现时抓到）。
+    _psql_dsn(dsn, "DO $$ BEGIN IF NOT EXISTS "
+                   "(SELECT FROM pg_roles WHERE rolname='evoguard_app') THEN "
+                   "CREATE ROLE evoguard_app LOGIN PASSWORD 'app'; "
+                   "END IF; END $$;")
+    r = _psql_dsn(dsn, "GRANT USAGE, CREATE ON SCHEMA public TO evoguard_app")
     if r.returncode != 0:
-        print("建角色失败：", (r.stderr or r.stdout)[-300:])
+        print("授权失败：", (r.stderr or r.stdout)[-300:])
         return None
-    _psql_dsn(dsn, "GRANT SELECT, INSERT, UPDATE, DELETE "
-                   "ON runs, audit_events, skills TO evoguard_app")
+    # schema 权限不等于表权限：CI bootstrap 只建角色+授权 schema，
+    # 表是 superuser 建的，普通角色 SELECT 仍会被拒（本地复现抓到）。
+    _psql_dsn(dsn, "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES "
+                   "IN SCHEMA public TO evoguard_app")
     app_dsn = dsn.replace("postgres:evo@", "evoguard_app:app@")
     if app_dsn == dsn:
         # DSN 不是 postgres:evo 形式时，改成显式用户名

@@ -201,8 +201,16 @@ jobs:
             --out docs/review-remediation/probes/distributed_stress.json
       - name: PostgresStore cross-replica E2E (needs pg8000)
         run: |
+          # 独立库：pg_rls_live 用 superuser 建了 runs（owner=postgres），
+          # pg_store 用普通角色 ALTER 会报 "must be owner of table"
+          # （按 CI 顺序本地复现时抓到）。两个 e2e 各用各的库。
+          psql "postgresql://postgres:evo@127.0.0.1:5432/postgres" \
+            -c "CREATE DATABASE evoguard_store;" \
+            -c "\\connect evoguard_store" \
+            -c "GRANT USAGE, CREATE ON SCHEMA public TO evoguard_app;"
           pip install pg8000
-          python scripts/pg_store_e2e.py --dsn "$EVOGUARD_PG_DSN" \
+          python scripts/pg_store_e2e.py \
+            --dsn "postgresql://evoguard_app:app@127.0.0.1:5432/evoguard_store" \
             --out docs/review-remediation/probes/pg_store_e2e.json
       - name: Upload probes
         if: always()
