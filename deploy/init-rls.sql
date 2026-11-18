@@ -1,3 +1,12 @@
+-- PROD-01：普通角色（superuser 绕过 RLS，绝不能用于应用连接）
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='evoguard_app') THEN
+    CREATE ROLE evoguard_app LOGIN PASSWORD 'app';
+  END IF;
+END $$;
+GRANT USAGE, CREATE ON SCHEMA public TO evoguard_app;
+
 
 DO $$
 DECLARE t text;

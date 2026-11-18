@@ -400,11 +400,20 @@ def tenant_db_path(tenant_id):
 
 
 def get_store(tenant_id="default"):
-    path = tenant_db_path(tenant_id)
+    # PROD-01-T2：设 EVOGUARD_PG_DSN 时切共享 PG 存储（多副本同一套数据，
+    # 租户隔离由 PG RLS + SET LOCAL app.current_tenant 强制）；
+    # **不设时下面全部逻辑不变**，默认零依赖 SQLite 行为 100% 兼容。
+    pg_dsn = (os.environ.get("EVOGUARD_PG_DSN") or "").strip()
+    cache_key = ("pg:" + pg_dsn + ":" + str(tenant_id)) if pg_dsn \
+                else tenant_db_path(tenant_id)
     with _STORES_LOCK:
-        store = _STORES.get(path)
+        store = _STORES.get(cache_key)
         if store is None:
-            store = core.Store(path)            # 唯一一次 schema DDL
+            if pg_dsn:
+                import pg_store
+                store = pg_store.PostgresStore(pg_dsn, tenant_id=tenant_id)
+            else:
+                store = core.Store(cache_key)   # 唯一一次 schema DDL
             # skills / experience 的建表也移出请求路径（EG-010）
             experience.ensure_schema(store)
             skills.ensure_schema(store)
@@ -415,7 +424,7 @@ def get_store(tenant_id="default"):
             # 初始化时读一次，别让每次 /api/health 都多开一条连接
             store._eg_journal = store.journal_mode()
             store._eg_ready = True
-            _STORES[path] = store
+            _STORES[cache_key] = store
     return store
 
 

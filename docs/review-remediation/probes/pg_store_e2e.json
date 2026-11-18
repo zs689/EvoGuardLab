@@ -1,0 +1,15 @@
+{
+  "backend": "real PostgreSQL via pg8000 (ordinary role evoguard_app)",
+  "checks": {
+    "replica1_wrote": true,
+    "replica2_read_same_experiment": true,
+    "replica2_read_same_runs": true,
+    "tenant_b_cannot_read_tenant_a": true
+  },
+  "detail": {
+    "experiment_id": "exp_79db381aeb37",
+    "runs_seen": 1,
+    "tenant_b_error": "ApiError"
+  },
+  "passed": true
+}

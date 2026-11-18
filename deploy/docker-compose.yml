@@ -13,6 +13,9 @@ x-common: &common
   environment:
     AGENTLAB_MODE: enterprise
     EVOGUARD_REDIS_URL: redis://redis:6379/0
+    # PROD-01：两个副本共享同一个 PG 库，业务数据不再分裂到各自容器内 SQLite
+    EVOGUARD_PG_DSN: postgresql://evoguard_app:app@postgres:5432/evoguard
+    EVOGUARD_PG_ROLE: evoguard_app
     EVOGUARD_AUTH_MODE: jwt_hs256
     EVOGUARD_JWT_SECRET: ${EVOGUARD_JWT_SECRET:?需要设置 JWT 密钥}
     EVOGUARD_JWT_ISSUER: https://idp.example
