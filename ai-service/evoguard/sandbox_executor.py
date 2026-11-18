@@ -154,6 +154,96 @@ def as_tool_executor(sandbox, *, tool_prefix="file."):
     return _exec
 
 
+# ---- PROD-04-T1：受限只读命令 + 出站 HTTP 白名单 --------------------------
+#: 命令白名单是**精确匹配**的 token 列表，绝不用 shell=True，绝不做 split(';') 后拼接
+READONLY_COMMANDS = frozenset({"ls", "cat", "stat", "wc", "head", "tail",
+                               "pwd", "date", "echo", "find"})
+SHELL_METACHARS = frozenset(";&|`$<>\n\r\\")
+
+#: SSRF 黑名单：环回 / 链路本地 / 私有网段 / 云元数据
+def _is_private_host(host):
+    import ipaddress
+    h = str(host or "").strip().lower().rstrip(".")
+    if h in ("localhost", "ip6-localhost"):
+        return True
+    try:
+        ip = ipaddress.ip_address(h)
+        return (ip.is_loopback or ip.is_link_local or ip.is_private
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
+    except ValueError:
+        # 域名：必须走白名单精确匹配，不解析（防 DNS rebinding 误判）
+        return None
+
+
+class NetworkSandbox:
+    """HTTP Fetch：域名白名单 + SSRF 内网拦截，纯标准库。"""
+
+    def __init__(self, allowed_domains=(), timeout=5, max_bytes=MAX_BYTES):
+        self.allowed = frozenset(str(d).lower().rstrip(".")
+                                 for d in (allowed_domains or []))
+        self.timeout = float(timeout)
+        self.max_bytes = int(max_bytes)
+
+    def check_url(self, url):
+        import urllib.parse as _up
+        u = _up.urlparse(str(url or ""))
+        if u.scheme not in ("http", "https"):
+            raise SandboxError("scheme_not_allowed:%s" % u.scheme)
+        host = (u.hostname or "").lower().rstrip(".")
+        if not host:
+            raise SandboxError("missing_host")
+        if not self.allowed or host not in self.allowed:
+            raise SandboxError("domain_not_allowlisted:%s" % host)
+        private = _is_private_host(host)
+        if private is True:
+            raise SandboxError("ssrf_private_host:%s" % host)
+        return host, u
+
+    def fetch(self, url, *, opener=None):
+        host, u = self.check_url(url)
+        import urllib.request as _ur
+        fn = opener or _ur.urlopen
+        try:
+            with fn(str(url), timeout=self.timeout) as r:
+                raw = r.read(self.max_bytes + 1)
+        except Exception as exc:                            # noqa: BLE001
+            raise SandboxError("fetch_failed:" + type(exc).__name__)
+        if len(raw) > self.max_bytes:
+            raise SandboxError("response_too_large")
+        return {"url": str(url), "host": host,
+                "bytes": len(raw), "body": raw.decode("utf-8", "replace")}
+
+
+def run_readonly_command(argv, *, cwd=None, timeout=5,
+                         max_bytes=MAX_BYTES, popen=None):
+    """受控只读命令：白名单精确匹配 + 无 shell + 无元字符 + 超时/输出上限。
+
+    返回 {cmd, stdout, bytes}；任何违规抛 SandboxError（-> executed=False）。
+    """
+    import subprocess
+    args = list(argv or [])
+    if not args or str(args[0]) not in READONLY_COMMANDS:
+        raise SandboxError("command_not_allowlisted:%s"
+                           % (args[0] if args else "<empty>"))
+    # 每个参数都禁 shell 元字符（含反斜杠与换行）
+    for a in args:
+        if any(ch in str(a) for ch in SHELL_METACHARS):
+            raise SandboxError("shell_metachar_in_arg:%s" % str(a)[:30])
+    fn = popen or subprocess.run
+    try:
+        r = fn([str(x) for x in args], cwd=cwd, timeout=timeout,
+               shell=False, capture_output=True, check=False)
+    except Exception as exc:                                # noqa: BLE001
+        raise SandboxError("command_failed:" + type(exc).__name__)
+    out = (r.stdout or b"")
+    if isinstance(out, str):
+        out = out.encode("utf-8")
+    if len(out) > max_bytes:
+        raise SandboxError("output_too_large:%d" % len(out))
+    return {"cmd": str(args[0]), "stdout": out.decode("utf-8", "replace"),
+            "bytes": len(out), "returncode": r.returncode}
+
+
 def describe():
     return {
         "level": "application-level path fence (NOT an OS sandbox)",
@@ -162,6 +252,8 @@ def describe():
         "read_ext": sorted(READ_EXT),
         "write_ext": sorted(WRITE_EXT),
         "max_bytes": MAX_BYTES,
+        "readonly_commands": sorted(READONLY_COMMANDS),
+        "network": "domain allowlist + SSRF private-host block",
         "protections": ["absolute path", ".. traversal", "symlink escape",
                         "extension allowlist", "size cap"],
         "not_protected": ["OS-level resource limits", "network egress",

@@ -66,25 +66,57 @@ def _clip(text, n=160):
     return t[:n] + ("…" if len(t) > n else "")
 
 
+def _doc_text(e):
+    return " ".join(str(e.get(k) or "") for k in
+                    ("root_cause", "recovery_action", "recovery_result"))
+
+
+def _bm25_scores(rows, goal):
+    """PROD-04-T2：复用 evidence_gate.bm25 做混合检索。
+
+    中文用已验证的 2-gram 词元（BM25Index 自带 tokenize 是英文的），
+    让「订单金额错位」与「核对交易数目」这类**跨名称相似任务**也能召回。
+    BM25 失败（缺模块/空库）时返回空 dict，回退到原有关键词路径。
+    """
+    try:
+        from evidence_gate.bm25 import BM25Index
+        idx = BM25Index()
+        for e in rows:
+            idx.add(str(e.get("id") or ""),
+                    " ".join(_words(_doc_text(e))))  # 2-gram 已空格分隔
+        idx.build()
+        return dict(idx.search(" ".join(_words(goal)), top_k=len(rows)))
+    except Exception:                                   # noqa: BLE001
+        return {}
+
+
 def retrieve_relevant(store, goal, *, agent_type=None, task_type=None,
                       max_items=MAX_ITEMS):
-    """返回按相关性排序的 **validated** 经验（不返回 pending/rejected）。"""
-    # task_type 为 None 时不过滤任务类型，靠后面的相关性排序与关键词把关。
-    # agent_type 只是提示性的，绝不当成 task_type 硬过滤（两者维度不同）。
+    """返回按相关性排序的 **validated** 经验（不返回 pending/rejected）。
+
+    混合相关性 = BM25(2-gram) + task/failure_type 加权 + confidence。
+    """
+    # task_type 为 None 时不过滤任务类型，靠相关性排序把关。
+    # agent_type 只是提示性的，绝不当成 task_type 硬过滤（维度不同）。
     rows = _exp.retrieve(store, task_type=task_type,
                          include_pending=False)      # 硬编码 False：不给调用方越权通道
     goal_words = _words(goal)
-    ranked = sorted(rows, key=lambda e: -_score(e, goal_words))
-    # 关键词有交集才带上；一点关系都没有的宁可不注入（避免噪声/漂移诱导）
+    bm = _bm25_scores(rows, goal)
+
+    def hybrid(e):
+        s = _score(e, goal_words)          # task/failure + 关键词 + confidence
+        s += bm.get(str(e.get("id")), 0.0) * 1.5   # BM25 主项
+        return s
+
+    ranked = sorted(rows, key=lambda e: -hybrid(e))
     out = []
     for e in ranked:
-        text = " ".join(str(e.get(k) or "") for k in
-                        ("root_cause", "recovery_action", "recovery_result"))
-        # 按任务类型精确命中，或关键词有交集，才注入。
         tagged = bool(task_type and e.get("task_type") == task_type)
-        if not tagged and not (goal_words & _words(text)):
-            continue
-        out.append(e)
+        # BM25 命中也算相关（跨名称迁移的关键），否则退回精确关键词
+        relevant = (tagged or bool(goal_words & _words(_doc_text(e)))
+                    or str(e.get("id")) in bm)
+        if relevant:
+            out.append(e)
         if len(out) >= max_items:
             break
     return out
@@ -129,5 +161,5 @@ def build_context(store, goal, *, agent_type=None, task_type=None,
 def describe():
     return {"max_items": MAX_ITEMS, "max_chars": MAX_CHARS,
             "include_pending": False, "rejected_never": True,
-            "ranking": "task/failure_type + keyword overlap + confidence",
+            "ranking": "BM25(2-gram) + task/failure_type + confidence",
             "untrusted_marker": True}

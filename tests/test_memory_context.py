@@ -152,5 +152,19 @@ class _PAnswer:
         return json.dumps({"thought": "", "tool": None, "answer": "ok"}), 5, "p"
 
 
+class TestSemanticTransfer(Base):
+    def test_cross_name_similar_task_recalled(self):
+        """PROD-04-T2：跨名称但语义相近的任务能召回历史经验。"""
+        # 经验写的是「订单金额错位」，查询用「交易金额核对」——
+        # task_type 不同、字面不同，但共享「金额」2-gram，BM25 应召回
+        _add(self.store, "e-transfer", EX.VALIDATED,
+             task="invoice", cause="订单金额计算错位",
+             action="逐项核对单价与数量后重算")
+        text, stats = MC.build_context(
+            self.store, "帮我核对这笔交易的金额是否算错", task_type="invoice")
+        self.assertEqual(stats["injected"], 1)
+        self.assertIn("e-transfer", text)
+
+
 if __name__ == "__main__":
     unittest.main()
