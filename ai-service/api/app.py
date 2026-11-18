@@ -146,6 +146,9 @@ def _build_backends():
 
 
 BACKENDS = _build_backends()
+# 有害请求语义层：默认关（本地小模型 0.5-5s/条，不能拖慢普通请求）
+_HARMFUL_JUDGE_ON = (os.environ.get("EVOGUARD_HARMFUL_JUDGE") or "").strip() in (
+    "1", "true", "on", "yes")
 
 
 def _check_rate(actor):
@@ -1007,6 +1010,21 @@ class Handler(BaseHTTPRequestHandler):
         if not goal:
             return self._reject(400, self._rid, "POST", "/api/react/run",
                                 "anonymous", "goal_required")
+        # INT-04 后续：直接越狱/有害请求语义层（**默认关**，显式开启才用）。
+        # 判官不可用 -> 503 转人工，绝不静默放行；判有害 -> 400 拒绝。
+        if _HARMFUL_JUDGE_ON:
+            try:
+                import harmful_request_judge as _HRJ
+                sem = _HRJ.guard_input_semantic(goal)
+            except Exception as exc:                    # noqa: BLE001
+                sem = {"decision": "report", "reason":
+                       "semantic_error:" + type(exc).__name__}
+            if sem.get("decision") == "deny":
+                return self._reject(400, self._rid, "POST", "/api/react/run",
+                                    "anonymous", "harmful_request_denied")
+            if sem.get("decision") == "report":
+                return self._reject(503, self._rid, "POST", "/api/react/run",
+                                    "anonymous", "semantic_judge_unavailable")
         try:
             import autonomous_agent as AA
             import tool_registry as TR

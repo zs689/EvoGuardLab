@@ -98,6 +98,12 @@ class TestMainPathWiring(Base):
     def test_react_requires_goal(self):
         code, body = self.req("POST", "/api/react/run", {"goal": ""})
         self.assertEqual(code, 400)
+    def test_semantic_layer_is_opt_in(self):
+        """有害请求语义层默认关，不能拖慢普通请求。"""
+        import importlib
+        import app as A
+        importlib.reload(A)
+        self.assertFalse(A._HARMFUL_JUDGE_ON)
 
     def test_skill_synthesize_route(self):
         code, body = self.req("POST", "/api/skills/synthesize", {
