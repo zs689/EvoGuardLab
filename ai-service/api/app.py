@@ -41,6 +41,7 @@ import skills     # noqa: E402
 import experience # noqa: E402
 import service_controls  # noqa: E402  —— 服务层工程基线（纯标准库）
 import agent_watch       # noqa: E402  —— 外部 agent 监测/入口防护
+import security          # noqa: E402  —— 安全模式声明（P1-2 诚实性）
 import env as evo_env    # noqa: E402  —— EVOGUARD_* 前缀兼容
 
 # EVOGUARD_* 先于 AGENTLAB_* 生效（向下兼容旧配置名）
@@ -186,6 +187,12 @@ AW_GATE = (None if _AW_MODE in ("off", "0", "false")
                                          semantic=_AW_SEM))
 AW_BLOCKED = [0]          # list 包一层，避免 global 声明
 AW_SEEN = [0]
+
+# 红队 P1-2：security 默认 audit —— 命中只在 security_effects 记 detected，
+# 工具输出正文逐字返回、调用不中断。以前看板只显示 detected 亮灯，容易误读成
+# 「已拦截」。这里把真实模式与「输出门禁是否强制拦截」显式暴露，绝不静默。
+_SEC_MODE = security.mode()
+_OUTPUT_GATE_ENFORCES = (_SEC_MODE == security.MODE_ENFORCE)
 
 
 def agent_watch_text(body):
@@ -386,6 +393,13 @@ def _read_json(path, default):
 # 实例本身无状态，多线程共享安全。
 _STORES = {}
 _STORES_LOCK = threading.Lock()
+# 红队 P1-3：每个租户一个 sqlite 文件，_STORES 若只增不删，攻击者（或正常
+# 流量）不断换租户名就能让磁盘文件数/内存句柄无界增长。加一个可配置 LRU
+# 上限；0 表示不限制（保留旧行为，供压测/兼容）。
+try:
+    _STORE_CACHE_MAX = max(0, int(os.environ.get("EVOGUARD_STORE_CACHE_MAX", "32")))
+except ValueError:
+    _STORE_CACHE_MAX = 32
 
 
 def tenant_db_path(tenant_id):
@@ -430,6 +444,19 @@ def get_store(tenant_id="default"):
             store._eg_journal = store.journal_mode()
             store._eg_ready = True
             _STORES[cache_key] = store
+        else:
+            # LRU：命中就删掉再插回，把条目挪到 dict 末尾（3.7+ 保序）。
+            store = _STORES.pop(cache_key)
+            _STORES[cache_key] = store
+        # 淘汰最久未用条目。不主动 close()：在途请求可能仍持有该 Store 的
+        # 局部引用，关闭其连接池会波及它们；移除引用后交给 GC 回收即可，
+        # 这已能阻止缓存无界增长与文件/句柄泄漏。default 主库永不淘汰。
+        if _STORE_CACHE_MAX and len(_STORES) > _STORE_CACHE_MAX:
+            for old_key in list(_STORES):
+                if old_key != cache_key and old_key != tenant_db_path("default"):
+                    _STORES.pop(old_key, None)
+                    if len(_STORES) <= _STORE_CACHE_MAX:
+                        break
     return store
 
 
@@ -941,6 +968,11 @@ class Handler(BaseHTTPRequestHandler):
                          "audit_failures": AUDIT_FAILURES,
                          "db": store_health(self._tenant_id),
                          "metrics_exists": os.path.exists(METRICS),
+                "security": {"mode": _SEC_MODE,
+                             "output_gate_enforces": _OUTPUT_GATE_ENFORCES,
+                             "note": ("命中仅记账、不拦截输出"
+                                      if not _OUTPUT_GATE_ENFORCES
+                                      else "命中会拦截并净化工具输出")},
                 "agent_watch": {"mode": _AW_MODE,
                                 "enforce": bool(AW_GATE and AW_GATE.enforce),
                                 "semantic": bool(_AW_SEM),
@@ -1443,6 +1475,11 @@ def main():
     warning = CONTROLS.describe().get("warning")
     if warning:
         print("[warn] " + warning, file=sys.stderr, flush=True)
+    # 红队 P1-2：默认 audit 只检测不拦截，必须在启动时明说，绝不静默。
+    if not _OUTPUT_GATE_ENFORCES:
+        print("[warn] 安全模式=%s：输出侧注入命中仅记账、不拦截、不净化正文。"
+              "需要真实拦截请设 AGENTLAB_SECURITY_MODE=enforce。"
+              % _SEC_MODE, file=sys.stderr, flush=True)
     port = _parse_port(sys.argv[1:])
     if not os.path.isdir(FRONTEND):
         raise SystemExit("找不到前端目录：%s" % FRONTEND)

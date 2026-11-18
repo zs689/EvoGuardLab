@@ -80,6 +80,13 @@ class TestEndpoints(_ServerCase):
         d = self._json("/api/health")
         self.assertTrue(d["ok"])
         self.assertIn("db", d)
+        # 红队 P1-2：安全模式与「输出门禁是否拦截」必须显式声明，
+        # 不能让 detected 亮灯被误读成已拦截。
+        sec = d["security"]
+        self.assertIn(sec["mode"], ("off", "audit", "enforce"))
+        self.assertEqual(sec["output_gate_enforces"],
+                         sec["mode"] == "enforce")
+        self.assertTrue(sec["note"])
 
     def test_meta_covers_dataset_and_modes(self):
         d = self._json("/api/meta")

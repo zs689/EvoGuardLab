@@ -284,9 +284,16 @@ class ApprovalGate:
                 (run_id, tool, ad, APPROVED))]
         mismatch = None
         for r in rows:
-            # EG-026：审批绑定租户。跨租户复用在企业模式下等于越权。
-            if tenant_id and r.get("tenant_id") and r["tenant_id"] != tenant_id:
-                raise ApprovalDenied(r["id"], "租户不匹配，原审批不能复用")
+            # EG-026 / 红队 P0-3：审批绑定租户后，消费方必须出示**匹配**的
+            # tenant_id。旧写法 `if tenant_id and r["tenant_id"] and ...` 在
+            # 调用方不传 tenant_id 时整个校验被短路 —— 无租户身份也能消费
+            # 属于其他租户的已批准审批（越权）。改为「只要请求绑了租户，
+            # 不传或传错一律拒绝」；请求本身无 tenant 的老库保持兼容。
+            req_tenant = r.get("tenant_id")
+            if req_tenant and req_tenant != tenant_id:
+                raise ApprovalDenied(
+                    r["id"], "租户不匹配，原审批不能复用（需 tenant_id=%s）"
+                    % req_tenant)
             if r["policy_digest"] and r["policy_digest"] != pd:
                 raise ApprovalDenied(r["id"], "权限/工具契约已变更，原审批不能复用")
             if r["expires_at"] < self.clock():
@@ -405,12 +412,15 @@ class ApprovalGate:
         r = self.get(request_id)
         if not r:
             raise ApprovalDenied(request_id, "审批请求不存在")
-        # EG-026：审批人必须属于同一租户。企业模式下这是「租户级审批人绑定」
-        # 的最小实现；真实 IdP 的角色解析仍然没有（见台账 EG-026）。
-        if tenant_id and r.get("tenant_id") and r["tenant_id"] != tenant_id:
+        # EG-026 / 红队 P0-3：审批人必须属于同一租户。旧写法在调用方不传
+        # tenant_id 时短路，导致任何人都能批准其他租户的高危请求（越权）。
+        # 改为「请求绑了租户就必须出示匹配身份，不传视为不匹配」；请求本身
+        # 无 tenant 的老库/兼容模式不受影响。真实 IdP 角色解析仍未做（EG-026）。
+        req_tenant = r.get("tenant_id")
+        if req_tenant and req_tenant != tenant_id:
             raise ApprovalDenied(
                 request_id, "审批人租户 %s 与请求租户 %s 不一致"
-                % (tenant_id, r["tenant_id"]))
+                % (tenant_id, req_tenant))
         with self.store.conn() as c:
             # 条件迁移：只有 pending 能变 approved。并发下第二个会 rowcount=0。
             cur = c.execute(

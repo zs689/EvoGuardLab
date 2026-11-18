@@ -90,6 +90,24 @@ class TestApprovalTenantAndReconcile(unittest.TestCase):
         for c in ("tenant_id", "effect_status", "effect_receipt"):
             self.assertIn(c, cols)
 
+    def test_approve_without_tenant_cannot_approve_tenant_request(self):
+        """红队 P0-3：审批人是 acme 的请求，不传 tenant_id 不得批准。"""
+        rid = self.pending("acme")
+        with self.assertRaises(approval.ApprovalDenied) as cm:
+            self.gate.approve(rid, approved_by="anonymous")
+        self.assertIn("租户", str(cm.exception))
+        self.assertEqual(self.gate.get(rid)["status"], approval.PENDING,
+                         "越权批准竟然改了状态")
+
+    def test_consume_without_tenant_cannot_reuse_tenant_approval(self):
+        """红队 P0-3：不传 tenant_id 不得消费属于 acme 的已批准审批。"""
+        rid = self.pending("acme")
+        self.gate.approve(rid, tenant_id="acme")
+        with self.assertRaises(approval.ApprovalDenied):
+            self.gate.require("run_t", "order.settle", ARGS)  # 无 tenant_id
+        self.assertEqual(self.gate.get(rid)["status"], approval.APPROVED,
+                         "无租户身份竟然消费掉了 acme 的审批")
+
     def test_legacy_request_without_tenant_still_works(self):
         """老库里的审批没有 tenant_id，不能因为加了绑定就全部拒绝。"""
         rid = self.pending(None)
