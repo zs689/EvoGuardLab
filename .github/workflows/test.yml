@@ -151,3 +151,62 @@ jobs:
     steps:
       - name: All mandatory checks ran and passed
         run: echo "unittest / objective gates / clean-clone / wheel(Linux+Windows) all passed"
+
+
+  # PROD-05：真 Postgres/Redis 服务容器上的集成验证。
+  # 本机 Docker 已实测过同一套脚本；这里让远端 Runner 也跑一遍，
+  # 不把「本机可用」冒充「CI 已绿」。
+  integration-pg-redis:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: evo
+          POSTGRES_DB: evoguard
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d evoguard"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      PGPASSWORD: evo
+      EVOGUARD_REDIS_URL: redis://127.0.0.1:6379/0
+      EVOGUARD_PG_DSN: postgresql://evoguard_app:app@127.0.0.1:5432/evoguard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Postgres client (psql) for RLS live script
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Bootstrap non-superuser role (superuser bypasses RLS)
+        run: |
+          psql "postgresql://postgres:evo@127.0.0.1:5432/evoguard" \
+            -c "CREATE ROLE evoguard_app LOGIN PASSWORD 'app';" \
+            -c "GRANT USAGE, CREATE ON SCHEMA public TO evoguard_app;"
+      - name: PG RLS live (real DB)
+        run: |
+          python scripts/pg_rls_live.py \
+            --dsn "postgresql://postgres:evo@127.0.0.1:5432/evoguard" \
+            --out docs/review-remediation/probes/pg_rls_live.json
+      - name: Redis two-process stress
+        run: |
+          python scripts/distributed_stress.py --url "$EVOGUARD_REDIS_URL" \
+            --out docs/review-remediation/probes/distributed_stress.json
+      - name: PostgresStore cross-replica E2E (needs pg8000)
+        run: |
+          pip install pg8000
+          python scripts/pg_store_e2e.py --dsn "$EVOGUARD_PG_DSN" \
+            --out docs/review-remediation/probes/pg_store_e2e.json
+      - name: Upload probes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-probes
+          path: docs/review-remediation/probes/
