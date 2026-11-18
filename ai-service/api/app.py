@@ -1004,6 +1004,37 @@ class Handler(BaseHTTPRequestHandler):
     def h_report(self):
         self._send(200, {"markdown": _read_text(REPORT, "（未生成报告）")})
 
+    def _send_stream(self, _op, body):
+        """FIX-PRX-T2：SSE 流式响应。
+
+        tool_calls 增量在代理侧被缓冲，判定通过才补发；被拦则下发标准错误帧。
+        因此客户端不会收到「半截参数」去执行。
+        """
+        try:
+            code, lines, audit = _op.proxy_stream(
+                body, use_semantic=_HARMFUL_JUDGE_ON,
+                agent_type=str(body.get("evoguard_agent") or "react"))
+        except ValueError as exc:
+            return self._err("E_NOT_READY", str(exc), 503)
+        if code != 200:
+            return self._send(code, lines)
+        self._response_status = 200
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Accel-Buffering", "no")
+        # 不设 Content-Length：SSE 是流，长度事先不可知；
+        # 关连接让客户端知道结束（标准库 http.server 不支持 chunked 编码）。
+        self.send_header("Connection", "close")
+        self.end_headers()
+        try:
+            for chunk in lines:
+                self.wfile.write(chunk.encode("utf-8"))
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass                        # 客户端提前断开，不算服务端错误
+        self.close_connection = True
+
     def h_openai_chat(self):
         """PROD-02-T1：OpenAI-compatible 透明安全代理。
 
@@ -1016,6 +1047,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._err("E_BAD_REQUEST", "请求体不是合法 JSON")
         try:
             import openai_proxy as _op
+            if body.get("stream") is True:
+                return self._send_stream(_op, body)
             code, resp, audit = _op.proxy(
                 body, use_semantic=_HARMFUL_JUDGE_ON,
                 agent_type=str(body.get("evoguard_agent") or "react"))

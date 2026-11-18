@@ -82,13 +82,24 @@ def _call_upstream(payload, *, url=None, opener=None, timeout=120):
 def _preflight_call(tool_call, *, agent_type, goal, cfg, registry, rails):
     """单个 tool_call 的门禁。返回 (allowed, decision_record)。"""
     name = str(((tool_call or {}).get("function") or {}).get("name") or "")
-    raw_args = ((tool_call or {}).get("function") or {}).get("arguments") or "{}"
-    try:
-        args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-    except ValueError:
+    raw_args = ((tool_call or {}).get("function") or {}).get("arguments")
+    if raw_args in (None, ""):
         args = {}
+    elif isinstance(raw_args, str):
+        try:
+            args = json.loads(raw_args)
+        except ValueError:
+            # 以前这里静默回退成 {}，等于「解析不了就当没参数放行」——
+            # 校验看到空参数、下游却按原文解析，两边判断不一致。
+            return False, {"tool": name, "stop": True, "decision": "deny",
+                           "reason": "invalid_tool_arguments_json",
+                           "executed": False}
+    else:
+        args = raw_args
     if not isinstance(args, dict):
-        args = {}
+        return False, {"tool": name, "stop": True, "decision": "deny",
+                       "reason": "invalid_tool_arguments_type",
+                       "executed": False}
     # 1) tool_registry 未声明 -> 直接拒绝（不猜、不放行）
     declared = (registry.declared() or {}) if registry else {}
     if name not in declared:
@@ -202,3 +213,191 @@ def describe():
             "tool_call": ["tool_registry", "tool_rails", "execution.preflight"],
             "output": ["security.guard_tool_output"],
             "config": "EVOGUARD_UPSTREAM_URL"}
+
+# ---- FIX-PRX-T2：SSE 流式门禁 -------------------------------------------
+#: 流式下「先发出去的话收不回来」，所以策略必须分两类：
+#: - 文本增量：每累计 SCAN_EVERY 字符扫一次 L1，命中高危立即中止并发错误帧
+#: - tool_calls 增量：**一个字节都不转发**，聚合到流结束再判定，
+#:   通过才一次性发出。这样客户端永远不会拿到「半截参数」去执行。
+SCAN_EVERY = 300
+
+
+def _sse(obj):
+    return "data: " + json.dumps(obj, ensure_ascii=False) + "\n\n"
+
+
+def _merge_tool_delta(acc, deltas):
+    """把流式 tool_calls 增量按 index 合并成完整调用。"""
+    for d in deltas or []:
+        idx = int(d.get("index") or 0)
+        slot = acc.setdefault(idx, {"id": "", "type": "function",
+                                    "function": {"name": "", "arguments": ""}})
+        if d.get("id"):
+            slot["id"] = d["id"]
+        fn = d.get("function") or {}
+        if fn.get("name"):
+            slot["function"]["name"] = fn["name"]
+        if fn.get("arguments"):
+            slot["function"]["arguments"] += fn["arguments"]
+    return acc
+
+
+def process_sse(lines, *, payload, agent_type, registry, rails, cfg,
+                goal=""):
+    """处理上游 SSE 行流。返回 (emitted_lines, audit)。
+
+    纯函数（不碰 socket），便于用列表直接测。
+    """
+    audit = {"attempted": True, "executed": False, "effect": "unchanged",
+             "checks": [], "decision": "allow"}
+    out = []
+    tool_acc = {}
+    content_buf = []
+    scanned = 0
+    blocked = None
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
+        if not line.startswith("data:"):
+            # 兼容 `event:`/注释行：原样转发（不含业务内容）
+            out.append(line + "\n\n")
+            continue
+        data = line[5:].strip()
+        if data == "[DONE]":
+            continue
+        try:
+            obj = json.loads(data)
+        except ValueError:
+            # 上游发出无法解析的帧：不转发，避免把不确定内容透给客户端
+            audit["checks"].append({"stage": "stream", "codes": ["bad_sse_frame"]})
+            continue
+        delta = {}
+        for ch in (obj.get("choices") or []):
+            delta = ch.get("delta") or {}
+            break
+        if delta.get("tool_calls"):
+            # **不转发**：聚合后统一判定
+            _merge_tool_delta(tool_acc, delta["tool_calls"])
+        content = delta.get("content")
+        if content:
+            content_buf.append(content)
+            scanned += len(content)
+            if scanned >= SCAN_EVERY:
+                chunk = "".join(content_buf)
+                f = _sec.scan(chunk, "assistant_output")
+                hard = [x for x in f if x.get("severity") == "error"]
+                audit["checks"].append({"stage": "stream_content",
+                                        "codes": [x["code"] for x in hard]})
+                if hard:
+                    blocked = {"reason": "stream_output_blocked",
+                               "codes": [x["code"] for x in hard]}
+                    break
+                content_buf = []
+                scanned = 0
+        # 只转发「已通过检查的文本」与元数据
+        safe_obj = json.loads(json.dumps(obj))
+        for ch in (safe_obj.get("choices") or []):
+            d2 = ch.get("delta") or {}
+            d2.pop("tool_calls", None)
+        out.append(_sse(safe_obj))
+
+    if blocked:
+        audit["decision"] = "deny"
+        audit["blocked"] = blocked
+        out.append(_sse({"error": {"message": blocked["reason"],
+                                   "type": "invalid_request_error",
+                                   "code": blocked["reason"],
+                                   "detail": blocked["codes"]}}))
+        out.append("data: [DONE]\n\n")
+        return out, audit
+
+    # 流结束：统一判定 tool_calls
+    if tool_acc:
+        for idx in sorted(tool_acc):
+            tc = tool_acc[idx]
+            ok, rec = _preflight_call(tc, agent_type=agent_type, goal=goal,
+                                      cfg=cfg, registry=registry, rails=rails)
+            audit["checks"].append({"stage": "stream_tool_call", **{
+                k: rec.get(k) for k in ("tool", "stop", "decision", "reason")}})
+            if not ok:
+                audit["decision"] = "deny"
+                audit["blocked"] = rec
+                out.append(_sse({"error": {
+                    "message": "tool_call blocked by policy: %s" % rec.get("reason"),
+                    "type": "invalid_request_error",
+                    "code": "tool_blocked", "detail": rec}}))
+                out.append("data: [DONE]\n\n")
+                return out, audit
+        # 全部通过：一次性补发完整 tool_calls（含 finish_reason）
+        out.append(_sse({"choices": [{
+            "index": 0, "finish_reason": "tool_calls",
+            "delta": {"tool_calls": [dict(v, index=k)
+                                     for k, v in sorted(tool_acc.items())]}}]}))
+    out.append("data: [DONE]\n\n")
+    return out, audit
+
+
+def proxy_stream(payload, *, upstream_url=None, opener=None,
+                 agent_type="react", registry=None, rails=None,
+                 use_semantic=False, judge=None):
+    """流式入口。返回 (status_code, lines_iterable_or_error_body, audit)。
+
+    status 200 时第二项是 SSE 行生成器；否则是标准 JSON 错误体。
+    """
+    messages = payload.get("messages") or []
+    goal = _user_text(messages)
+    findings, sem = guard_messages(messages, use_semantic=use_semantic,
+                                   judge=judge)
+    hard = [f for f in findings if f.get("severity") == "error"]
+    if hard or (sem and sem.get("decision") == "deny"):
+        return 400, _openai_error("input_blocked: %s" % ",".join(
+            [f["code"] for f in hard])), {"decision": "deny",
+                                          "executed": False}
+    if sem and sem.get("decision") == "report":
+        return 503, _openai_error("semantic_judge_unavailable",
+                                  "semantic_unavailable"), {
+                                      "decision": "review", "executed": False}
+
+    url = upstream_url or _default_upstream_url()
+    if not url:
+        raise ValueError("未配置 EVOGUARD_UPSTREAM_URL")
+    reg = registry if registry is not None else _reg.REGISTRY
+    rl = rails if rails is not None else _rails.load_default()
+    allowed_tools = sorted((reg.declared() or {}).keys())
+    writes = [t for t in allowed_tools
+              if ((reg.declared() or {}).get(t) or {}).get("side_effect") == "write"]
+    cfg = _exec.build_config({}, agent_type=agent_type,
+                             allowed_tools=allowed_tools, write_tools=writes,
+                             has_contract=True, has_intent_judge=True)
+
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body, headers={"Content-Type": "application/json"},
+        method="POST")
+    fn = opener or urllib.request.urlopen
+    try:
+        resp = fn(req, timeout=120)
+    except Exception as exc:                                # noqa: BLE001
+        return 502, _openai_error("upstream_failed:" + type(exc).__name__,
+                                  "upstream_unavailable"), {
+                                      "decision": "review", "executed": False}
+    lines, audit = process_sse(_iter_lines(resp), payload=payload,
+                               agent_type=agent_type, registry=reg, rails=rl,
+                               cfg=cfg, goal=goal)
+    return 200, lines, audit
+
+
+def _iter_lines(resp):
+    """把上游响应按行吐出来（兼容带 readline 的对象与 bytes 流）。"""
+    if hasattr(resp, "readline"):
+        while True:
+            line = resp.readline()
+            if not line:
+                break
+            yield line.decode("utf-8", "replace") if isinstance(line, bytes) else line
+        return
+    data = resp.read()
+    text = data.decode("utf-8", "replace") if isinstance(data, bytes) else data
+    for line in text.splitlines():
+        yield line
