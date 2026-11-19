@@ -17,17 +17,35 @@
 import os
 import re
 import shutil
+import threading
 
 #: 允许读写的扩展名（默认只读白名单；写入另有一套更严格的）
 READ_EXT = frozenset({".txt", ".md", ".json", ".csv", ".log", ".yaml",
                       ".yml", ".py", ".toml", ".ini"})
-WRITE_EXT = frozenset({".txt", ".md", ".json", ".csv", ".log"})
+# AGENT-E2E-01：编码工具需要写出 .py（修 Bug 基准的核心动作）。写仍受
+# SandboxExecutor 的 realpath 围栏 + 审批约束，扩扩展名不等于放宽边界。
+WRITE_EXT = frozenset({".txt", ".md", ".json", ".csv", ".log", ".py"})
 MAX_BYTES = 1 << 20                      # 单文件 1 MiB
 _BAD_NAME = re.compile(r"[\x00<>:\"|?*]")
 
 
 class SandboxError(PermissionError):
     """路径/权限被拒绝。调用方据此记 executed=False。"""
+
+
+class SandboxOverloaded(RuntimeError):
+    """并发容器已达上限，快速拒绝，不无限拉起容器打爆宿主机内存。"""
+
+
+#: SBX-SEC-01-T1：全局有界并发信号量，防并发容器 OOM 攻击。
+#: 0 表示不限制（仅供受控压测，默认必须有限）。
+try:
+    _MAX_CONCURRENT = max(0, int(os.environ.get(
+        "EVOGUARD_SANDBOX_MAX_CONCURRENT", "4")))
+except ValueError:
+    _MAX_CONCURRENT = 4
+_SANDBOX_SEMAPHORE = (threading.BoundedSemaphore(_MAX_CONCURRENT)
+                      if _MAX_CONCURRENT > 0 else None)
 
 
 def _norm_rel(path):
@@ -344,11 +362,25 @@ class DockerCodeSandbox:
 
     def run(self, code, *, timeout_s=None):
         """在容器里执行 Python 源码，返回 {ok, stdout, stderr, returncode, ...}。"""
+        if not isinstance(code, str) or not code.strip():
+            raise DockerSandboxError("empty_code")
+        # SBX-SEC-01-T1：并发上限，超限立即拒绝（不排队无限拉容器）
+        got = True
+        if _SANDBOX_SEMAPHORE is not None:
+            got = _SANDBOX_SEMAPHORE.acquire(blocking=False)
+            if not got:
+                raise SandboxOverloaded(
+                    "sandbox_overloaded：并发容器已达上限 %d" % _MAX_CONCURRENT)
+        try:
+            return self._run_inner(code, timeout_s=timeout_s)
+        finally:
+            if got and _SANDBOX_SEMAPHORE is not None:
+                _SANDBOX_SEMAPHORE.release()
+
+    def _run_inner(self, code, *, timeout_s=None):
         import subprocess as _sp
         import tempfile
         import uuid
-        if not isinstance(code, str) or not code.strip():
-            raise DockerSandboxError("empty_code")
         limit = float(timeout_s or self.timeout_s)
         name = "evo-sbx-" + uuid.uuid4().hex[:12]
         with tempfile.TemporaryDirectory(prefix="evo-sbx-") as tmp:
@@ -361,6 +393,9 @@ class DockerCodeSandbox:
                 "--memory=" + self.memory, "--cpus=" + self.cpus,
                 "--pids-limit=64", "--cap-drop=ALL",
                 "--security-opt", "no-new-privileges",
+                # SBX-SEC-01-T1：非 root（nobody）+ 受限 tmpfs
+                "--user", "65534:65534",
+                "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m",
                 "-v", script + ":/work/script.py:ro",
                 "-w", "/work", self.image,
                 "python", "/work/script.py",
@@ -390,6 +425,55 @@ class DockerCodeSandbox:
                         capture_output=True, timeout=10, check=False)
                 raise DockerSandboxError("run_failed:" + type(exc).__name__) \
                     from exc
+
+
+def register_coding_tools(registry, *, root, docker_sandbox=None):
+    """AGENT-E2E-01-T1：把受控文件读写 + 容器代码执行注册为标准 Agent 工具。
+
+    - fs.read：只读，限于 sandbox root（路径围栏由 SandboxExecutor 保证）；
+    - fs.write：写工具，走审批 + 受控根目录，绝不越界；
+    - code.run_in_sandbox：只读挂载进容器执行测试，宿主机无副作用。
+
+    executor（传入 ReActAgent 的 callable）由调用方按 name 分派到对应对象。
+    """
+    fs = SandboxExecutor(root, allow_write=True)
+    reg = registry
+    # 与 tool_contract.DEFAULT_CONTRACTS / TOOL_SCHEMAS 对齐的显式契约：
+    # controlled 模式的契约层与身份层各自独立检查，两处必须一致。
+    reg.register("fs.read", {
+        "identities": ["coder"], "allowed_domains": [],
+        "allowed_resource_pattern": None, "writable_paths": [],
+        "max_amount": None, "methods": ["read"], "side_effect": "none",
+        "requires_approval": False,
+    }, scope="read_only", source="coding_bench")
+    reg.register("fs.write", {
+        "identities": ["coder"], "allowed_domains": [],
+        "allowed_resource_pattern": None, "writable_paths": ["*"],
+        "max_amount": None, "methods": ["write"], "side_effect": "write",
+        "requires_approval": True,
+    }, scope="write", source="coding_bench")
+    reg.register("code.run_in_sandbox", {
+        "identities": ["coder"], "allowed_domains": [],
+        "allowed_resource_pattern": None, "writable_paths": [],
+        "max_amount": None, "methods": ["read"], "side_effect": "none",
+        "requires_approval": False,
+    }, scope="read_only", source="coding_bench")
+
+    def executor(tool, args):
+        if tool == "fs.read":
+            return fs.read(str(args.get("path") or ""))   # 已是 {path,size,content}
+        if tool == "fs.write":
+            r = fs.write(str(args.get("path") or ""), str(args.get("content") or ""))
+            return {"written": True, "path": r.get("path"), "bytes": r.get("bytes")}
+        if tool == "code.run_in_sandbox":
+            if docker_sandbox is None:
+                return {"error": "docker_sandbox_unavailable"}
+            r = docker_sandbox.run(str(args.get("code") or ""))
+            return {"stdout": r.get("stdout", ""), "stderr": r.get("stderr", ""),
+                    "returncode": r.get("returncode"), "ok": r.get("ok")}
+        return {"error": "unknown_tool:" + tool}
+
+    return executor
 
 
 def describe():
