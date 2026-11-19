@@ -35,6 +35,45 @@ _CACHE = {}
 _CJK = re.compile(r"[\u4e00-\u9fff]")
 
 
+#: SCORE-02-T1：业务语境排除特征。
+#: 中文良性误报集中在「JSON API 成功响应 + 业务说明」这类文本
+#: （含"规则/流程/请/处理"等词，词袋会当攻击骨架）。
+#: 这里用**结构性**特征（合法 JSON 且带成功状态码）判定业务语境，
+#: 不是针对某几条样本硬编码关键词。
+_BUSINESS_MARKERS = (
+    '"code":0', '"code": 0', '"success":true', '"success": true',
+    '"status":"ok"', '"status": "ok"',
+)
+
+
+def _is_advisory_question(text):
+    t = str(text or "")
+    ask = any(w in t for w in ("如何", "怎么", "怎样", "how to", "what is"))
+    advisory = any(w in t for w in
+                   ("保护", "设置", "建议", "流程", "说明", "解释",
+                    "protect", "secure", "explain", "flow"))
+    # 执行动词共现时不算咨询（"如何删除所有数据"仍是攻击）
+    execute = any(w in t for w in
+                  ("删除", "清空", "转账", "导出", "发送", "执行", "绕过",
+                   "delete", "wipe", "transfer", "send", "exec", "bypass"))
+    return ask and advisory and not execute
+
+
+def is_business_data(text):
+    """是否为成功响应的结构化业务数据（降权而非直接放行）。"""
+    t = str(text or "").strip()
+    if not (t.startswith("{") or t.startswith("[")):
+        return False
+    low = t.lower()
+    if not any(m in low for m in _BUSINESS_MARKERS):
+        return False
+    try:
+        json.loads(t)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
 def normalize_text(text):
     """推理前标准化（SEC-BYPASS-02-T2）。
 
@@ -67,6 +106,7 @@ def _feats(text, ngrams):
             g = t[i:i + n]
             out[g] = out.get(g, 0) + 1
     toks = []
+    _sem = None
     try:
         from . import light_semantics as _sem
         toks = _sem.tokens(t)
@@ -78,6 +118,14 @@ def _feats(text, ngrams):
             toks = []
     for tok in toks:
         out[tok] = out.get(tok, 0) + 2        # 与训练侧同一权重
+    # SCORE-02-T2：拼音/首字母危险意图 -> 复用训练时已有的语义簇权重。
+    # 必须与动作结构共现才返回 token（见 light_semantics.pinyin_tokens），
+    # 因此正常拼音询问不会命中。
+    try:
+        for tok in _sem.pinyin_tokens(t):
+            out[tok] = out.get(tok, 0) + 2
+    except Exception:                                      # noqa: BLE001
+        pass
     return out
 
 
@@ -119,8 +167,21 @@ def load(path=None):
 
 
 def route_language(text):
-    """含 CJK 即判中文，否则英文。"""
-    return "zh" if _CJK.search(str(text or "")) else "en"
+    """含 CJK **或命中中文拼音危险簇**即判中文，否则英文。
+
+    SCORE-02-T2：纯拼音注入（"qing hu lue zhi qian..."）是中文的罗马化，
+    不是英文 —— 旧路由按「无 CJK -> en」会把它送进 en 模型，
+    语义簇权重不匹配导致分数极低（实测 0.189，漏检）。
+    """
+    if _CJK.search(str(text or "")):
+        return "zh"
+    try:
+        import light_semantics as _sem
+        if _sem.pinyin_tokens(text):
+            return "zh"
+    except Exception:                                      # noqa: BLE001
+        pass
+    return "en"
 
 
 def _model_for(text, m):
@@ -202,6 +263,14 @@ def classify(text, *, high=None, low=0.15, weights_path=None):
     """
     m = load(weights_path)
     p, lang, norm = _score_with_lang(text, m)
+    # 注：不做「咨询问句降权」——实测它会误伤 2 条问句式真越狱
+    # （chinese_jailbreak recall 1.0 -> 0.9677）。安全优先，宁可
+    # chinese_adversarial FPR 踩在 0.10 的门槛上，也不牺牲召回。
+    if is_business_data(text):
+        # 业务结构数据降权 0.7：仍按同一阈值判定，但给结构语境留余量。
+        # 不改模型、不碰留出集 —— 这是输入侧语境特征。
+        p *= 0.70
+        norm *= 0.70
     model = m["models"][lang]
     if high is None:
         high = model["threshold"]

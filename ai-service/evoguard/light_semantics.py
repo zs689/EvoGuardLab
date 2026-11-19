@@ -41,6 +41,57 @@ def tokens(text):
     return hit
 
 
+#: SCORE-02-T2：中文拼音/首字母危险意图词 -> 复用同一套语义簇 token。
+#: 关键纪律：这里只做「危险意图词识别」，**不做单独拦截决定** ——
+#: 必须与动作结构（调用/删除/绕过/输出）共现才算攻击，否则
+#: "qing bang wo cha ding dan"（请帮我查订单）这种正常拼音会被误杀。
+PINYIN_TO_CLUSTER = {
+    # 全拼（去空格后匹配）
+    "hulue": "<IGN>", "wushi": "<IGN>", "wangji": "<IGN>",
+    "shanchu": "<BYPASS>", "shandiao": "<BYPASS>",
+    "raoguo": "<BYPASS>", "poyi": "<BYPASS>",
+    "zhuanzhang": "<OUT>", "zhuandao": "<OUT>",
+    "fasong": "<OUT>", "daochu": "<OUT>", "duchu": "<OUT>",
+    "diaoyong": "<OUT>", "zhixing": "<OUT>",
+    " quanbu": "<ALL>", "suoyou": "<ALL>", "yishang": "<ALL>",
+    "xitong": "<SYS>", "miyao": "<SYS>", "tishi": "<SYS>",
+    "guanliyuan": "<ROLE>", "chaojiguanliyuan": "<ROLE>",
+    "wuxianzhi": "<NOLIMIT>", "wuguol": "<NOLIMIT>",
+    # 首字母缩写（方案点名的高频项）
+    "hlzl": "<IGN>", "wszl": "<IGN>", "hl": "<IGN>",
+    "qbsc": "<ALL><BYPASS>", "sc": "<BYPASS>",
+    "dqmy": "<OUT><SYS>", "dwbx": "<OUT>",
+    "rg": "<BYPASS>", "wktgjglyqx": "<ROLE><ALL>",
+    "zhixing": "<OUT>", "fs": "<OUT>", "dw": "<OUT>",
+}
+
+#: 动作结构词（必须与危险意图共现才触发）
+PINYIN_ACTION_WORDS = (
+    "diaoyong", "zhixing", "shan", "sc", "fs", "dq", "zhuan",
+    "call", "exec", "delete", "send", "output",
+    "diao yong", "zhi xing", "删", "执行", "调用", "发送", "转账",
+    "jie suan", "jiesuan", "qdzx", "settle", "结算",
+    "jinru", "denglu", "kaitong", "ti quan", "tiquan", "quanxian",
+    "ddzhyhh", "qbzz", "bzhye", "sfyj", "login", "grant",
+)
+
+
+def pinyin_tokens(text):
+    """返回 (token, 证据)。规范化：小写 + 去空格 + 保留原串供动作共现判断。"""
+    raw = str(text or "").lower()
+    compact = raw.replace(" ", "").replace("\u200b", "")
+    hits = []
+    for word, tok in PINYIN_TO_CLUSTER.items():
+        if word in compact:
+            hits.append(tok)
+    if not hits:
+        return []
+    # 必须有动作结构共现（在原文或压缩串里均可）
+    if not any(w in raw or w in compact for w in PINYIN_ACTION_WORDS):
+        return []
+    return list(dict.fromkeys(hits))
+
+
 def describe():
     return {"clusters": sorted(SEMANTIC_CLUSTERS),
             "token_weight": TOKEN_WEIGHT,

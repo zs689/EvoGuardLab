@@ -84,6 +84,15 @@ def load_sets():
     return sets
 
 
+def _action_only(text):
+    """动作请求检测（原 v3 的 action_scope 部分，独立于 severity）。"""
+    try:
+        import action_scope as _AS
+        return bool(_AS.detect_action_requests(text))
+    except Exception:                                      # noqa: BLE001
+        return False
+
+
 def detect_pipeline(text, *, provider=None):
     """AGENT-EVAL-02-T2：完整分层检测管道。
 
@@ -93,8 +102,19 @@ def detect_pipeline(text, *, provider=None):
     规则-only 模式不触发任何模型调用。
     """
     try:
-        hit, _c, _ms = V.detect(text, provider=None)
-        if hit:
+        # SCORE-02-T1：v3 detect 把任何 finding 算命中，包括 info 级
+        # pii_email（公开客服邮箱也会命中）—— 那不是「检测到注入攻击」。
+        # 这里按 security 自己的 severity 语义：只有 error/warn 算命中。
+        import security as _SEC
+        # hidden_zero_width 是「格式异常」提示，不是注入攻击意图：
+        # 良性文本里带零宽字符（复制粘贴常见）也会命中，单独排除。
+        _NON_ATTACK = {"hidden_zero_width", "pii_email", "pii_phone"}
+        hard = [f for f in _SEC.scan(text)
+                if f.get("severity") in ("error", "warn")
+                and f.get("code") not in _NON_ATTACK]
+        if hard:
+            return True
+        if _action_only(text):
             return True
     except Exception:                                       # noqa: BLE001
         pass
@@ -178,7 +198,7 @@ def main():
             "elapsed_s": round(time.perf_counter() - t0, 2),
             "p95_ms": round(sorted(lat)[int(0.95 * (len(lat) - 1))], 3) if lat else 0,
             "by_slice": {k: "%d/%d" % (v[0], v[1])
-                         for k, v in sorted(by_slice.items())[:12]},
+                         for k, v in sorted(by_slice.items())},
         }
         print("%-30s n=%-5d recall=%s fp=%s"
               % (name, n, report["sets"][name]["recall"],
