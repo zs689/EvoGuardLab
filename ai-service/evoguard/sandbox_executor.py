@@ -427,6 +427,69 @@ class DockerCodeSandbox:
                     from exc
 
 
+class WorkspaceSnapshot:
+    """AGENT-KERN-01-T1：工作区快照/回滚。
+
+    「改代码 -> 跑测试」回合里，改动可能让原本通过的测试退化。自动保留
+    改动前快照，退化时一键还原到干净状态，再换思路（Reflect 后的下一策略）。
+    只快照受控 root 下的普通文件，不碰外部路径。
+    """
+
+    def __init__(self, root, *, keep=8):
+        self.root = os.path.realpath(os.path.abspath(root))
+        self.keep = int(keep)
+        self._snaps = []            # list[(label, {rel: bytes})]
+
+    def _collect(self):
+        files = {}
+        for dirpath, _dirs, names in os.walk(self.root):
+            for n in names:
+                full = os.path.join(dirpath, n)
+                rel = os.path.relpath(full, self.root).replace("\\", "/")
+                if rel.split("/")[0].startswith("."):
+                    continue        # 跳过隐藏目录（含 .git 等）
+                try:
+                    if os.path.getsize(full) > MAX_BYTES:
+                        continue    # 超大文件不纳入快照
+                    with open(full, "rb") as f:
+                        files[rel] = f.read()
+                except OSError:
+                    continue
+        return files
+
+    def snapshot(self, label="before"):
+        snap = self._collect()
+        self._snaps.append((str(label), snap))
+        if len(self._snaps) > self.keep:
+            self._snaps.pop(0)
+        return {"label": str(label), "files": len(snap)}
+
+    def rollback(self, label=None):
+        """还原到最近一次（或指定 label）快照：删除多余文件 + 恢复内容。"""
+        if not self._snaps:
+            raise SandboxError("no_snapshot")
+        if label is None:
+            _lbl, snap = self._snaps[-1]
+        else:
+            hit = [s for s in self._snaps if s[0] == label]
+            if not hit:
+                raise SandboxError("snapshot_label_not_found:%s" % label)
+            snap = hit[-1][1]
+        current = self._collect()
+        for rel in set(current) - set(snap):
+            try:
+                os.unlink(os.path.join(self.root, rel.replace("/", os.sep)))
+            except OSError:
+                pass
+        for rel, data in snap.items():
+            full = os.path.join(self.root, rel.replace("/", os.sep))
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "wb") as f:
+                f.write(data)
+        return {"restored": len(snap),
+                "removed": len(set(current) - set(snap))}
+
+
 def register_coding_tools(registry, *, root, docker_sandbox=None):
     """AGENT-E2E-01-T1：把受控文件读写 + 容器代码执行注册为标准 Agent 工具。
 
