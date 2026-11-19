@@ -123,11 +123,10 @@ MONITOR_DEFAULTS = {
 def collect_online_stats(store, skill, *, since=None):
     """从 runs / experiments / security_effects 汇总**上线后**的真实指标。
 
-    **关联方式的诚实说明**：`runs` 表没有 skill_id 列，因此这里用
-    「上线时间窗 + task_type(agent_type)」做近似关联 —— 它统计的是
-    「该技能上线后、同类任务」的运行，不是「严格只跑了该技能」的运行。
-    这个近似会稀释信号（无关运行混进来），所以阈值不能定得太敏感。
-    要做精确关联，需要在 runs 上加 skill_id 列并改写入路径，属于更大的改动。
+    **关联方式**：优先用 `runs.skill_id` 精确归因（EVO-LOOP-01-T2
+    给 runs 加了列，runtime 在 skill 命中时写回）；只有库里该技能
+    没有任何 skill_id 归属时才回退「时间窗 + task_type」近似，
+    兼容功能上线前的旧库。返回的 association 字段会说明本次用哪种。
     """
     task_type = skill.get("task_type")
     start = since if since is not None else (skill.get("promoted_at") or 0)
@@ -136,11 +135,27 @@ def collect_online_stats(store, skill, *, since=None):
     # 会让监控在「从未跑过扫描」的库上直接抛错。
     _sec.ensure_schema(store)
     with store.conn() as c:
-        rows = c.execute(
-            "SELECT r.id, r.success FROM runs r "
-            "LEFT JOIN experiments e ON e.id=r.experiment_id "
-            "WHERE r.started_at >= ? AND (e.agent_type IS NULL OR e.agent_type=?) "
-            "AND r.success IS NOT NULL", (start, task_type)).fetchall()
+        # EVO-LOOP-01-T2：**优先按 runs.skill_id 精确归因**。
+        # 只有该列在本库没有任何归属记录时（旧库/该功能上线前的运行），
+        # 才回退到「时间窗 + task_type」近似 —— 避免无关运行稀释信号，
+        # 也避免「同 task_type 下别人的失败误伤本技能」。
+        cur = c.execute("PRAGMA table_info(runs)")
+        cols = {r[1] for r in cur.fetchall()}
+        exact = False
+        if "skill_id" in cols:
+            rows_exact = c.execute(
+                "SELECT id, success FROM runs "
+                "WHERE skill_id=? AND success IS NOT NULL",
+                (skill.get("id"),)).fetchall()
+            if rows_exact:
+                rows = rows_exact
+                exact = True
+        if not exact:
+            rows = c.execute(
+                "SELECT r.id, r.success FROM runs r "
+                "LEFT JOIN experiments e ON e.id=r.experiment_id "
+                "WHERE r.started_at >= ? AND (e.agent_type IS NULL OR e.agent_type=?) "
+                "AND r.success IS NOT NULL", (start, task_type)).fetchall()
         run_ids = [r["id"] for r in rows]
         n = len(rows)
         ok = sum(1 for r in rows if r["success"])
@@ -160,7 +175,8 @@ def collect_online_stats(store, skill, *, since=None):
             "success_rate": round(ok / n, 4) if n else None,
             "unauthorized": unauthorized, "warnings": fp,
             "since": start, "task_type": task_type,
-            "association": "time_window+task_type (runs 无 skill_id 列)"}
+            "association": ("runs.skill_id (精确归因)" if exact
+                            else "time_window+task_type (无 skill_id 归属，回退近似)")}
 
 
 def baseline_from_evaluation(store, skill_id):
@@ -250,11 +266,22 @@ def monitor_and_rollback(store, skill_id, online_runs=None, *,
     try:
         _sk.rollback(store, skill_id)
     except (KeyError, ValueError) as exc:
-        # 只有 v1（首次晋升）时「没有更旧的快照可退」——这是真实约束，
-        # 必须如实报出，不能假装回滚成功。
+        # EVO-LOOP-01-T1：v1（首次晋升）没有更旧快照可退，但**不能因此
+        # 放着闯祸的技能继续激活**。止血兜底：disable（先别用了），
+        # 与 rollback（换回旧正文继续用）严格区分。
         out["error"] = "rollback_unavailable:" + str(exc)[:100]
         out["degraded"] = True
         out["rolled_back"] = False
+        try:
+            _sk.disable(store, skill_id)
+            out["disabled"] = True
+            out["status"] = "disabled"
+            out["reasons"] = reasons + [
+                "仅 v1 无旧快照可退，已 disable 止血（未回滚正文）"]
+        except Exception as dexc:                          # noqa: BLE001
+            # 连 disable 都失败必须明说，不能让调用方以为已经止血
+            out["disabled"] = False
+            out["error"] += ";disable_failed:" + type(dexc).__name__
         return out
 
     # **回读确认**：rollback 的语义是「恢复旧版本正文并重新启用」，

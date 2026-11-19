@@ -1007,8 +1007,30 @@ STRATEGY_BY_CAUSE = {
 }
 
 
+def _record_skill_id(store, run_id, skill_id):
+    """把「本次运行实际生效的 skill」写回 runs，供线上归因精确统计。
+
+    失败不影响主流程（归因缺失最多让监控回退到时间窗近似），
+    但不能静默：记一条 step 让轨迹里能看到。
+    """
+    if not run_id or not skill_id:
+        return
+    try:
+        with store.conn() as c:
+            c.execute("UPDATE runs SET skill_id=? WHERE id=? "
+                      "AND (skill_id IS NULL OR skill_id=?)",
+                      (skill_id, run_id, skill_id))
+    except Exception:                                      # noqa: BLE001
+        try:
+            store.add_step(run_id, 0, "security", "skill_attribution",
+                           {"skill_id": skill_id}, {"error": "write_failed"},
+                           status="error")
+        except Exception:                                  # noqa: BLE001
+            pass
+
+
 def plan_recovery(store, agent_type, root_cause, mode, scope="single",
-                  forced_skill=None):
+                  forced_skill=None, run_id=None):
     """产出一条**策略链** list[str]，不再是一个孤立字符串。
 
     为什么必须是链：一次运行里可以同时存在多个故障点，
@@ -1047,6 +1069,7 @@ def plan_recovery(store, agent_type, root_cause, mode, scope="single",
     # guard 用例全被污染 -> 负迁移虚高 -> 真正有效的技能也会被拒。
     if forced and forced.get("task_type") == agent_type and \
             (not forced.get("fault_type") or forced.get("fault_type") == root_cause):
+        _record_skill_id(store, run_id, forced["id"])
         chain = core.as_chain(forced["strategy"])
         return pack(chain, {"max_retry": MAX_RETRY, "root_cause": root_cause,
                             "skill_id": forced["id"], "forced": True, "chain": chain},
@@ -1060,6 +1083,7 @@ def plan_recovery(store, agent_type, root_cause, mode, scope="single",
         sk = None
 
     if sk:
+        _record_skill_id(store, run_id, sk["id"])
         chain = core.as_chain(sk["strategy"])
         return pack(chain, {"max_retry": MAX_RETRY, "root_cause": root_cause,
                             "skill_id": sk["id"], "skill_version": sk["version"],
@@ -1212,7 +1236,7 @@ def _recover(store, exp, run_exp, rid, ctx, mode):
         did = None
 
     plan = plan_recovery(store, exp["agent_type"], d["root_cause"], mode,
-                         scope=scope,
+                         scope=scope, run_id=rid,
                          forced_skill=exp.get("forced_skill"))
     chain = plan["strategy_chain"]
     if chain[0] == "human_takeover":

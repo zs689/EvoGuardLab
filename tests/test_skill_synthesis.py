@@ -273,3 +273,115 @@ class TestOnlineMonitorRollback(unittest.TestCase):
         row = [x for x in skills.list_skills(self.store)
                if x["id"] == self.skill_id][0]
         self.assertEqual(row["status"], "active")
+
+class TestV1DemoteAndAttribution(unittest.TestCase):
+    """EVO-LOOP-01：v1 退化要能止血；归因要精确。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = core.Store(os.path.join(self.tmp.name, "v1.db"))
+        self.addCleanup(self.tmp.cleanup)
+        self.addCleanup(self.store.close)
+        self.steps = [
+            {"seq": 1, "logical": 1, "name": "file.read", "status": "error",
+             "error_type": "timeout", "output": None},
+            {"seq": 2, "logical": 2, "name": "http.fetch", "status": "ok",
+             "output": {"docs": ["ok"]}},
+        ]
+        s = SS.synthesize(self.store, self.steps, task_type="newdomain")
+        assert s["accepted"]["accepted"], s["accepted"]
+        self.skill = s["skill"]
+        self.sid = self.skill["id"]
+        # 制造越权副作用所需的扫描表
+        import security as SEC
+        SEC.ensure_schema(self.store)
+
+    def _promote_once(self):
+        training = newdomain_cases("tr", 3, "file")
+        target = newdomain_cases("tg", 3, "http")
+        guard = newdomain_cases("gd", 3, "sql")
+        def runner(case, sk):
+            return True if case["task_id"].startswith("gd") else sk is not None
+        out = SS.evaluate_and_promote(
+            self.store, self.skill, target, guard, runner,
+            training_cases=training)
+        assert out["promoted"], out
+        return out
+
+    def _runs(self, n, *, success=True, skill_id=None, task="newdomain"):
+        exp = self.store.create_experiment("v1", task, "T-v1",
+                                          "tool_timeout", 0, 7)
+        out = []
+        for _ in range(n):
+            run = self.store.create_run(exp["id"], "C", 7)
+            rid = run["id"] if isinstance(run, dict) else run
+            if skill_id:
+                with self.store.conn() as c:
+                    c.execute("UPDATE runs SET skill_id=? WHERE id=?",
+                              (skill_id, rid))
+            self.store.finish_run(rid, 1 if success else 0, "x", "", 10, 100)
+            out.append(rid)
+        return out
+
+    def _unauthorized(self, rid):
+        with self.store.conn() as c:
+            c.execute(
+                "INSERT INTO security_effects(id,ts,run_id,where_,tool,"
+                "detected,decision,action,attempted,executed,effect,reason) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("e1", 1.0, rid, "tool_approval", "sql.update", 1, "deny",
+                 "blocked", 1, 1, "state_changed", "越权写"))
+
+    def test_v1_degradation_disables_for_stop_bleed(self):
+        """v1（只有一版）线上越权：无旧快照可退，但必须 disable 止血。"""
+        self._promote_once()
+        # 确认确实只有一版可退
+        with self.store.conn() as c:
+            versions = [r[0] for r in c.execute(
+                "SELECT version FROM skill_versions WHERE skill_id=?",
+                (self.sid,)).fetchall()]
+        self.assertLessEqual(len(versions), 2, "本用例要构造 v1 场景")
+
+        rids = self._runs(6, success=True, skill_id=self.sid)
+        self._unauthorized(rids[0])
+        # 强制 rollback 抛「无更旧快照」来精确构造 v1 场景
+        orig = skills.rollback
+        def no_old(*a, **k):
+            raise ValueError("当前指针 v1 之前没有更旧的快照")
+        skills.rollback = no_old
+        try:
+            r = SS.monitor_and_rollback(self.store, self.sid)
+        finally:
+            skills.rollback = orig
+        self.assertTrue(r["degraded"])
+        self.assertFalse(r["rolled_back"])
+        self.assertTrue(r["disabled"], r)
+        self.assertEqual(r["status"], "disabled")
+        row = [x for x in skills.list_skills(self.store)
+               if x["id"] == self.sid][0]
+        self.assertEqual(row["status"], "disabled")
+
+    def test_exact_attribution_ignores_unrelated_failures(self):
+        """同 task_type 下混入未启用本 skill 的失败运行，不误伤。"""
+        self._promote_once()
+        # 6 条本 skill 的成功运行 + 15 条无关失败运行（无 skill_id）
+        self._runs(6, success=True, skill_id=self.sid)
+        self._runs(15, success=False, skill_id=None)
+        sk = [x for x in skills.list_skills(self.store)
+              if x["id"] == self.sid][0]
+        stats = SS.collect_online_stats(self.store, sk)
+        self.assertEqual(stats["n"], 6,
+                         "精确归因应只统计带本 skill_id 的运行")
+        self.assertIn("skill_id", stats["association"])
+        r = SS.monitor_and_rollback(self.store, self.sid)
+        self.assertFalse(r["degraded"], "无关失败不应触发本 skill 回滚")
+
+    def test_legacy_fallback_still_works(self):
+        """旧库（runs 无 skill_id 归属）仍回退时间窗近似。"""
+        self._promote_once()
+        self._runs(8, success=False, skill_id=None)
+        sk = [x for x in skills.list_skills(self.store)
+              if x["id"] == self.sid][0]
+        stats = SS.collect_online_stats(self.store, sk)
+        self.assertGreaterEqual(stats["n"], 8)
+        self.assertIn("回退", stats["association"])

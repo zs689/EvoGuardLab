@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS runs(
   id TEXT PRIMARY KEY, experiment_id TEXT, mode TEXT, status TEXT,
   seed INTEGER, started_at REAL, ended_at REAL, success INTEGER,
   tokens INTEGER, latency_ms INTEGER, answer TEXT, expect TEXT,
-  note TEXT);
+  note TEXT, skill_id TEXT);
 
 CREATE TABLE IF NOT EXISTS steps(
   id TEXT PRIMARY KEY, run_id TEXT, seq INTEGER, logical INTEGER,
