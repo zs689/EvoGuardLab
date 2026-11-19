@@ -29,7 +29,9 @@ CREATE TABLE IF NOT EXISTS skills(
   scope TEXT DEFAULT 'single', active_version INTEGER,
   promoted_from_evaluation TEXT, promoted_at REAL,
   decision_params TEXT, disabled_at REAL,
-  rolled_back_from_version INTEGER, rolled_back_at REAL);
+  rolled_back_from_version INTEGER, rolled_back_at REAL,
+  error_signature TEXT, diagnostic_steps TEXT,
+  fix_pattern TEXT, verification_check TEXT);
 
 CREATE TABLE IF NOT EXISTS skill_versions(
   id TEXT PRIMARY KEY, skill_id TEXT, version INTEGER, snapshot TEXT, created_at REAL);
@@ -71,7 +73,9 @@ PROMOTION_PROTOCOL = "promotion-gate-v1"
 # 技能「正文」= 决定执行行为的全部字段。status / version / 时间戳刻意排除：
 # 晋升本身会改它们，纳入哈希会让同一评估在幂等重放时立刻失效。
 CONTENT_FIELDS = ("name", "task_type", "fault_type", "strategy",
-                  "required_tools", "safety", "scope", "decision_params")
+                  "required_tools", "safety", "scope", "decision_params",
+                  "error_signature", "diagnostic_steps", "fix_pattern",
+                  "verification_check")
 
 PROMOTION_ERRORS = {
     "NO_EVALUATION": "该技能没有任何评估记录，必须先跑 paired-v2 独立验证",
@@ -183,13 +187,18 @@ def save(store, skill):
     strategy = _db_value(skill["strategy"])
     with store.conn() as c:
         c.execute("INSERT INTO skills(id,name,task_type,fault_type,strategy,required_tools,"
-                  "safety,status,version,created_at,scope,decision_params) "
-                  "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                  "safety,status,version,created_at,scope,decision_params,"
+                  "error_signature,diagnostic_steps,fix_pattern,verification_check) "
+                  "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                   (skill["id"], skill["name"], skill["task_type"], skill["fault_type"],
                    strategy, _db_value(skill["required_tools"]),
                    _db_value(skill["safety"]), skill["status"], skill["version"],
                    skill["created_at"], skill.get("scope") or SINGLE,
-                   _db_value(skill.get("decision_params"))))
+                   _db_value(skill.get("decision_params")),
+                   skill.get("error_signature"),
+                   _db_value(skill.get("diagnostic_steps")),
+                   skill.get("fix_pattern"),
+                   skill.get("verification_check")))
         c.execute("INSERT INTO skill_versions(id,skill_id,version,snapshot,created_at) "
                   "VALUES(?,?,?,?,?)",
                   ("skv_" + uuid.uuid4().hex[:8], skill["id"], skill["version"],

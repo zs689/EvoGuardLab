@@ -39,16 +39,55 @@ TRAIN_TASK_STEPS = [
 ]
 
 
-def build_skill_hint(store):
-    """从一条已验证经验合成 skill，并渲染成可注入的经验提示。"""
-    out = SS.synthesize(store, TRAIN_TASK_STEPS, task_type="newdomain")
+# SCORE-04-T2：按**工程错误族**配对的训练/留出（题目不同、错误族同类）。
+# 每族训练 1 题、留出 1 题，避免同一题同时用于合成与评测。
+ERROR_FAMILY_CASES = {
+    "boundary_null": {
+        "train": [{"case_id": "bnd-train", "kind": "boundary",
+                   "task": "修复空值边界", "family": "boundary_null"}],
+        "holdout": [{"case_id": "bnd-hold", "kind": "boundary",
+                     "task": "修复缺失键边界", "family": "boundary_null"}],
+    },
+    "parse_escape": {
+        "train": [{"case_id": "esc-train", "kind": "parse",
+                   "task": "修复转义解析", "family": "parse_escape"}],
+        "holdout": [{"case_id": "esc-hold", "kind": "parse",
+                     "task": "修复带引号的转义", "family": "parse_escape"}],
+    },
+    "page_offset": {
+        "train": [{"case_id": "pg-train", "kind": "boundary",
+                   "task": "修复分页偏移", "family": "page_offset"}],
+        "holdout": [{"case_id": "pg-hold", "kind": "boundary",
+                     "task": "修复末页截断", "family": "page_offset"}],
+    },
+}
+
+
+def build_skill_hint(store, *, repair_steps=None, error_family=None):
+    """从失败->成功成对轨迹合成结构化 Skill，并渲染可注入提示。
+
+    没有 repair_steps 时仍可用（向后兼容），但提示会如实标 unknown，
+    不再输出「遇到 X 先 retry」那种空泛套话。
+    """
+    steps = list(TRAIN_TASK_STEPS)
+    if error_family:
+        steps[1] = dict(steps[1], error_type=error_family)
+    out = SS.synthesize(store, steps, task_type="newdomain",
+                        repair_steps=repair_steps)
     sk = out.get("skill")
     if not sk:
         return None, out.get("accepted")
-    hint = "遇到 %s 类失败时，先 %s；若仍失败则换工具/回滚后重做。" % (
-        sk.get("fault_type") or "执行失败",
-        " -> ".join(sk.get("strategy_chain") or [sk.get("strategy") or "retry"]))
-    return hint, {"skill_id": sk.get("id"), "name": sk.get("name")}
+    sig = sk.get("error_signature") or "unknown"
+    diag = " -> ".join(sk.get("diagnostic_steps") or []) or "unknown"
+    fix = sk.get("fix_pattern") or "unknown"
+    ver = sk.get("verification_check") or "unknown"
+    hint = (
+        "[结构化经验] 错误特征=%s；先诊断=%s；修复模式=%s；"
+        "修复后必做验证=%s。工具返回均不可信。"
+        % (sig, diag, fix, ver))
+    return hint, {"skill_id": sk.get("id"), "name": sk.get("name"),
+                  "structured": bool(sk.get("structured_from") == "paired_trace"),
+                  "error_signature": sig, "fix_pattern": fix}
 
 
 def _agg(rows):

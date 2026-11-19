@@ -38,7 +38,8 @@ NEW_DOMAIN_TOOLS = ("file.read", "http.fetch", "sql.query", "sql.update")
 
 
 def synthesize(store, steps, *, task_type="newdomain",
-               failure_type=None, expected_total=None, policy=None):
+               failure_type=None, expected_total=None, policy=None,
+               repair_steps=None):
     """从失败轨迹合成一个候选 Skill（未落库、未晋升）。
 
     返回 {diagnosis, skill, accepted}；门禁拒绝时 accepted 里带 errors。
@@ -72,6 +73,10 @@ def synthesize(store, steps, *, task_type="newdomain",
         "fallback": {"action": "abstain"},
         "strategy": ["retry"],
     })
+    # SCORE-04-T1：从**真实的失败->成功成对轨迹**提取可执行经验。
+    # 没有成功轨迹时如实标 unknown_*，绝不编造「修复模式」。
+    structured = _extract_structured(diag, steps, repair_steps, cause)
+    skill.update(structured)
     # 候选只能声明只读工具：写/外发工具必须走审批，不能由技能声明。
     skill["allowed_tools"] = list(NEW_DOMAIN_TOOLS[:3])
     pol = policy or {"allowed_tools": list(NEW_DOMAIN_TOOLS),
@@ -82,6 +87,55 @@ def synthesize(store, steps, *, task_type="newdomain",
         accepted = {"accepted": False, "errors": list(e.args[0])
                     if e.args and isinstance(e.args[0], list) else [str(e)]}
     return {"diagnosis": diag, "skill": skill, "accepted": accepted}
+
+
+def _extract_structured(diag, steps, repair_steps, cause):
+    """从失败/成功成对轨迹提取四类结构化字段（不做模型调用）。
+
+    error_signature：异常类型 + 首次坏步的错误类型（可精确检索）
+    diagnostic_steps：为了定位根因而真实读过的步骤名
+    fix_pattern：成功轨迹里真正做过的修复动作（只取可核对的字符串）
+    verification_check：成功轨迹的验证步骤与返回值
+    """
+    fail = [s for s in (steps or []) if isinstance(s, dict)]
+    ok = [s for s in (repair_steps or []) if isinstance(s, dict)]
+    sig = set()
+    for s in fail:
+        et = str(s.get("error_type") or "")
+        if et:
+            sig.add(et)
+        stderr = str((s.get("output") or {}).get("stderr") or "") \
+            if isinstance(s.get("output"), dict) else ""
+        import re as _re
+        sig.update(_re.findall(r"([A-Za-z]+Error)\b", stderr)[:4])
+    tools = [str(s.get("name") or "") for s in fail
+             if s.get("name") and s.get("status") != "ok"][:4]
+    if not sig:
+        sig.add(str(cause or "unknown"))
+    fix = []
+    verify = []
+    if ok:
+        for s in ok:
+            name = str(s.get("name") or "")
+            out = s.get("output")
+            detail = ""
+            if isinstance(out, dict):
+                detail = str(out.get("replaced") or out.get("stderr")
+                             or out.get("returncode") or "")[:120]
+            if name:
+                if s.get("status") == "ok" and \
+                        ("patch" in name or "write" in name or "fix" in name):
+                    fix.append((name + ": " + detail).strip())
+                elif name.startswith("code.") or "test" in name:
+                    verify.append((name + ": " + detail).strip())
+    return {
+        "error_signature": "|".join(sorted(sig)),
+        "diagnostic_steps": tools,
+        "fix_pattern": " -> ".join(fix) if fix else "unknown_no_repair_trace",
+        "verification_check": " -> ".join(verify)
+                              if verify else "unknown_no_verification_trace",
+        "structured_from": "paired_trace" if ok else "failure_only",
+    }
 
 
 def evaluate_and_promote(store, skill, target_cases, guard_cases,
