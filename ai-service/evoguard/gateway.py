@@ -100,10 +100,21 @@ def extract_json_strict(text):
 class Provider:
     name = "base"
     is_mock = False
+    supports_tools = False
 
     def complete(self, messages, temperature=0.0, max_tokens=256):
         """返回 (text, tokens, model_id)。失败抛 LLMError。"""
         raise NotImplementedError
+
+    def complete_ex(self, messages, *, tools=None, temperature=0.0,
+                    max_tokens=256):
+        """带原生 tool_calls 的扩展入口（AGENT-PLUG-01-T2）。
+
+        默认实现向后兼容：不支持原生工具的模型退化为纯文本补全。
+        """
+        text, tokens, model = self.complete(
+            messages, temperature=temperature, max_tokens=max_tokens)
+        return ToolCallReply(text, tokens, model, [])
 
     def info(self):
         return {"provider": self.name, "mock": self.is_mock}
@@ -311,6 +322,207 @@ class OllamaNativeProvider(Provider):
         return text, tokens or max(1, len(text) // 2), model
 
 
+class ProviderSpec:
+    """AGENT-PLUG-01：一行配置描述一个模型后端的能力档案。
+
+    严禁在 Agent 主逻辑里硬编码模型名或厂商私有参数 —— 私有差异全部收敛
+    到这里（`extra_body` / `supports_*`），换模型只改配置不改代码。
+    """
+
+    def __init__(self, backend="openai_compat", base_url=None, model=None,
+                 api_key_env=None, supports_tools=False,
+                 supports_json_mode=False, supports_think_flag=False,
+                 extra_body=None, timeout=60):
+        self.backend = str(backend)
+        self.base_url = base_url
+        self.model = model
+        self.api_key_env = api_key_env
+        self.supports_tools = bool(supports_tools)
+        self.supports_json_mode = bool(supports_json_mode)
+        self.supports_think_flag = bool(supports_think_flag)
+        self.extra_body = dict(extra_body or {})
+        self.timeout = int(timeout)
+
+    @classmethod
+    def from_env(cls, role=None):
+        """按角色读环境变量；未设时回退默认模型。"""
+        prefix = "EVOGUARD_MODEL_" + role.upper() if role else "AGENTLAB_LLM"
+        def _g(k, d=None):
+            return os.environ.get(prefix + "_" + k) or d
+        backend = (os.environ.get("AGENTLAB_LLM") or "mock").strip()
+        return cls(
+            backend=_g("BACKEND", backend),
+            base_url=_g("BASE", os.environ.get("AGENTLAB_LLM_BASE")),
+            model=_g("MODEL", os.environ.get("AGENTLAB_LLM_MODEL")),
+            api_key_env=_g("API_KEY_ENV", None),
+            supports_tools=str(_g("SUPPORTS_TOOLS", "")).lower() in ("1", "true", "on"),
+            supports_json_mode=str(_g("SUPPORTS_JSON", "")).lower() in ("1", "true", "on"),
+            supports_think_flag=str(_g("SUPPORTS_THINK", "")).lower() in ("1", "true", "on"),
+            timeout=int(_g("TIMEOUT", 60)),
+        )
+
+    def describe(self):
+        return {"backend": self.backend, "model": self.model,
+                "supports_tools": self.supports_tools,
+                "supports_json_mode": self.supports_json_mode,
+                "supports_think_flag": self.supports_think_flag}
+
+
+class ToolCallReply:
+    """带原生 tool_calls 的模型回复（AGENT-PLUG-01-T2）。"""
+
+    def __init__(self, text="", tokens=0, model="", tool_calls=None, raw=None):
+        self.text = text or ""
+        self.tokens = int(tokens or 0)
+        self.model = model or ""
+        self.tool_calls = list(tool_calls or [])
+        self.raw = raw
+
+    def as_tuple(self):
+        return self.text, self.tokens, self.model
+
+
+class OpenAICompatProvider(Provider):
+    """通用 OpenAI 兼容后端（OpenAI/DeepSeek/Qwen/vLLM/LM Studio/Ollama /v1）。
+
+    与 LocalProvider 的区别：支持 `tools`/`tool_calls` 原生调用、Bearer 鉴权、
+    以及 `extra_body`（厂商私有参数统一放这里，不散落在 Agent 逻辑）。
+    """
+
+    name = "openai_compat"
+
+    def __init__(self, spec=None, **kw):
+        self.spec = spec or ProviderSpec(**kw)
+        self.base = (self.spec.base_url or DEFAULT_BASE).rstrip("/")
+        self.model = self.spec.model
+        self.timeout = self.spec.timeout
+        self.supports_tools = self.spec.supports_tools
+        if not self.spec.supports_json_mode:
+            # 仅当档案未声明 JSON mode 时，才退化为 prompt-JSON（由 Agent 侧决策）
+            pass
+
+    def _headers(self):
+        h = {"Content-Type": "application/json"}
+        env = self.spec.api_key_env or os.environ.get("OPENAI_API_KEY_ENV")
+        key = os.environ.get(env) if env else None
+        if key:
+            h["Authorization"] = "Bearer " + key
+        return h
+
+    def _post(self, path, payload):
+        req = urllib.request.Request(
+            self.base + path, data=json.dumps(payload).encode("utf-8"),
+            headers=self._headers(), method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", "ignore")[:300]
+            except Exception:
+                pass
+            if e.code in (401, 403):
+                raise LLMError("E_LLM_AUTH", "接口需要鉴权（%s）" % e.code)
+            if e.code in (400, 404):
+                raise LLMError("E_LLM_MODEL", "模型/端点不对（%s）：%s" % (e.code, body))
+            if e.code == 429:
+                raise LLMError("E_LLM_RATE", "被限流（429）")
+            if e.code in (502, 503, 504):
+                raise LLMError("E_LLM_DOWN", "模型服务没起来（%s）" % e.code)
+            raise LLMError("E_LLM_HTTP", "HTTP %s：%s" % (e.code, body))
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            if isinstance(e, TimeoutError):
+                raise LLMError("E_LLM_TIMEOUT", "等待 %s 秒无响应" % self.timeout)
+            raise LLMError("E_LLM_UNREACHABLE",
+                           "连不上 %s（%s）" % (self.base, getattr(e, "reason", e)))
+
+    def resolve_model(self):
+        return self.model or "gpt-4o-mini"
+
+    def complete(self, messages, temperature=0.0, max_tokens=256):
+        return self.complete_ex(messages, temperature=temperature,
+                                max_tokens=max_tokens).as_tuple()
+
+    def complete_ex(self, messages, *, tools=None, temperature=0.0,
+                    max_tokens=256):
+        payload = {"model": self.resolve_model(), "messages": messages,
+                   "temperature": temperature, "max_tokens": max_tokens,
+                   "stream": False}
+        payload.update(self.spec.extra_body)
+        if tools and self.supports_tools:
+            payload["tools"] = tools
+        data = self._post("/chat/completions", payload)
+        msg = data["choices"][0]["message"]
+        text = strip_think(msg.get("content") or "")
+        calls = []
+        for c in (msg.get("tool_calls") or []):
+            fn = c.get("function") or {}
+            try:
+                args = json.loads(fn.get("arguments") or "{}")
+            except Exception:
+                args = {"_raw": fn.get("arguments")}
+            calls.append({"id": c.get("id"), "name": fn.get("name"), "args": args})
+        usage = data.get("usage") or {}
+        tokens = int(usage.get("total_tokens") or max(1, len(text) // 2))
+        return ToolCallReply(text, tokens, self.resolve_model(), calls, data)
+
+
+class AnthropicCompatProvider(OpenAICompatProvider):
+    """Anthropic Messages 兼容后端（/v1/messages）。"""
+
+    name = "anthropic_compat"
+
+    def _headers(self):
+        h = {"Content-Type": "application/json",
+             "anthropic-version": "2023-06-01"}
+        env = self.spec.api_key_env or "ANTHROPIC_API_KEY"
+        key = os.environ.get(env) if env else None
+        if key:
+            h["x-api-key"] = key
+        return h
+
+    def complete_ex(self, messages, *, tools=None, temperature=0.0,
+                    max_tokens=256):
+        # Anthropic 把 system 独立出来，messages 只放 user/assistant。
+        system_parts, convo = [], []
+        for m in messages:
+            if m.get("role") == "system":
+                system_parts.append(str(m.get("content") or ""))
+            else:
+                convo.append({"role": m.get("role"),
+                              "content": str(m.get("content") or "")})
+        payload = {"model": self.resolve_model(), "messages": convo,
+                   "max_tokens": max_tokens, "temperature": temperature}
+        if system_parts:
+            payload["system"] = "\n\n".join(system_parts)
+        payload.update(self.spec.extra_body)
+        if tools and self.supports_tools:
+            payload["tools"] = [{"name": t["function"]["name"],
+                                 "description": t["function"].get("description", ""),
+                                 "input_schema": t["function"].get("parameters", {})}
+                                for t in tools]
+        data = self._post("/messages", payload)
+        text = "".join(b.get("text", "") for b in (data.get("content") or [])
+                       if b.get("type") == "text")
+        calls = [{"id": b.get("id"), "name": b.get("name"), "args": b.get("input") or {}}
+                 for b in (data.get("content") or []) if b.get("type") == "tool_use"]
+        usage = data.get("usage") or {}
+        tokens = int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
+        return ToolCallReply(strip_think(text), tokens or max(1, len(text) // 2),
+                             self.resolve_model(), calls, data)
+
+
+#: 自定义后端注册表（AGENT-PLUG-01-T1）。register_provider(name, factory)。
+_CUSTOM_PROVIDERS = {}
+
+
+def register_provider(name, factory):
+    """注册一个自定义后端工厂：factory(spec) -> Provider 实例。"""
+    _CUSTOM_PROVIDERS[str(name)] = factory
+    return name
+
+
 _CACHE = {}
 
 
@@ -376,6 +588,39 @@ class ResilientProvider(Provider):
         finally:
             self._sem.release()
 
+    def complete_ex(self, messages, *, tools=None, temperature=0.0,
+                    max_tokens=256):
+        """透传原生 tool_calls（熔断/并发包装不能把结构化回复吃掉）。"""
+        if not self._sem.acquire(timeout=self.queue_timeout):
+            self.stats["rejected_busy"] += 1
+            raise LLMError("E_OVERLOADED",
+                           "模型调用并发已满，排队 %.1fs 超时"
+                           % self.queue_timeout)
+        try:
+            was_half_open = (self.breaker.state == self.breaker.HALF_OPEN \
+                             if hasattr(self.breaker, "HALF_OPEN")
+                             else self.breaker.state == "half_open")
+            if not self.breaker.allow():
+                self.stats["rejected_open"] += 1
+                raise LLMError("E_CIRCUIT_OPEN",
+                               "下游连续失败，熔断打开（%s）"
+                               % self.breaker.state)
+            if was_half_open:
+                self.stats["probe_admitted"] += 1
+            try:
+                out = self.inner.complete_ex(
+                    messages, tools=tools, temperature=temperature,
+                    max_tokens=max_tokens)
+            except Exception:
+                self.breaker.record(False)
+                self.stats["failed"] += 1
+                raise
+            self.breaker.record(True)
+            self.stats["ok"] += 1
+            return out
+        finally:
+            self._sem.release()
+
     def snapshot(self):
         d = dict(self.stats)
         d["breaker"] = self.breaker.snapshot()
@@ -383,21 +628,47 @@ class ResilientProvider(Provider):
         return d
 
 
-def get_provider(force=None):
-    """按环境变量取后端。同一个进程内复用，避免每次新建连接配置。"""
-    mode = force or os.environ.get("AGENTLAB_LLM") or "mock"
-    if mode in _CACHE:
-        return _CACHE[mode]
-    if mode == "mock":
+def get_provider(force=None, *, role=None, spec=None):
+    """AGENT-PLUG-01：模型无关热插拔入口。
+
+    - `role`：按角色路由（planner/executor/judge），读 EVOGUARD_MODEL_<ROLE>_*；
+      未设时回退默认模型；
+    - `spec`：显式给 ProviderSpec（测试/编程式接入）；
+    - `force`：后端名（mock/ollama/ollama_raw/local/openai_compat/
+      anthropic_compat 或 register_provider 注册的自定义名）。
+
+    只改配置即可换模型，Agent 业务代码零改动。
+    """
+    sp = spec or ProviderSpec.from_env(role=role)
+    mode = (force or sp.backend or "mock").strip()
+    # 缓存键要包含"实际生效的模型/端点"，否则按角色路由会串用别的角色的连接：
+    # 同一个 mode 但不同 base/model 必须分开缓存。
+    key = "%s|%s|%s|%s" % (mode, sp.base_url or "", sp.model or "",
+                           role or "")
+    if key in _CACHE:
+        return _CACHE[key]
+
+    if mode in _CUSTOM_PROVIDERS:
+        p = _CUSTOM_PROVIDERS[mode](sp)
+    elif mode == "mock":
         p = MockProvider()
     elif mode == "ollama":
-        p = OllamaNativeProvider(json_mode=True)
+        p = OllamaNativeProvider(json_mode=True,
+                                 base=sp.base_url, model=sp.model,
+                                 timeout=sp.timeout)
     elif mode == "ollama_raw":
-        p = OllamaNativeProvider(json_mode=False)
+        p = OllamaNativeProvider(json_mode=False,
+                                 base=sp.base_url, model=sp.model,
+                                 timeout=sp.timeout)
+    elif mode == "openai_compat":
+        p = OpenAICompatProvider(sp)
+    elif mode == "anthropic_compat":
+        p = AnthropicCompatProvider(sp)
     else:
-        p = LocalProvider()
-    _CACHE[mode] = _maybe_resilient(p, mode)
-    return _CACHE[mode]
+        p = LocalProvider(base=sp.base_url, model=sp.model,
+                          timeout=sp.timeout)
+    _CACHE[key] = _maybe_resilient(p, key)
+    return _CACHE[key]
 
 
 def _maybe_resilient(provider, mode):

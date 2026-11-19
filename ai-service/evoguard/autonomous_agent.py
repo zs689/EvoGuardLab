@@ -75,15 +75,92 @@ def build_tools_prompt(registry=None, agent_type=None):
     return tools
 
 
-def _model_call(provider, messages, max_tokens=1024):
-    text, tokens, model_id = provider.complete(
-        messages, temperature=0.0, max_tokens=max_tokens)
+def _detect_repetition(text, *, min_repeat=3, window=24):
+    """AGENT-PLUG-01-T2：检测模型输出复读死循环（同一片段连续重复）。
+
+    返回 True 表示疑似复读。用于把「模型卡住刷同一句」转成可控错误，
+    而不是把垃圾喂进后续步骤空转。
+    """
+    if not text or len(text) < window * min_repeat:
+        return False
+    tail = text[-window:]
+    return text.count(tail) >= min_repeat
+
+
+def _tools_spec(registry, agent_type):
+    """把 registry 里该 Agent 的工具转成 OpenAI `tools` 数组（原生调用用）。"""
+    declared = registry.declared() or {}
+    try:
+        names = sorted(registry.allowed_tools(agent_type))
+    except Exception:                                       # noqa: BLE001
+        names = list(declared)
+    out = []
+    for name in names:
+        d = declared.get(name) or {}
+        props = {k: {"type": "string"} for k in (d.get("param_keys") or [])}
+        out.append({"type": "function", "function": {
+            "name": name, "description": "tool %s" % name,
+            "parameters": {"type": "object", "properties": props}}})
+    return out
+
+
+def _model_call(provider, messages, max_tokens=1024, *,
+                registry=None, agent_type=None, enable_tools=True):
+    """AGENT-PLUG-01-T2：协议自适应的模型调用。
+
+    1) 模型声明 supports_tools 且给了 registry -> 走原生 `tools`/`tool_calls`；
+    2) 否则退化为 prompt-JSON（旧行为，兼容弱模型/本地模型）；
+    3) 文本格式坏掉时发**1 次**轻量纠错提示（不直接崩溃）；
+    4) 复读死循环 -> 返回 None（上层记 no_parseable_model_output）。
+    """
+    use_native = bool(enable_tools and registry is not None
+                      and getattr(provider, "supports_tools", False))
+    tools = _tools_spec(registry, agent_type) if use_native else None
+    try:
+        reply = provider.complete_ex(messages, tools=tools,
+                                     temperature=0.0, max_tokens=max_tokens)
+        text, tokens, model_id = reply.as_tuple()
+        calls = reply.tool_calls
+    except AttributeError:
+        text, tokens, model_id = provider.complete(
+            messages, temperature=0.0, max_tokens=max_tokens)
+        calls = []
+
+    if _detect_repetition(text):
+        return None, tokens, model_id          # 复读熔断
+
+    # 原生 tool_calls：转成下游统一的 {tool,args} 结构
+    if calls:
+        first = calls[0]
+        obj = {"thought": "", "tool": first.get("name"),
+               "args": first.get("args") or {},
+               "tool_calls": calls}
+        return obj, tokens, model_id
+
     if not text:
         return None, tokens, model_id
     obj = _gw.extract_json(text)
-    if not isinstance(obj, dict):
+    if isinstance(obj, dict):
+        return obj, tokens, model_id
+
+    # 格式自修复：仅重试 1 次，提示必须只输出 JSON 对象
+    repair = list(messages) + [
+        {"role": "user", "content":
+         "上一条输出不是合法 JSON 对象。请只输出一个 JSON 对象"
+         "（含 thought/tool/args/answer 键），不要任何解释或代码块。"}]
+    try:
+        reply2 = provider.complete_ex(repair, tools=tools,
+                                      temperature=0.0, max_tokens=max_tokens)
+        text2, tokens2, model2 = reply2.as_tuple()
+        tokens += tokens2
+    except AttributeError:
+        text2, tokens2, model2 = provider.complete(
+            repair, temperature=0.0, max_tokens=max_tokens)
+        tokens += tokens2
+    if _detect_repetition(text2):
         return None, tokens, model_id
-    return obj, tokens, model_id
+    obj2 = _gw.extract_json(text2)
+    return (obj2 if isinstance(obj2, dict) else None), tokens, model_id
 
 
 def _dedupe_key(tool, args):
@@ -433,7 +510,9 @@ class ReActAgent:
         final_answer = None
 
         for seq in range(1, limit + 1):
-            obj, tokens, model_id = _model_call(self.provider, messages)
+            obj, tokens, model_id = _model_call(
+                self.provider, messages, registry=self.registry,
+                agent_type=self.agent_type)
             total_tokens += tokens or 0
             if obj is None:
                 stopped_by = "no_parseable_model_output"
@@ -681,13 +760,15 @@ class PlanRunner:
                                 "_next_step", "_results"))
 
     def __init__(self, agent, store, session_id, *, tenant_id="default",
-                 approval_gate=None):
+                 approval_gate=None, snapshot=None):
         if store is None or not session_id:
             raise ValueError("PlanRunner 需要 store 与 session_id")
         self.agent = agent
         self.store = store
         self.session_id = str(session_id)
         self.tenant_id = str(tenant_id)
+        # AGENT-KERN-01：可选工作区快照器，测试退化时回滚脏改动。
+        self.snapshot = snapshot
         # PLAN-SEC-01-T1：接入 approval.py 正式审批状态机。不传则用同一
         # store 构造默认 gate（向后兼容旧调用），绝不自己造一个弱审批。
         try:
@@ -705,6 +786,8 @@ class PlanRunner:
             sel = ("plan,next_step,status,results,approval_id"
                    if "approval_id" in cols
                    else "plan,next_step,status,results,NULL AS approval_id")
+            sel += (",replan_count" if "replan_count" in cols
+                    else ",0 AS replan_count")
             row = c.execute(
                 "SELECT %s FROM agent_plans "
                 "WHERE session_id=? AND tenant_id=?" % sel,
@@ -715,7 +798,8 @@ class PlanRunner:
                 "next_step": int(row["next_step"] or 0),
                 "status": row["status"],
                 "results": json.loads(row["results"] or "[]"),
-                "approval_id": row["approval_id"]}
+                "approval_id": row["approval_id"],
+                "replan_count": int(row["replan_count"] or 0)}
 
     def _save(self, state):
         now = _core.now()
@@ -726,21 +810,24 @@ class PlanRunner:
             cols = [d[1] for d in c.execute("PRAGMA table_info(agent_plans)")]
             if "approval_id" not in cols:
                 c.execute("ALTER TABLE agent_plans ADD COLUMN approval_id TEXT")
+            if "replan_count" not in cols:
+                c.execute("ALTER TABLE agent_plans ADD COLUMN replan_count INTEGER")
             c.execute(
                 "INSERT INTO agent_plans(session_id,tenant_id,plan,next_step,"
-                "status,results,approval_id,created_at,updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?) "
+                "status,results,approval_id,replan_count,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(session_id) DO UPDATE SET "
                 "plan=excluded.plan, next_step=excluded.next_step, "
                 "status=excluded.status, results=excluded.results, "
                 "approval_id=excluded.approval_id, "
+                "replan_count=excluded.replan_count, "
                 "updated_at=excluded.updated_at "
                 "WHERE agent_plans.tenant_id=excluded.tenant_id",
                 (self.session_id, self.tenant_id,
                  json.dumps(state["plan"], ensure_ascii=False),
                  int(state["next_step"]), state["status"],
                  json.dumps(state["results"], ensure_ascii=False),
-                 approval_id, now, now))
+                 approval_id, int(state.get("replan_count") or 0), now, now))
 
     @classmethod
     def _clean_plan(cls, plan):
@@ -794,9 +881,60 @@ class PlanRunner:
                     state["next_step"], "note": "需先 approve()"}
         return self._advance()
 
+    # ---- AGENT-KERN-01：反思 + 动态重规划 --------------------------------
+    def reflect(self, failure_reason, step_index=0):
+        """结构化反思：从失败中提取 root_cause 与 next_strategy。
+
+        不依赖特定模型：纯规则推理（失败类型 -> 根因 -> 策略），
+        换任何模型都能用；这是 Agent 架构本身的能力，不是模型的。
+        """
+        reason = str(failure_reason or "")
+        rc, strategy = "unknown", "retry_same"
+        if "tool_output_blocked" in reason or "injection" in reason.lower():
+            rc, strategy = "untrusted_output_injection", "isolate_output"
+        elif "rails" in reason or "deny" in reason or "guard" in reason:
+            rc, strategy = "policy_denied", "adjust_args_or_abort"
+        elif "returncode" in reason or "assert" in reason or "fail" in reason:
+            rc, strategy = "test_regression", "rollback_and_rework"
+        elif "timeout" in reason or "no_executor" in reason:
+            rc, strategy = "exec_failure", "replan_alternate_tool"
+        elif "no_parseable" in reason or "E_LLM" in reason:
+            rc, strategy = "model_output_invalid", "simplify_prompt"
+        rec = {"step": step_index, "root_cause": rc, "next_strategy": strategy,
+               "reason": reason[:200]}
+        return rec
+
+    def replan(self, remaining, *, max_replan=2):
+        """动态调整剩余步骤（受 max_replan 上限约束，防死循环）。
+
+        `remaining` 为新的剩余步骤列表；返回是否生效。
+        """
+        state = self._load()
+        if not state:
+            raise ValueError("没有可恢复的计划")
+        done = state["plan"][:state["next_step"]]
+        rc = int(state.get("replan_count") or 0)
+        if rc >= int(max_replan):
+            return {"replanned": False, "reason": "max_replan_reached"}
+        state["plan"] = done + self._clean_plan(remaining)
+        state["replan_count"] = rc + 1
+        state["status"] = "running"
+        self._save(state)
+        return {"replanned": True, "replan_count": rc + 1,
+                "remaining": len(remaining)}
+
     def _summary(self, state):
         return {"status": state["status"], "next_step": state["next_step"],
                 "results": state["results"], "session_id": self.session_id}
+
+    def _reflect_rec(self, idx, tool, reason):
+        """失败步骤 -> 记录 + 自动结构化反思（轨迹完整持久化）。"""
+        reason = str(reason or "failed")
+        rec = {"step": idx, "tool": tool, "executed": False,
+               "decision": "deny", "reason": reason}
+        rec["reflection"] = self.reflect(failure_reason=reason,
+                                         step_index=idx)
+        return rec
 
     def _advance(self):
         state = self._load()
@@ -839,9 +977,8 @@ class PlanRunner:
             if self.agent.rails:
                 v = _rails.check_call(self.agent.rails, tool, args)
                 if v and v.get("blocked"):
-                    results.append({"step": idx, "tool": tool,
-                                    "executed": False, "decision": "deny",
-                                    "reason": v.get("reason") or "rails_call_blocked"})
+                    results.append(self._reflect_rec(
+                        idx, tool, v.get("reason") or "rails_call_blocked"))
                     state["next_step"] = idx + 1
                     state["results"] = results
                     state["approval_id"] = None
@@ -851,16 +988,15 @@ class PlanRunner:
             # 复用 agent 唯一门禁（契约 + 意图 + 审批）
             pre = self.agent._preflight(tool, args, idx + 1)
             if pre.get("stop"):
-                results.append({"step": idx, "tool": tool, "executed": False,
-                                "decision": "deny", "reason": pre.get("reason")})
+                results.append(self._reflect_rec(
+                    idx, tool, pre.get("reason")))
                 state["next_step"] = idx + 1
                 state["results"] = results
                 state["approval_id"] = None
                 self._save(state)
                 continue
             if self.agent.executor is None:
-                results.append({"step": idx, "tool": tool, "executed": False,
-                                "decision": "deny", "reason": "no_executor"})
+                results.append(self._reflect_rec(idx, tool, "no_executor"))
                 state["next_step"] = idx + 1
                 state["results"] = results
                 state["approval_id"] = None
@@ -890,6 +1026,23 @@ class PlanRunner:
             else:
                 rec = {"step": idx, "tool": tool, "executed": True,
                        "decision": "allow", "output": out}
+
+            # AGENT-KERN-01-T1：测试失败(returncode!=0) -> 结构化反思 +
+            # 可选工作区回滚（若配置了 snapshot），把脏改动退回干净态。
+            rc = None
+            if isinstance(out, dict):
+                rc = out.get("returncode")
+            if isinstance(rc, int) and rc != 0:
+                rec["reflection"] = self.reflect(
+                    failure_reason="test_failure(returncode=%d)" % rc,
+                    step_index=idx)
+                rec["reflection"]["next_strategy"] = "rollback_and_rework"
+                if self.snapshot is not None:
+                    try:
+                        rec["rollback"] = self.snapshot.rollback()
+                    except Exception as exc:            # noqa: BLE001
+                        rec["rollback"] = {"error": type(exc).__name__}
+
             results.append(rec)
             state["next_step"] = idx + 1     # 检查点：完成一步推进一格
             state["results"] = results
