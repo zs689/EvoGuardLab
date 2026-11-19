@@ -159,6 +159,11 @@ CREATE TABLE IF NOT EXISTS agent_sessions(
   created_at REAL, updated_at REAL);
 CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON agent_sessions(tenant_id);
 
+CREATE TABLE IF NOT EXISTS agent_plans(
+  session_id TEXT PRIMARY KEY, tenant_id TEXT, plan TEXT,
+  next_step INTEGER, status TEXT, results TEXT,
+  created_at REAL, updated_at REAL);
+
 CREATE INDEX IF NOT EXISTS idx_steps_run ON steps(run_id, seq);
 CREATE INDEX IF NOT EXISTS idx_faults_run ON faults(run_id);
 """

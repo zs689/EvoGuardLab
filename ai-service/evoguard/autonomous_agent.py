@@ -336,7 +336,7 @@ class ReActAgent:
                  has_approval_backend=False,
                  memory_store=None, memory_task_type=None,
                  session_id=None, store=None, tenant_id="default",
-                 session_budget=None):
+                 session_budget=None, plan_first=False):
         self.agent_type = agent_type
         self.goal = goal
         self.provider = provider or _gw.get_provider()
@@ -375,6 +375,9 @@ class ReActAgent:
         self.cfg["react_enforce"] = bool(enforce)
         self.cfg["requested_controlled"] = want_controlled
         self.cfg["downgraded"] = want_controlled and not effective_controlled
+        # AGENT-PRO-01-T1：显式计划模式开关。计划可由模型先产出或由调用方
+        # 提供；无论来源，执行都走 PlanRunner 的检查点/审批断点，不新开旁路。
+        self.plan_first = bool(plan_first)
 
     def _preflight(self, tool, args, seq, observation=None):
         """契约 → 意图 → 审批。工具调用的唯一放行点。"""
@@ -637,6 +640,165 @@ class ReActAgent:
                 out["session_error"] = str(exc)[:200]
             out["session_summary"] = new_summary[:200]
         return out
+
+    def run_plan(self, plan):
+        """AGENT-PRO-01-T1：用显式计划跑任务（带检查点/审批断点）。
+
+        需要构造时传了 store 与 session_id；`plan_first=True` 只是声明意图，
+        计划本身可由模型先生成或由调用方给出，两者执行路径一致。
+        """
+        if not self.store or not self.session_id:
+            raise ValueError("run_plan 需要构造时传 store 与 session_id")
+        return PlanRunner(self, self.store, self.session_id,
+                          tenant_id=self.tenant_id).start(plan)
+
+
+def _plan_step_needs_approval(step, registry):
+    """计划步骤是否写/外发操作（需审批、串行）。"""
+    decl = (registry.declared() or {}).get(str(step.get("tool") or "")) or {}
+    side = str(decl.get("side_effect") or step.get("side_effect") or "")
+    scope = str(decl.get("_scope") or decl.get("scope") or step.get("scope") or "")
+    return side in ("write", "external", "arbitrary") or scope in ("write", "external")
+
+
+class PlanRunner:
+    """AGENT-PRO-01-T1：显式计划 + 检查点断点续跑。
+
+    `ReActAgent` 的单轮循环是「边想边做」；复杂工程任务需要先规划、逐步执行、
+    写操作挂起审批、审批后从断点继续而不是整轮重跑。这里把计划与执行进度
+    持久化到 `agent_plans`，以 session_id 为键。
+
+    - `start(plan)`：存计划并开始执行；
+    - 遇到需审批的写步骤：挂起 `status='awaiting_approval'`，记 next_step；
+    - `approve()`：标记当前步骤审批通过；
+    - `resume()`：从 next_step 继续，已完成的步骤绝不重复执行。
+
+    所有步骤仍复用 agent 的唯一门禁 `_preflight` + executor，不新开旁路。
+    """
+
+    def __init__(self, agent, store, session_id, *, tenant_id="default"):
+        if store is None or not session_id:
+            raise ValueError("PlanRunner 需要 store 与 session_id")
+        self.agent = agent
+        self.store = store
+        self.session_id = str(session_id)
+        self.tenant_id = tenant_id
+
+    def _load(self):
+        with self.store.conn() as c:
+            row = c.execute(
+                "SELECT plan,next_step,status,results FROM agent_plans "
+                "WHERE session_id=?", (self.session_id,)).fetchone()
+        if not row:
+            return None
+        return {"plan": json.loads(row["plan"] or "[]"),
+                "next_step": int(row["next_step"] or 0),
+                "status": row["status"],
+                "results": json.loads(row["results"] or "[]")}
+
+    def _save(self, state):
+        now = _core.now()
+        with self.store.conn() as c:
+            c.execute(
+                "INSERT INTO agent_plans(session_id,tenant_id,plan,next_step,"
+                "status,results,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(session_id) DO UPDATE SET "
+                "plan=excluded.plan, next_step=excluded.next_step, "
+                "status=excluded.status, results=excluded.results, "
+                "updated_at=excluded.updated_at",
+                (self.session_id, self.tenant_id,
+                 json.dumps(state["plan"], ensure_ascii=False),
+                 int(state["next_step"]), state["status"],
+                 json.dumps(state["results"], ensure_ascii=False), now, now))
+
+    def start(self, plan):
+        if not isinstance(plan, list) or not plan:
+            raise ValueError("plan 必须是非空步骤列表")
+        state = {"plan": plan, "next_step": 0, "status": "running",
+                 "results": []}
+        self._save(state)
+        return self._advance()
+
+    def approve(self):
+        state = self._load()
+        if not state:
+            raise ValueError("没有可审批的计划")
+        if state["status"] != "awaiting_approval":
+            return {"status": state["status"], "approved": False}
+        # 给当前挂起的步骤打批准标记，resume 时才会真正执行而不是再次挂起。
+        idx = state["next_step"]
+        if 0 <= idx < len(state["plan"]):
+            step = dict(state["plan"][idx])
+            step["_approved"] = True
+            state["plan"][idx] = step
+        state["status"] = "running"
+        self._save(state)
+        return {"status": "running", "approved": True}
+
+    def resume(self):
+        state = self._load()
+        if not state:
+            raise ValueError("没有可恢复的计划")
+        if state["status"] == "done":
+            return self._summary(state)
+        if state["status"] == "awaiting_approval":
+            return {"status": "awaiting_approval", "paused_at":
+                    state["next_step"], "note": "需先 approve()"}
+        return self._advance()
+
+    def _summary(self, state):
+        return {"status": state["status"], "next_step": state["next_step"],
+                "results": state["results"], "session_id": self.session_id}
+
+    def _advance(self):
+        state = self._load()
+        plan, results = state["plan"], state["results"]
+        while state["next_step"] < len(plan):
+            idx = state["next_step"]
+            step = plan[idx]
+            tool = str(step.get("tool") or "")
+
+            # 需审批的写步骤：挂起，等 approve() 后再继续（绝不整轮重跑）
+            if _plan_step_needs_approval(step, self.agent.registry) \
+                    and not step.get("_approved"):
+                state["status"] = "awaiting_approval"
+                self._save(state)
+                return {"status": "awaiting_approval", "paused_at": idx,
+                        "tool": tool, "session_id": self.session_id}
+
+            args = step.get("args") or {}
+            # 复用 agent 唯一门禁
+            pre = self.agent._preflight(tool, args, idx + 1)
+            if pre.get("stop"):
+                results.append({"step": idx, "tool": tool, "executed": False,
+                                "decision": "deny", "reason": pre.get("reason")})
+                state["next_step"] = idx + 1
+                state["results"] = results
+                self._save(state)
+                continue
+            if self.agent.executor is None:
+                results.append({"step": idx, "tool": tool, "executed": False,
+                                "decision": "deny", "reason": "no_executor"})
+                state["next_step"] = idx + 1
+                state["results"] = results
+                self._save(state)
+                continue
+            try:
+                out = self.agent.executor(tool, args)
+                rec = {"step": idx, "tool": tool, "executed": True,
+                       "decision": "allow", "output": out}
+            except Exception as exc:                        # noqa: BLE001
+                rec = {"step": idx, "tool": tool, "executed": False,
+                       "decision": "deny",
+                       "reason": "executor_error:" + type(exc).__name__}
+            results.append(rec)
+            state["next_step"] = idx + 1     # 检查点：完成一步推进一格
+            state["results"] = results
+            self._save(state)
+
+        state["status"] = "done"
+        self._save(state)
+        return self._summary(state)
 
 
 def run_react(**kwargs):

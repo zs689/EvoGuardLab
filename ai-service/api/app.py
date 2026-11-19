@@ -403,6 +403,10 @@ ROUTES = [
     ("POST", r"^/api/skills/synthesize$", "h_skill_synthesize"),
     ("POST", r"^/api/skills/monitor$", "h_skill_monitor"),
 ]
+# AGENT-PRO-01-T2：容器代码沙箱主路径。**默认关闭** —— 代码执行面必须显式
+# 开启，不能因为加了端点就默认暴露。开启后仍受鉴权（_guarded 统一门禁）。
+if (os.environ.get("EVOGUARD_SANDBOX_HTTP") or "").strip() in ("1", "true", "on"):
+    ROUTES.append(("POST", r"^/api/sandbox/run$", "h_sandbox_run"))
 
 
 def _read_json(path, default):
@@ -1224,6 +1228,37 @@ class Handler(BaseHTTPRequestHandler):
                           for s in out["steps"]]})
         except Exception as exc:                        # noqa: BLE001
             self._send(500, {"error": "react_failed",
+                             "detail": type(exc).__name__})
+
+    def h_sandbox_run(self):
+        """AGENT-PRO-01-T2：容器代码沙箱执行端点（需 EVOGUARD_SANDBOX_HTTP=1）。
+
+        body: {"code": str, "timeout_s": number?}
+        在无网/只读根/限内存 CPU 的临时容器里跑 Python；无 Docker 明确 503，
+        绝不降级到宿主机执行。请求体大小、鉴权、限流由 _guarded 统一处理。
+        """
+        try:
+            import sandbox_executor as _sbx
+            box = _sbx.DockerCodeSandbox()
+        except Exception as exc:                        # noqa: BLE001
+            return self._send(503, {"error": "sandbox_unavailable",
+                                    "detail": str(exc)[:200]})
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+        except Exception:
+            return self._err("E_BAD_REQUEST", "请求体不是合法 JSON")
+        code = str((body or {}).get("code") or "")
+        if not code.strip():
+            return self._err("E_BAD_REQUEST", "code 不能为空")
+        try:
+            timeout = float((body or {}).get("timeout_s") or 0) or None
+            out = box.run(code, timeout_s=timeout)
+            self._send(200, out)
+        except _sbx.DockerSandboxError as exc:
+            self._send(400, {"error": "sandbox_error", "detail": str(exc)[:200]})
+        except Exception as exc:                        # noqa: BLE001
+            self._send(500, {"error": "sandbox_failed",
                              "detail": type(exc).__name__})
 
     def h_skill_monitor(self):

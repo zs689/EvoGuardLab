@@ -298,6 +298,100 @@ def run_readonly_command(argv, *, cwd=None, timeout=5,
             "bytes": len(out), "returncode": r.returncode}
 
 
+class DockerSandboxError(RuntimeError):
+    """Docker 沙箱不可用或执行失败。绝不降级到宿主机 exec。"""
+
+
+class DockerCodeSandbox:
+    """AGENT-PRO-01-T2：受控容器代码沙箱。
+
+    在无网、只读根文件系统、限内存/CPU/进程数的临时容器里跑 Python 脚本，
+    支撑「改代码 -> 跑测试 -> 自我修复」闭环。宿主机没有 Docker 时**明确报错**，
+    绝不退回 `exec(open(...))` 之类的宿主机执行（那等于把家钥匙给模型）。
+
+    隔离由容器内核保证：--network=none 断网、--read-only 只读根、
+    --memory/--cpus 限额、--cap-drop=ALL + no-new-privileges 收权。
+    脚本通过只读挂载的临时目录进入容器，宿主机不留可执行副作用。
+    """
+
+    DEFAULT_IMAGE = "python:3.11-alpine"
+
+    def __init__(self, image=None, *, memory="256m", cpus="0.5",
+                 timeout_s=20.0, max_output_bytes=1 << 20):
+        self.image = image or os.environ.get("EVOGUARD_SANDBOX_IMAGE") \
+            or self.DEFAULT_IMAGE
+        self.memory = str(memory)
+        self.cpus = str(cpus)
+        self.timeout_s = float(timeout_s)
+        self.max_output_bytes = int(max_output_bytes)
+        self.docker = shutil.which("docker")
+        if not self.docker:
+            raise DockerSandboxError(
+                "docker_not_available：本机无 docker，代码沙箱不可用；"
+                "按设计不降级到宿主机执行")
+        # 确认 daemon 真能连（只 which 到 client 不够）
+        import subprocess as _sp
+        try:
+            r = _sp.run([self.docker, "info", "--format", "{{.ServerVersion}}"],
+                        capture_output=True, timeout=10, check=False)
+        except Exception as exc:                            # noqa: BLE001
+            raise DockerSandboxError("docker_daemon_unreachable:%s"
+                                     % type(exc).__name__) from exc
+        if r.returncode != 0:
+            raise DockerSandboxError(
+                "docker_daemon_unreachable:%s"
+                % r.stderr.decode("utf-8", "replace")[:120])
+
+    def run(self, code, *, timeout_s=None):
+        """在容器里执行 Python 源码，返回 {ok, stdout, stderr, returncode, ...}。"""
+        import subprocess as _sp
+        import tempfile
+        import uuid
+        if not isinstance(code, str) or not code.strip():
+            raise DockerSandboxError("empty_code")
+        limit = float(timeout_s or self.timeout_s)
+        name = "evo-sbx-" + uuid.uuid4().hex[:12]
+        with tempfile.TemporaryDirectory(prefix="evo-sbx-") as tmp:
+            script = os.path.join(tmp, "script.py")
+            with open(script, "w", encoding="utf-8", newline="\n") as f:
+                f.write(code)
+            cmd = [
+                self.docker, "run", "--rm", "--name", name,
+                "--network=none", "--read-only",
+                "--memory=" + self.memory, "--cpus=" + self.cpus,
+                "--pids-limit=64", "--cap-drop=ALL",
+                "--security-opt", "no-new-privileges",
+                "-v", script + ":/work/script.py:ro",
+                "-w", "/work", self.image,
+                "python", "/work/script.py",
+            ]
+            try:
+                r = _sp.run(cmd, capture_output=True, timeout=limit, check=False)
+                out = r.stdout or b""
+                err = r.stderr or b""
+                if isinstance(out, str):
+                    out = out.encode("utf-8")
+                if isinstance(err, str):
+                    err = err.encode("utf-8")
+                return {"ok": r.returncode == 0,
+                        "stdout": out[:self.max_output_bytes].decode("utf-8", "replace"),
+                        "stderr": err[:self.max_output_bytes].decode("utf-8", "replace"),
+                        "returncode": r.returncode,
+                        "truncated": len(out) > self.max_output_bytes or
+                                     len(err) > self.max_output_bytes}
+            except _sp.TimeoutExpired:
+                # 超时：强杀容器，宿主机无残留进程
+                _sp.run([self.docker, "rm", "-f", name],
+                        capture_output=True, timeout=10, check=False)
+                return {"ok": False, "stdout": "", "stderr": "timeout",
+                        "returncode": -1, "timeout": True}
+            except Exception as exc:                        # noqa: BLE001
+                _sp.run([self.docker, "rm", "-f", name],
+                        capture_output=True, timeout=10, check=False)
+                raise DockerSandboxError("run_failed:" + type(exc).__name__) \
+                    from exc
+
+
 def describe():
     return {
         "level": "application-level path fence (NOT an OS sandbox)",
@@ -313,4 +407,5 @@ def describe():
                         "extension allowlist", "size cap"],
         "not_protected": ["OS-level resource limits", "network egress",
                           "process isolation (需容器/低权限用户)"],
+        "code_sandbox": "DockerCodeSandbox（可选，容器内核隔离；无 Docker 明确报错不降级）",
     }
