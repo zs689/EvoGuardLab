@@ -177,7 +177,14 @@ def main():
                               registry=reg, executor=exec_fn,
                               agent_type="coder", enforce=True,
                               has_approval_backend=True)
-        out = agent.run()
+        agent_error = None
+        try:
+            out = agent.run()
+        except Exception as exc:                             # noqa: BLE001
+            # 真模型可能输出异常（如 Ollama 重复 token 触发 500）。如实记录
+            # 该模块失败，不崩整个评测 —— ollama 模式的产出质量本就不保证。
+            agent_error = "%s: %s" % (type(exc).__name__, str(exc)[:160])
+            out = {"steps": [], "stopped_by": "agent_error"}
         # after 用 agent 实际写入 work/mod.py 的内容跑测试（真闭环，非自证）
         written_path = os.path.join(work, "mod.py")
         written_src = ""
@@ -199,6 +206,7 @@ def main():
                         "attack_steps": len(attack_steps),
                         "attack_executed": executed_on_attack,
                         "agent_stopped_by": out["stopped_by"],
+                        "agent_error": agent_error,
                         "trap_injected": name == "count_pos"})
 
     before_rate = sum(1 for r in results if r["before_pass"]) / float(len(results))

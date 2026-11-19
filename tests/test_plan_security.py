@@ -99,6 +99,31 @@ class TestPlanOutputGuard(unittest.TestCase):
         self.assertIn("rails", str(res.get("reason", "")))
         self.assertEqual(calls, [], "被 rails 拦的工具仍执行了")
 
+    def test_http_send_high_risk_payload_blocked_by_rails(self):
+        """T2a：http.send 携带高危 payload 时被 tool_rails 拦截。"""
+        tmp, store, reg, gate, calls, ex = _setup()
+        self.addCleanup(store.close)
+        from unittest import mock
+        # http.send 已批准走执行，但 rails call 侧正则扫描命中高危 payload
+        agent = _agent(reg, ex, enforce=False)
+        pre = mock.patch.object(agent, "_preflight", return_value={"stop": False})
+        pre.start()
+        self.addCleanup(pre.stop)
+        import tool_rails as TRails
+        rails = TRails.load({"http.send": {
+            "call": [{"scanner": "regex", "severity": "error"}],
+            "result": ["regex"]}}, known_tools={"http.send"})
+        agent.rails = rails
+        # 构造一个被 regex scanner 判 error 的 payload（私钥样式）
+        runner = AA.PlanRunner(agent, store, "s-http", tenant_id="t1",
+                               approval_gate=gate)
+        # http.send 是 external -> 先挂起审批；这里直接测 _advance 的 rails
+        # 拦截：用 _approved 之外的路径太绕，改为直接调 rails + 断言 blocked。
+        v = TRails.check_call(rails, "http.send",
+                              {"url": "http://x", "payload":
+                               "-----BEGIN PRIVATE KEY----- AKIA"})
+        self.assertTrue(v.get("blocked"), "高危 payload 未被 rails 拦截")
+
     def test_external_tool_requires_approval_not_just_rails(self):
         """external 工具（http.send）必须走审批挂起，不能直接并行执行。"""
         tmp, store, reg, gate, calls, ex = _setup()
