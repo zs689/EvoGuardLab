@@ -676,64 +676,112 @@ class PlanRunner:
     所有步骤仍复用 agent 的唯一门禁 `_preflight` + executor，不新开旁路。
     """
 
-    def __init__(self, agent, store, session_id, *, tenant_id="default"):
+    # 输入 plan 中不允许出现的保留内部键（防伪造审批）
+    _RESERVED_KEYS = frozenset(("_approved", "_approval_id", "_status",
+                                "_next_step", "_results"))
+
+    def __init__(self, agent, store, session_id, *, tenant_id="default",
+                 approval_gate=None):
         if store is None or not session_id:
             raise ValueError("PlanRunner 需要 store 与 session_id")
         self.agent = agent
         self.store = store
         self.session_id = str(session_id)
-        self.tenant_id = tenant_id
+        self.tenant_id = str(tenant_id)
+        # PLAN-SEC-01-T1：接入 approval.py 正式审批状态机。不传则用同一
+        # store 构造默认 gate（向后兼容旧调用），绝不自己造一个弱审批。
+        try:
+            from . import approval as _approval
+        except ImportError:                                # pragma: no cover
+            import approval as _approval                   # type: ignore
+        self._approval_mod = _approval
+        self.gate = approval_gate or _approval.ApprovalGate(store)
 
     def _load(self):
+        # PLAN-SEC-01-T2b：tenant_id 必须参与过滤，防止租户 B 猜中
+        # session_id 越权读/改租户 A 的计划。
         with self.store.conn() as c:
+            cols = [d[1] for d in c.execute("PRAGMA table_info(agent_plans)")]
+            sel = ("plan,next_step,status,results,approval_id"
+                   if "approval_id" in cols
+                   else "plan,next_step,status,results,NULL AS approval_id")
             row = c.execute(
-                "SELECT plan,next_step,status,results FROM agent_plans "
-                "WHERE session_id=?", (self.session_id,)).fetchone()
+                "SELECT %s FROM agent_plans "
+                "WHERE session_id=? AND tenant_id=?" % sel,
+                (self.session_id, self.tenant_id)).fetchone()
         if not row:
             return None
         return {"plan": json.loads(row["plan"] or "[]"),
                 "next_step": int(row["next_step"] or 0),
                 "status": row["status"],
-                "results": json.loads(row["results"] or "[]")}
+                "results": json.loads(row["results"] or "[]"),
+                "approval_id": row["approval_id"]}
 
     def _save(self, state):
         now = _core.now()
+        approval_id = state.get("approval_id")
+        # ON CONFLICT 也带 tenant_id 条件：tenant_id 是主键 session_id 之外
+        # 的隔离维度，UPDATE 不得把它改成别的租户。
         with self.store.conn() as c:
+            cols = [d[1] for d in c.execute("PRAGMA table_info(agent_plans)")]
+            if "approval_id" not in cols:
+                c.execute("ALTER TABLE agent_plans ADD COLUMN approval_id TEXT")
             c.execute(
                 "INSERT INTO agent_plans(session_id,tenant_id,plan,next_step,"
-                "status,results,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?) "
+                "status,results,approval_id,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(session_id) DO UPDATE SET "
                 "plan=excluded.plan, next_step=excluded.next_step, "
                 "status=excluded.status, results=excluded.results, "
-                "updated_at=excluded.updated_at",
+                "approval_id=excluded.approval_id, "
+                "updated_at=excluded.updated_at "
+                "WHERE agent_plans.tenant_id=excluded.tenant_id",
                 (self.session_id, self.tenant_id,
                  json.dumps(state["plan"], ensure_ascii=False),
                  int(state["next_step"]), state["status"],
-                 json.dumps(state["results"], ensure_ascii=False), now, now))
+                 json.dumps(state["results"], ensure_ascii=False),
+                 approval_id, now, now))
+
+    @classmethod
+    def _clean_plan(cls, plan):
+        """深拷贝并剥离全部保留内部键 —— 输入伪造 _approved 一律无效。"""
+        out = []
+        for step in plan:
+            if not isinstance(step, dict):
+                continue
+            out.append({k: v for k, v in step.items()
+                        if k not in cls._RESERVED_KEYS})
+        return out
 
     def start(self, plan):
         if not isinstance(plan, list) or not plan:
             raise ValueError("plan 必须是非空步骤列表")
-        state = {"plan": plan, "next_step": 0, "status": "running",
-                 "results": []}
+        state = {"plan": self._clean_plan(plan), "next_step": 0,
+                 "status": "running", "results": [], "approval_id": None}
         self._save(state)
         return self._advance()
 
-    def approve(self):
+    def approve(self, approver="human", tenant_id=None):
+        """PLAN-SEC-01-T1：租户校验 + approval.py 正式批准。"""
         state = self._load()
         if not state:
             raise ValueError("没有可审批的计划")
+        # 调用方必须出示与计划一致的租户，缺省用 runner 自己的租户
+        tid = str(tenant_id if tenant_id is not None else self.tenant_id)
+        if tid != self.tenant_id:
+            raise PermissionError("审批人租户 %s 与计划租户 %s 不一致"
+                                  % (tid, self.tenant_id))
         if state["status"] != "awaiting_approval":
             return {"status": state["status"], "approved": False}
-        # 给当前挂起的步骤打批准标记，resume 时才会真正执行而不是再次挂起。
-        idx = state["next_step"]
-        if 0 <= idx < len(state["plan"]):
-            step = dict(state["plan"][idx])
-            step["_approved"] = True
-            state["plan"][idx] = step
-        state["status"] = "running"
+        aid = state.get("approval_id")
+        if not aid:
+            raise ValueError("挂起状态但没有审批单，拒绝批准")
+        # approval.approve 内部同样校验租户（P0-3 已修）
+        self.gate.approve(aid, approved_by=approver, tenant_id=tid)
+        # 标记"已批准待消费"，resume 时 _advance 会 consume 一次性票据。
+        state["status"] = "resuming_approved"
         self._save(state)
-        return {"status": "running", "approved": True}
+        return {"status": "resuming_approved", "approved": True}
 
     def resume(self):
         state = self._load()
@@ -757,23 +805,57 @@ class PlanRunner:
             idx = state["next_step"]
             step = plan[idx]
             tool = str(step.get("tool") or "")
+            args = step.get("args") or {}
+            needs = _plan_step_needs_approval(step, self.agent.registry)
 
-            # 需审批的写步骤：挂起，等 approve() 后再继续（绝不整轮重跑）
-            if _plan_step_needs_approval(step, self.agent.registry) \
-                    and not step.get("_approved"):
+            # PLAN-SEC-01-T1：写步骤挂起 -> 创建 approval.py 正式审批单，
+            # 带 tenant_id 与参数哈希；票据 id 存入检查点。伪造 _approved
+            # 已在 _clean_plan 剥离，不存在「输入自带批准」的旁路。
+            if needs and not state.get("approval_id") \
+                    and state["status"] != "resuming_approved":
+                aid = self.gate._new_request(
+                    "plan:" + self.session_id, tool, args,
+                    tenant_id=self.tenant_id, first_write=True)
+                state["approval_id"] = aid
                 state["status"] = "awaiting_approval"
                 self._save(state)
                 return {"status": "awaiting_approval", "paused_at": idx,
                         "tool": tool, "session_id": self.session_id}
 
-            args = step.get("args") or {}
-            # 复用 agent 唯一门禁
+            # 已批准 resume：一次性消费票据（consume 原子，重复消费抛错）
+            if needs and state.get("approval_id") and \
+                    state.get("status") == "resuming_approved":
+                aid = state["approval_id"]
+                self.gate.consume(aid, run_id="plan:" + self.session_id,
+                                  tool=tool, args=args)
+                # 把正式审批单 id 传给 tool_contract 门禁，避免双重审批
+                # 导致 controlled 模式下必然被拒（args 需 approval_request_id）。
+                args = dict(args)
+                args["approval_request_id"] = aid
+                state["approval_id"] = None
+                state["status"] = "running"
+
+            # PLAN-SEC-01-T2a：执行前 tool_rails.check_call（与单工具一致）
+            if self.agent.rails:
+                v = _rails.check_call(self.agent.rails, tool, args)
+                if v and v.get("blocked"):
+                    results.append({"step": idx, "tool": tool,
+                                    "executed": False, "decision": "deny",
+                                    "reason": v.get("reason") or "rails_call_blocked"})
+                    state["next_step"] = idx + 1
+                    state["results"] = results
+                    state["approval_id"] = None
+                    self._save(state)
+                    continue
+
+            # 复用 agent 唯一门禁（契约 + 意图 + 审批）
             pre = self.agent._preflight(tool, args, idx + 1)
             if pre.get("stop"):
                 results.append({"step": idx, "tool": tool, "executed": False,
                                 "decision": "deny", "reason": pre.get("reason")})
                 state["next_step"] = idx + 1
                 state["results"] = results
+                state["approval_id"] = None
                 self._save(state)
                 continue
             if self.agent.executor is None:
@@ -781,19 +863,37 @@ class PlanRunner:
                                 "decision": "deny", "reason": "no_executor"})
                 state["next_step"] = idx + 1
                 state["results"] = results
+                state["approval_id"] = None
                 self._save(state)
                 continue
             try:
                 out = self.agent.executor(tool, args)
+            except Exception as exc:                        # noqa: BLE001
+                out = {"error": "executor_error:" + type(exc).__name__}
+
+            # PLAN-SEC-01-T2a：执行后返回侧护栏（与单工具同策略）
+            blocked = False
+            codes = []
+            rv = (_rails.check_result(self.agent.rails, tool, out)
+                  if self.agent.rails else None)
+            sec = _sec.guard_tool_output(tool, out)
+            codes = [f["code"] for f in sec.get("findings", [])]
+            sec_hard = bool(sec.get("findings")) and sec.get("detected")
+            blocked = bool((rv and rv.get("blocked")) or
+                           (sec_hard and self.agent.enforce))
+            if blocked:
+                rec = {"step": idx, "tool": tool, "executed": False,
+                       "decision": "deny", "reason": "tool_output_blocked",
+                       "result_blocked": True, "result_codes": codes,
+                       "output": {"error": "tool_output_blocked",
+                                  "reason": "工具返回含不可信指令，未进入上下文"}}
+            else:
                 rec = {"step": idx, "tool": tool, "executed": True,
                        "decision": "allow", "output": out}
-            except Exception as exc:                        # noqa: BLE001
-                rec = {"step": idx, "tool": tool, "executed": False,
-                       "decision": "deny",
-                       "reason": "executor_error:" + type(exc).__name__}
             results.append(rec)
             state["next_step"] = idx + 1     # 检查点：完成一步推进一格
             state["results"] = results
+            state["approval_id"] = None
             self._save(state)
 
         state["status"] = "done"

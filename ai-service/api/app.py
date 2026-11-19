@@ -300,6 +300,9 @@ MAX_BODY_BYTES = int(os.environ.get("AGENTLAB_MAX_BODY_BYTES", 65536))
 # EG-005：单连接的读/写 socket 超时，防慢客户端（slowloris）长期占住线程。
 # 0 表示不设置（退回系统默认，供特殊压测）。默认 30s 足够正常请求。
 SOCKET_TIMEOUT_S = float(os.environ.get("AGENTLAB_SOCKET_TIMEOUT", "30"))
+# SBX-SEC-01-T2：沙箱执行超时的硬上限，防客户端传 timeout_s=86400 打挂服务。
+MAX_SANDBOX_TIMEOUT = float(os.environ.get("EVOGUARD_SANDBOX_MAX_TIMEOUT", "30"))
+MIN_SANDBOX_TIMEOUT = 1.0
 MAX_PAGE_SIZE = int(os.environ.get("AGENTLAB_MAX_PAGE_SIZE", 200))
 # 单次运行详情的每类轨迹上限（EG-012）：不传 limit 的内部诊断调用不受影响。
 MAX_DETAIL_ITEMS = int(os.environ.get("AGENTLAB_MAX_DETAIL_ITEMS", 500))
@@ -407,6 +410,14 @@ ROUTES = [
 # 开启，不能因为加了端点就默认暴露。开启后仍受鉴权（_guarded 统一门禁）。
 if (os.environ.get("EVOGUARD_SANDBOX_HTTP") or "").strip() in ("1", "true", "on"):
     ROUTES.append(("POST", r"^/api/sandbox/run$", "h_sandbox_run"))
+# PLAN-SEC-01：显式计划的执行/审批/续跑主路径。企业模式校验 executor 角色。
+ROUTES += [
+    ("POST", r"^/api/plans/start$", "h_plan_start"),
+    ("POST", r"^/api/plans/([A-Za-z0-9_\-]{1,64})/approve$", "h_plan_approve"),
+    ("POST", r"^/api/plans/([A-Za-z0-9_\-]{1,64})/resume$", "h_plan_resume"),
+]
+_PLAN_RUNNERS = {}       # (tenant_id, session_id) -> PlanRunner
+_PLAN_RUNNERS_LOCK = threading.Lock()
 
 
 def _read_json(path, default):
@@ -1251,15 +1262,113 @@ class Handler(BaseHTTPRequestHandler):
         code = str((body or {}).get("code") or "")
         if not code.strip():
             return self._err("E_BAD_REQUEST", "code 不能为空")
+        # SBX-SEC-01-T2：timeout 硬上限，越界直接 400（不接受 86400）
+        raw_timeout = (body or {}).get("timeout_s")
+        timeout = None
+        if raw_timeout is not None:
+            try:
+                timeout = float(raw_timeout)
+            except (TypeError, ValueError):
+                return self._err("E_BAD_REQUEST", "timeout_s 必须是数字")
+            if not (MIN_SANDBOX_TIMEOUT <= timeout <= MAX_SANDBOX_TIMEOUT):
+                return self._err(
+                    "E_BAD_REQUEST",
+                    "timeout_s 必须在 %.0f..%.0f 秒之间"
+                    % (MIN_SANDBOX_TIMEOUT, MAX_SANDBOX_TIMEOUT))
+        # SBX-SEC-01-T2：入容器前静态扫描高危模式，记审计（不静默）
         try:
-            timeout = float((body or {}).get("timeout_s") or 0) or None
+            import code_guard as _cg
+            findings = _cg.scan_code(code)
+            sev = _cg.worst_severity(findings)
+            if sev == "error":
+                _audit(self._rid, "POST", "/api/sandbox/run", 400,
+                       "anonymous", "sandbox_code_guard_blocked")
+                return self._err("E_BAD_REQUEST",
+                                 "代码静态扫描命中高危模式，拒绝执行")
+        except ImportError:
+            pass                                        # 可选模块，缺失不阻断
+        try:
             out = box.run(code, timeout_s=timeout)
             self._send(200, out)
+        except _sbx.SandboxOverloaded as exc:
+            # SBX-SEC-01-T1：并发超限快速拒绝，429 + retry_after
+            self._reject(429, self._rid, "POST", "/api/sandbox/run",
+                         "anonymous", "sandbox_overloaded", retry_after=1.0)
         except _sbx.DockerSandboxError as exc:
             self._send(400, {"error": "sandbox_error", "detail": str(exc)[:200]})
         except Exception as exc:                        # noqa: BLE001
             self._send(500, {"error": "sandbox_failed",
                              "detail": type(exc).__name__})
+
+    def _plan_runner(self, session_id):
+        """取/建 PlanRunner（按 tenant+session 隔离，企业模式要 executor 角色）。"""
+        import autonomous_agent as _aa
+        key = (self._tenant_id, session_id)
+        with _PLAN_RUNNERS_LOCK:
+            runner = _PLAN_RUNNERS.get(key)
+            if runner is not None:
+                return runner
+            agent = _aa.ReActAgent(goal="plan", store=get_store(self._tenant_id),
+                                   tenant_id=self._tenant_id,
+                                   session_id=session_id,
+                                   executor=None)   # 默认无执行器 -> 不产生副作用
+            runner = _aa.PlanRunner(agent, get_store(self._tenant_id),
+                                    session_id, tenant_id=self._tenant_id)
+            _PLAN_RUNNERS[key] = runner
+            return runner
+
+    def _plan_role_check(self):
+        if MODE == "enterprise" and "executor" not in self._roles:
+            self._err("E_FORBIDDEN", "该身份没有执行角色", 403)
+            return False
+        return True
+
+    def h_plan_start(self):
+        if not self._plan_role_check():
+            return
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+        except Exception:
+            return self._err("E_BAD_REQUEST", "请求体不是合法 JSON")
+        sid = str((body or {}).get("session_id") or "").strip()
+        plan = (body or {}).get("plan")
+        if not sid or not isinstance(plan, list) or not plan:
+            return self._err("E_BAD_REQUEST", "session_id 与非空 plan 必填")
+        try:
+            out = self._plan_runner(sid).start(plan)
+            self._send(200, dict(out, session_id=sid))
+        except Exception as exc:                        # noqa: BLE001
+            self._send(400, {"error": "plan_start_failed",
+                             "detail": str(exc)[:200]})
+
+    def h_plan_approve(self, sid):
+        if not self._plan_role_check():
+            return
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
+        except Exception:
+            return self._err("E_BAD_REQUEST", "请求体不是合法 JSON")
+        approver = str((body or {}).get("approver") or "human")
+        try:
+            out = self._plan_runner(sid).approve(
+                approver=approver, tenant_id=self._tenant_id)
+            self._send(200, dict(out, session_id=sid))
+        except Exception as exc:                        # noqa: BLE001
+            # 租户不匹配/无审批单都明确拒绝，不静默
+            self._send(403, {"error": "plan_approve_denied",
+                             "detail": str(exc)[:200]})
+
+    def h_plan_resume(self, sid):
+        if not self._plan_role_check():
+            return
+        try:
+            out = self._plan_runner(sid).resume()
+            self._send(200, dict(out, session_id=sid))
+        except Exception as exc:                        # noqa: BLE001
+            self._send(400, {"error": "plan_resume_failed",
+                             "detail": str(exc)[:200]})
 
     def h_skill_monitor(self):
         """FIX-C1：线上退化监控。用**上线后真实运行指标**判定是否回滚。
