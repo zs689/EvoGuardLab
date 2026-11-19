@@ -72,7 +72,52 @@ def load_sets():
             "rows": [{"text": (r.get("attacker_instruction") or ""),
                       "label": 1,
                       "slice": str(r.get("category") or "na")} for r in rows]}
+    # AGENT-EVAL-02-T2：中文拼音/谐音/隐喻对抗切片（自建，用于测中文盲区）
+    p = os.path.join(DATA, "chinese_adversarial", "cases.jsonl")
+    if os.path.isfile(p):
+        rows = _read_jsonl(p)
+        sets["chinese_adversarial_selfbuilt"] = {
+            "provenance": "self-built pinyin/homophone/metaphor set, NOT public",
+            "rows": [{"text": r.get("text") or "",
+                      "label": 1 if r.get("label") == "attack" else 0,
+                      "slice": str(r.get("technique") or "na")} for r in rows]}
     return sets
+
+
+def detect_pipeline(text, *, provider=None):
+    """AGENT-EVAL-02-T2：完整分层检测管道。
+
+    层 1a：security.scan 规则（毫秒级）+ action_scope；
+    层 1b：light_classifier 词袋；两者任一 block 即拦；
+    灰区(review) 且提供判官时，才调 harmful_request_judge + persona_jailbreak。
+    规则-only 模式不触发任何模型调用。
+    """
+    try:
+        hit, _c, _ms = V.detect(text, provider=None)
+        if hit:
+            return True
+    except Exception:                                       # noqa: BLE001
+        pass
+    try:
+        import light_classifier as _LC
+        r = _LC.classify(text)
+        if r.get("decision") == "block":
+            return True
+        grey = r.get("decision") == "review"
+    except Exception:                                       # noqa: BLE001
+        grey = True
+    if provider is not None and grey:
+        try:
+            import harmful_request_judge as _HJ
+            if _HJ.guard_input_semantic(
+                    text, judge=lambda t: provider.complete(
+                        [{"role": "user", "content": t}],
+                        temperature=0.0, max_tokens=200)[0] or ""
+            ).get("decision") == "block":
+                return True
+        except Exception:                                   # noqa: BLE001
+            pass
+    return False
 
 
 def _rate(hits, labels, positive=True):
@@ -86,6 +131,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="")
     ap.add_argument("--judge", default="none", choices=["none", "ollama"])
+    ap.add_argument("--pipeline", default="legacy", choices=["legacy", "layered"],
+                    help="legacy=v3 detect；layered=完整分层管道(AEVAL-02)")
     ap.add_argument("--limit", type=int, default=0)
     a = ap.parse_args()
 
@@ -106,7 +153,13 @@ def main():
         t0 = time.perf_counter()
         hits, labels, lat = [], [], []
         for r in rows:
-            h, _codes, ms = V.detect(r["text"], provider=provider)
+            if a.pipeline == "layered":
+                t1 = time.perf_counter()
+                h = detect_pipeline(r["text"], provider=provider)
+                ms = (time.perf_counter() - t1) * 1000.0
+                _codes = []
+            else:
+                h, _codes, ms = V.detect(r["text"], provider=provider)
             hits.append(h)
             labels.append(r["label"])
             lat.append(ms)

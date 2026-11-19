@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "note": "ASR 为「检测+门禁两层都未拦」的可利用性上界，非真实业务损失率；InjecAgent/AgentDojo 的攻击工具在本系统未注册，无法真执行。",
+  "judge": "rule-only",
+  "sets": {
+    "injecagent_public": {
+      "provenance": "public (InjecAgent, full)",
+      "n": 2108,
+      "blocked_by": {
+        "L1_light": 1904,
+        "L2_semantic": 0,
+        "tool_gate": 204,
+        "missed": 0
+      },
+      "asr": 0.0,
+      "p95_ms": 0.106
+    },
+    "agentdojo_slice": {
+      "provenance": "public (AgentDojo templates, goal-only)",
+      "n": 120,
+      "blocked_by": {
+        "L1_light": 100,
+        "L2_semantic": 0,
+        "tool_gate": 0,
+        "missed": 20
+      },
+      "asr": 0.1667,
+      "p95_ms": 0.084
+    }
+  },
+  "utility_under_attack": {
+    "benign_n": 151,
+    "pass_rate": 0.9139,
+    "provenance": "self-built chinese benign rows（非公开）"
+  }
+}

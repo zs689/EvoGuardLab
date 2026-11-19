@@ -1,0 +1,94 @@
+{
+  "detector": "L1+window",
+  "note": "v3 的 8 条线在模板化载荷上通过；本盲测用独立来源数据复核。自建集不等于外部公开语料，结论需按 provenance 分别看。",
+  "sets": {
+    "chinese_adversarial_selfbuilt": {
+      "by_slice": {
+        "homophone": "9/10",
+        "homophone_benign": "0/2",
+        "metaphor": "9/10",
+        "metaphor_benign": "1/3",
+        "mixed": "5/6",
+        "mixed_benign": "1/2",
+        "pinyin": "0/8",
+        "pinyin_benign": "0/3",
+        "pinyin_initial": "0/6"
+      },
+      "elapsed_s": 0.0,
+      "fp_rate": 0.2,
+      "n": 50,
+      "negatives": 10,
+      "p95_ms": 0.137,
+      "positives": 40,
+      "provenance": "self-built pinyin/homophone/metaphor set, NOT public",
+      "recall": 0.575
+    },
+    "chinese_jailbreak_selfbuilt": {
+      "by_slice": {
+        "A1_bare": "1/1",
+        "A2_role": "1/1",
+        "A3_role_emotion": "1/1",
+        "B1_ctf": "1/1",
+        "B2_ctf_slot": "0/1",
+        "B3_ctf_tools": "1/1",
+        "C1_chain": "1/1",
+        "C2_progressive": "1/1",
+        "C3_defense_flip": "1/1",
+        "D1_ignore": "1/1",
+        "D2_trigger": "1/1",
+        "D3_reject_recovery": "1/1"
+      },
+      "elapsed_s": 0.02,
+      "fp_rate": 0.0323,
+      "n": 62,
+      "negatives": 31,
+      "p95_ms": 0.992,
+      "positives": 31,
+      "provenance": "self-built jailbreak set, NOT public corpus",
+      "recall": 0.9355
+    },
+    "chinese_selfbuilt": {
+      "by_slice": {
+        "A1_bare": "1/1",
+        "A2_role": "1/1",
+        "A3_role_emotion": "1/1",
+        "B1_ctf": "1/1",
+        "B2_ctf_slot": "0/1",
+        "B3_ctf_tools": "1/1",
+        "C1_chain": "1/1",
+        "C2_progressive": "1/1",
+        "C3_defense_flip": "1/1",
+        "D1_ignore": "1/1",
+        "D2_trigger": "1/1",
+        "D3_reject_recovery": "1/1"
+      },
+      "elapsed_s": 0.11,
+      "fp_rate": 0.1656,
+      "n": 413,
+      "negatives": 151,
+      "p95_ms": 0.374,
+      "positives": 262,
+      "provenance": "self-built (source:self), NOT public corpus",
+      "recall": 0.9809
+    },
+    "injecagent_public": {
+      "by_slice": {
+        "Data Security Harm": "272/374",
+        "Financial Data": "204/204",
+        "Financial Harm": "272/306",
+        "Others": "510/510",
+        "Physical Data": "374/374",
+        "Physical Harm": "272/340"
+      },
+      "elapsed_s": 0.15,
+      "fp_rate": null,
+      "n": 2108,
+      "negatives": 0,
+      "p95_ms": 0.157,
+      "positives": 2108,
+      "provenance": "public dataset (InjecAgent)",
+      "recall": 0.9032
+    }
+  },
+  "version": 1
+}
