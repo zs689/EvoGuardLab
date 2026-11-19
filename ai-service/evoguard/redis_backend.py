@@ -23,7 +23,13 @@ class RedisError(RuntimeError):
 
 
 class RESP:
-    """极简 RESP2 客户端：只支持lockstep 请求/响应，够本项目用。"""
+    """极简 RESP2 客户端：只支持 lockstep 请求/响应，够本项目用。
+
+INFRA-CONC-01-T1：RESP 是**无请求 ID 的 lockstep 协议** —— 两个线程同时
+sendall 会让回复错配到对方请求，是最危险的静默失效（限流判断串位）。
+这里用 RLock 把整个 send+read 串成原子；断链（idle 超时）时重连一次，
+避免 ThreadingHTTPServer 下永久失败。
+"""
 
     def __init__(self, host="127.0.0.1", port=6379, db=0,
                  timeout=3.0, password=None):
@@ -33,6 +39,11 @@ class RESP:
         self.timeout = timeout
         self.sock = None
         self._buf = b""
+        # 可注入建连函数（测试用假 socket 构造断链/并发；生产走真 socket）
+        import socket as _socket
+        self._connect_fn = _socket.create_connection
+        import threading as _threading
+        self._lock = _threading.RLock()
 
     @classmethod
     def from_url(cls, url, timeout=3.0):
@@ -51,7 +62,7 @@ class RESP:
         if self.sock is not None:
             return
         try:
-            self.sock = socket.create_connection(self.addr, self.timeout)
+            self.sock = self._connect_fn(self.addr, self.timeout)
             self.sock.settimeout(self.timeout)
         except OSError as exc:
             raise RedisError("无法连接 Redis %s: %s" % (self.addr, exc))
@@ -101,17 +112,34 @@ class RESP:
         raise RedisError("未知 RESP 类型 %r" % line[:20])
 
     def cmd(self, *parts):
-        self.connect()
-        self._send(parts)
-        return self._read()
+        """单条命令：send+read 全程持锁；断链重连一次后重试。"""
+        with self._lock:
+            for attempt in (0, 1):
+                try:
+                    self.connect()
+                    self._send(parts)
+                    return self._read()
+                except (RedisError, OSError) as exc:
+                    # 断链/超时：第一次失败丢弃连接重来一次；
+                    # 第二次直接抛，绝不静默返回一个「看起来正常」的值。
+                    self._drop_socket()
+                    if attempt == 1:
+                        raise RedisError("redis 重试后仍失败：%s"
+                                         % type(exc).__name__)
+        raise RedisError("unreachable")
 
-    def close(self):
-        if self.sock:
+    def _drop_socket(self):
+        if self.sock is not None:
             try:
                 self.sock.close()
-            finally:
-                self.sock = None
-                self._buf = b""
+            except Exception:                              # noqa: BLE001
+                pass
+            self.sock = None
+            self._buf = b""
+
+    def close(self):
+        with self._lock:
+            self._drop_socket()
 
 
 # 原子滑动窗口：Lua 保证「清理 + 计数 + 入队」一步完成，多副本无竞态

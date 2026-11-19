@@ -425,3 +425,132 @@ class MemoryAuditSink(AuditSink):
         if len(self.events) > self.limit:
             del self.events[:len(self.events) - self.limit]
         return len(self.events)
+
+
+# ---- INFRA-CONC-01-T2：PostgreSQL 共享审计链 ----------------------------
+#: 多副本 Compose 下每个容器写自己的 SQLite 审计库，副本 A 的事件副本 B
+#: 查不到，verify() 也只能验本容器那一半。这里提供与 AuditSink 同接口的
+#: PG 版本：复用同一套 _canonical/_sign 算法，连接走 PostgresStore
+#: （SET LOCAL app.current_tenant + FORCE RLS + 可选 HMAC 密钥）。
+PG_AUDIT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS audit_events (
+  seq BIGSERIAL PRIMARY KEY,       -- 链序：跨进程可靠递增，不用 ts 排序
+  id TEXT NOT NULL UNIQUE,
+  ts DOUBLE PRECISION NOT NULL,   -- 不能用 REAL(float4)：epoch 秒的小数会被
+                                  -- 截掉，导致 verify 重算 hash 与写入时不一致
+  tenant_id TEXT NOT NULL,
+  request_id TEXT NOT NULL, actor TEXT,
+  method TEXT, path TEXT, status INTEGER, decision TEXT,
+  detail TEXT, latency_ms DOUBLE PRECISION,
+  prev_hash TEXT, row_hash TEXT, hmac_sig TEXT);
+CREATE INDEX IF NOT EXISTS idx_pg_audit_ts ON audit_events(ts);
+"""
+
+
+class PostgresAuditStore(AuditSink):
+    """共享 PG 审计链。dsn 或 store 二选一传入。"""
+
+    def __init__(self, dsn=None, *, store=None, tenant_id="default",
+                 hmac_key=None, clock=None):
+        if store is None:
+            if not dsn:
+                raise ValueError("PostgresAuditStore 需要 dsn 或 store")
+            from pg_store import PostgresStore
+            store = PostgresStore(dsn, tenant_id=tenant_id)
+        self.store = store
+        self.hmac_key = hmac_key or os.environ.get(HMAC_KEY_ENV) or None
+        self._clock = clock or time.time
+        self._lock = threading.Lock()
+        with self.store.conn() as c:
+            c.executescript(PG_AUDIT_SCHEMA)
+            # 幂等迁移：早期 PG_AUDIT_SCHEMA 没有 seq，按 ts 排序会
+            # 在跨进程写时把链排错（ts 极接近时顺序不可靠，实测验链失败）。
+            cur = c.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='audit_events' AND column_name='seq'")
+            if not cur.fetchone():
+                c.execute("ALTER TABLE audit_events ADD COLUMN seq BIGSERIAL")
+                # 旧行按 ts 补一个可用顺序（尽力而为，如实标注）
+                c.execute("CREATE SEQUENCE IF NOT EXISTS audit_seq_fix")
+                c.execute("UPDATE audit_events SET seq=nextval('audit_seq_fix') "
+                          "WHERE seq IS NULL")
+
+    def emit(self, event):
+        tenant = str(event.get("tenant_id") or "").strip()
+        if not tenant:
+            raise ValueError("审计事件必须带 tenant_id")
+        ts = float(event.get("ts") or self._clock())
+        request_id = str(event.get("request_id") or "")
+        actor = event.get("actor")
+        method = event.get("method")
+        path = event.get("path")
+        status = int(event.get("status") or 0)
+        decision = event.get("decision")
+        detail = event.get("detail")
+        latency_ms = event.get("latency_ms")
+        with self._lock:
+            with self.store.conn() as c:
+                cur = c.execute(
+                    "SELECT row_hash FROM audit_events "
+                    "WHERE tenant_id=? ORDER BY seq DESC LIMIT 1",
+                    (tenant,))
+                last = cur.fetchone()
+                prev_hash = (last[0] if (last and last[0]) else "") or ""
+                row_hash = _canonical(ts, tenant, request_id, actor, method,
+                                      path, status, decision, detail,
+                                      latency_ms, prev_hash)
+                sig = _sign(self.hmac_key, row_hash) if self.hmac_key else None
+                import uuid
+                rid = "ev_" + uuid.uuid4().hex[:14]
+                c.execute(
+                    "INSERT INTO audit_events(id,ts,tenant_id,request_id,"
+                    "actor,method,path,status,decision,detail,latency_ms,"
+                    "prev_hash,row_hash,hmac_sig) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (rid, ts, tenant, request_id, actor, method, path, status,
+                     decision, detail, latency_ms, prev_hash, row_hash, sig))
+                return rid
+
+    record = emit
+
+    def verify(self, limit=None):
+        """逐行重算链；PG 版不实现归档锚点（该能力由 SQLite 版的
+        audit_anchors 表提供），因此发现 prev 缺口一律判 prev_mismatch。
+        这个差异如实写在返回值的 mode 字段里，不冒充等价。"""
+        prev_hash = ""
+        checked = 0
+        sql = ("SELECT id,ts,tenant_id,request_id,actor,method,path,status,"
+               "decision,detail,latency_ms,prev_hash,row_hash,hmac_sig "
+               "FROM audit_events ORDER BY seq ASC")
+        if limit:
+            sql += " LIMIT %d" % int(limit)
+        with self.store.conn() as c:
+            rows = c.execute(sql).fetchall()
+        for r in rows:
+            (rid, ts, tenant, request_id, actor, method, path, status,
+             decision, detail, latency_ms, stored_prev, stored_hash,
+             stored_sig) = r
+            if not stored_hash:
+                return False, {"reason": "unhashed", "first_bad_id": rid,
+                               "checked": checked, "mode": "pg_no_anchors"}
+            effective_prev = stored_prev or ""
+            if effective_prev != prev_hash:
+                return False, {"reason": "prev_mismatch", "first_bad_id": rid,
+                               "checked": checked, "mode": "pg_no_anchors"}
+            want = _canonical(ts, tenant, request_id, actor, method, path,
+                              status, decision, detail, latency_ms,
+                              effective_prev)
+            if want != stored_hash:
+                return False, {"reason": "hash_mismatch", "first_bad_id": rid,
+                               "checked": checked, "mode": "pg_no_anchors"}
+            if self.hmac_key:
+                want_sig = _sign(self.hmac_key, stored_hash)
+                if not stored_sig or not hmac.compare_digest(
+                        want_sig, str(stored_sig)):
+                    return False, {"reason": "hmac_mismatch",
+                                   "first_bad_id": rid, "checked": checked,
+                                   "mode": "pg_no_anchors"}
+            prev_hash = stored_hash
+            checked += 1
+        return True, {"reason": "ok", "first_bad_id": None,
+                      "checked": checked, "mode": "pg_no_anchors"}

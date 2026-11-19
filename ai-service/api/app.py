@@ -238,9 +238,17 @@ TRACER = ent_obs.Tracer() if _ENT_OK else None
 # 审计默认关闭：只有显式设置路径才落库，避免测试与只读看板产生副作用。
 AUDIT = None
 AUDIT_ERROR = ""
-if _ENT_OK and os.environ.get("AGENTLAB_AUDIT_DB"):
+if _ENT_OK and (os.environ.get("AGENTLAB_AUDIT_DB")
+                or os.environ.get("EVOGUARD_PG_DSN")):
     try:
-        AUDIT = ent_audit.AuditStore(os.environ["AGENTLAB_AUDIT_DB"])
+        if os.environ.get("EVOGUARD_PG_DSN"):
+            # INFRA-CONC-01-T2：多副本共用同一条 PG 审计链
+            AUDIT = ent_audit.PostgresAuditStore(
+                os.environ["EVOGUARD_PG_DSN"],
+                tenant_id="default",
+                hmac_key=os.environ.get("EVOGUARD_AUDIT_HMAC_KEY"))
+        else:
+            AUDIT = ent_audit.AuditStore(os.environ["AGENTLAB_AUDIT_DB"])
     except Exception as exc:            # noqa: BLE001
         # 不能静默降级：审计掉了还照样「看起来正常」，等于把最该知道的
         # 事故藏起来。这里留话给 stderr 与 /api/health，让监控能告警。

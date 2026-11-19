@@ -1,0 +1,32 @@
+{
+  "backend": "real PostgreSQL, two independent AuditStore instances",
+  "checks": {
+    "both_replicas_wrote": true,
+    "replica_a_verifies_full_chain": true,
+    "replica_b_verifies_full_chain": true,
+    "tamper_detected": true
+  },
+  "detail": {
+    "a": {
+      "checked": 2,
+      "first_bad_id": null,
+      "mode": "pg_no_anchors",
+      "reason": "ok"
+    },
+    "b": {
+      "checked": 2,
+      "first_bad_id": null,
+      "mode": "pg_no_anchors",
+      "reason": "ok"
+    },
+    "r1": "ev_bcc417fbaa8249",
+    "r2": "ev_d95a1d73f49d4a",
+    "tampered": {
+      "checked": 1,
+      "first_bad_id": "ev_d95a1d73f49d4a",
+      "mode": "pg_no_anchors",
+      "reason": "hash_mismatch"
+    }
+  },
+  "passed": true
+}
