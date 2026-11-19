@@ -45,11 +45,9 @@ import security          # noqa: E402  —— 安全模式声明（P1-2 诚实�
 import env as evo_env    # noqa: E402  —— EVOGUARD_* 前缀兼容
 
 # EVOGUARD_* 先于 AGENTLAB_* 生效（向下兼容旧配置名）
-_EV_ALIASED = evo_env.alias_env()
-import env as evo_env    # noqa: E402  —— EVOGUARD_* 前缀兼容
-
-# EVOGUARD_* 先于 AGENTLAB_* 生效（向下兼容旧配置名）
-_EV_ALIASED = evo_env.alias_env()
+# SCORE-05-T2：先应用安全档位（strict 一键开硬门禁），再做前缀映射。
+_EV_PROFILE_CHANGED = evo_env.apply_profile()
+_EV_ALIASED = evo_env.alias_env() + _EV_PROFILE_CHANGED
 
 try:                                    # 企业形态模块：缺失也不能拖垮服务
     from enterprise import audit as ent_audit          # noqa: E402
@@ -1062,6 +1060,7 @@ class Handler(BaseHTTPRequestHandler):
             "tasks": {at: [t["task_id"] for t in sim.TASKS[at]]
                       for at in sim.AGENT_TYPES},
             "case_faults": sim.CASE_FAULTS,
+            "security_profile": evo_env.profile_meta(),
             "composites": [
                 {"agent": a, "a": fa, "b": fb, "desc": d}
                 for a, fa, fb, d in sim.COMPOSITES
