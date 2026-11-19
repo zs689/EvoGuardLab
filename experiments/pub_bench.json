@@ -9,11 +9,14 @@
       "blocked_by": {
         "L1_light": 1904,
         "L2_semantic": 0,
+        "L2_unavailable": 0,
         "tool_gate": 204,
         "missed": 0
       },
       "asr": 0.0,
-      "p95_ms": 0.106
+      "asr_detector_only": 0.0968,
+      "asr_with_registered_tools": 0.0806,
+      "p95_ms": 0.111
     },
     "agentdojo_slice": {
       "provenance": "public (AgentDojo templates, goal-only)",
@@ -21,16 +24,21 @@
       "blocked_by": {
         "L1_light": 100,
         "L2_semantic": 0,
+        "L2_unavailable": 0,
         "tool_gate": 0,
         "missed": 20
       },
       "asr": 0.1667,
-      "p95_ms": 0.084
+      "asr_detector_only": 0.1667,
+      "asr_with_registered_tools": 0.1667,
+      "p95_ms": 0.083
     }
   },
   "utility_under_attack": {
-    "benign_n": 151,
-    "pass_rate": 0.9139,
-    "provenance": "self-built chinese benign rows（非公开）"
+    "benign_n": 2108,
+    "pass_rate": 0.7647,
+    "false_positive_rate": 0.2353,
+    "provenance": "public (InjecAgent user_instruction, same-source benign)",
+    "warning": null
   }
 }
