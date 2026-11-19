@@ -75,6 +75,20 @@ def build_tools_prompt(registry=None, agent_type=None):
     return tools
 
 
+def _classify_failure(out):
+    """从工具返回/错误对象粗分类根因（供 self_reflect 与 reflect 共用）。"""
+    if not isinstance(out, dict):
+        return "unknown"
+    if out.get("error"):
+        return "exec_error:" + str(out.get("error"))[:60]
+    rc = out.get("returncode")
+    if isinstance(rc, int) and rc != 0:
+        return "test_failure"
+    if out.get("timeout"):
+        return "timeout"
+    return "unknown"
+
+
 def _detect_repetition(text, *, min_repeat=3, window=24):
     """AGENT-PLUG-01-T2：检测模型输出复读死循环（同一片段连续重复）。
 
@@ -413,7 +427,7 @@ class ReActAgent:
                  has_approval_backend=False,
                  memory_store=None, memory_task_type=None,
                  session_id=None, store=None, tenant_id="default",
-                 session_budget=None, plan_first=False):
+                 session_budget=None, plan_first=False, self_reflect=False):
         self.agent_type = agent_type
         self.goal = goal
         self.provider = provider or _gw.get_provider()
@@ -455,6 +469,11 @@ class ReActAgent:
         # AGENT-PRO-01-T1：显式计划模式开关。计划可由模型先产出或由调用方
         # 提供；无论来源，执行都走 PlanRunner 的检查点/审批断点，不新开旁路。
         self.plan_first = bool(plan_first)
+        # AGENT-KERN-01：自我反思开关。开启后，工具返回测试失败(returncode!=0)
+        # 或执行出错时，自动向模型注入一条结构化反思提示，驱动其下轮换策略。
+        # 这是**架构级增益**：同模型 A/B 时唯一变量就是它，与模型强弱解耦。
+        self.self_reflect = bool(self_reflect)
+        self.reflections = []
 
     def _preflight(self, tool, args, seq, observation=None):
         """契约 → 意图 → 审批。工具调用的唯一放行点。"""
@@ -667,6 +686,24 @@ class ReActAgent:
                  "note": ("工具返回未通过输出侧检查，视为不可信"
                           if step.get("result_blocked") else "")},
                 ensure_ascii=False)})
+            # AGENT-KERN-01：自我反思。仅在开启时生效；把"测试失败/执行出错"
+            # 转成一条结构化提示，要求模型换策略，而不是沉默地重复同一动作。
+            if self.self_reflect:
+                rc = out.get("returncode") if isinstance(out, dict) else None
+                failed = (isinstance(rc, int) and rc != 0) or \
+                    (isinstance(out, dict) and out.get("error"))
+                if failed:
+                    refl = {"root_cause": _classify_failure(out),
+                            "failed_tool": tool}
+                    self.reflections.append(refl)
+                    messages.append({"role": "user", "content": json.dumps({
+                        "reflection": refl,
+                        "instruction": "上一步失败。不要重复同一动作；"
+                                       "请先说明根因，再换一种策略（改参数/换工具/回滚后重做）。"
+                    }, ensure_ascii=False)})
+                    step["reflection"] = refl
+                    steps.append(step)
+                    continue
             steps.append(step)
 
         if stopped_by is None and final_answer is None:
