@@ -153,6 +153,12 @@ CREATE TABLE IF NOT EXISTS events(
 CREATE TABLE IF NOT EXISTS evals(
   id TEXT PRIMARY KEY, experiment_id TEXT, metrics TEXT, created_at REAL);
 
+CREATE TABLE IF NOT EXISTS agent_sessions(
+  session_id TEXT PRIMARY KEY, tenant_id TEXT, agent_type TEXT,
+  turns TEXT, summary TEXT, untrusted_boundary TEXT,
+  created_at REAL, updated_at REAL);
+CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON agent_sessions(tenant_id);
+
 CREATE INDEX IF NOT EXISTS idx_steps_run ON steps(run_id, seq);
 CREATE INDEX IF NOT EXISTS idx_faults_run ON faults(run_id);
 """

@@ -406,13 +406,14 @@
       "path": "/api/react/run",
       "kind": "agent",
       "auth_in_enterprise": true,
-      "description": "驱动真实多轮 ReAct Agent；每次工具调用强制走 execution.preflight，越权/契约不通过时不执行（executed=false）",
+      "description": "驱动真实多轮 ReAct Agent；每次工具调用强制走 execution.preflight，越权/契约不通过时不执行（executed=false）；session_id 支持多轮会话持久化与上下文压缩",
       "request": {
         "goal": "string",
         "agent_type": "string?",
         "max_steps": "int?",
         "tools": "[{name,schema}]?",
-        "executor": "none|stub?"
+        "executor": "none|stub?",
+        "session_id": "string? (多轮续接；留空=单轮)"
       },
       "response": {
         "answer": "string|null",

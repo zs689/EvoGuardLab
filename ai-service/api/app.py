@@ -1208,10 +1208,15 @@ class Handler(BaseHTTPRequestHandler):
                 agent_type=agent_type, goal=goal, registry=reg,
                 executor=executor, memory_store=memory_store,
                 memory_task_type=body.get("memory_task_type"),
+                session_id=str(body.get("session_id") or "").strip() or None,
+                store=get_store(self._tenant_id),
+                tenant_id=self._tenant_id,
                 max_steps=int(body.get("max_steps") or 4)).run()
             self._send(200, {
                 "answer": out["answer"], "stopped_by": out["stopped_by"],
                 "contract": out["contract"], "memory": out.get("memory"),
+                "session_id": out.get("session_id"),
+                "session_saved": out.get("session_saved"),
                 "steps": [{"seq": s.get("seq"), "kind": s.get("kind"),
                            "tool": s.get("tool"),
                            "executed": bool(s.get("executed")),

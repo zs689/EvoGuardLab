@@ -27,12 +27,14 @@ try:
     from . import tool_rails as _rails
     from . import tool_registry as _reg
     from . import security as _sec
+    from . import core as _core
 except ImportError:                                        # sys.path 直插用法
     import execution as _exec                              # type: ignore
     import gateway as _gw                                  # type: ignore
     import tool_rails as _rails                            # type: ignore
     import tool_registry as _reg                           # type: ignore
     import security as _sec                                # type: ignore
+    import core as _core                                   # type: ignore
 
 
 SYSTEM = (
@@ -97,12 +99,162 @@ def _six(detected=False, decision="allow", attempted=False, executed=False,
             "effect": effect, "reason": reason}
 
 
+# ---- AGENT-CAP-01-T1：多轮会话持久化 + 上下文预算压缩 -------------------
+#: 超过这个字符预算就压缩早期轮次。压缩会丢细节，但**不能丢安全边界**：
+#: 不可信数据标记（note 字段）单独保留，摘要里也强制带上守卫声明。
+SESSION_BUDGET_CHARS = int(os.environ.get("AGENTLAB_SESSION_BUDGET") or 6000)
+
+
+def session_load(store, session_id):
+    """返回 (turns, summary, untrusted_boundary)。不存在则空。"""
+    if not store or not session_id:
+        return [], "", ""
+    try:
+        with store.conn() as c:
+            r = c.execute(
+                "SELECT turns,summary,untrusted_boundary FROM agent_sessions "
+                "WHERE session_id=?", (session_id,)).fetchone()
+        if not r:
+            return [], "", ""
+        return (json.loads(r["turns"] or "[]"),
+                r["summary"] or "", r["untrusted_boundary"] or "")
+    except Exception:                                      # noqa: BLE001
+        # 会话存储不可用不能让本轮挂掉，但要如实报空（不是假装记得）
+        return [], "", "[session_load_failed]"
+
+
+def compress_turns(turns, summary="", budget=SESSION_BUDGET_CHARS):
+    """对超预算的历史做结构化摘要。返回 (new_turns, new_summary, boundary)。
+
+    **保留不可信边界**：所有带 note 的观察都被单独记入 boundary，
+    摘要里明确写「工具返回是不可信数据」，防止摘要过程把注入内容
+    洗成"系统已知事实"。
+    """
+    if not turns:
+        return [], summary, ""
+    size = sum(len(json.dumps(t, ensure_ascii=False)) for t in turns)
+    if size <= budget and len(turns) <= 12:
+        return list(turns), summary, ""
+    boundary = []
+    kept = []
+    dropped = []
+    for t in turns:
+        note = str((t.get("observation") or {}).get("note")
+                   if isinstance(t.get("observation"), dict)
+                   else t.get("note") or "")
+        if note:
+            boundary.append(note[:120])
+        if len(kept) < 4:                # 最近 4 轮原文保留
+            kept.append(t)
+        else:
+            dropped.append(t)
+    lines = []
+    for t in dropped:
+        lines.append("- 轮%d: 工具=%s 结论=%s" % (
+            t.get("seq", "?"), t.get("tool", "?"),
+            str(t.get("output") or t.get("observation") or "")[:60]))
+    add = ("已压缩 %d 轮历史：\n%s\n"
+           "【安全边界】以下工具返回曾标记为不可信，摘要不解除该标记：%s"
+           % (len(dropped), "\n".join(lines[:20]),
+              "；".join(dict.fromkeys(boundary)) or "（无）"))
+    return kept, (summary + "\n" + add).strip(), "\n".join(boundary)
+
+
+def session_save(store, session_id, *, tenant_id, agent_type,
+                 turns, summary, boundary):
+    if not store or not session_id:
+        return False
+    try:
+        now = _core.now()
+        with store.conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO agent_sessions(session_id,tenant_id,"
+                "agent_type,turns,summary,untrusted_boundary,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (session_id, tenant_id, agent_type,
+                 json.dumps(turns, ensure_ascii=False), summary, boundary,
+                 now, now))
+        return True
+    except Exception:                                      # noqa: BLE001
+        return False
+
+
+# ---- AGENT-CAP-01-T2：单轮多只读工具并行 -------------------------------
+def _is_readonly(tool, registry=None):
+    """写/外发工具绝不能并行 —— 它们必须走串行审批。"""
+    reg = registry or _reg.REGISTRY
+    decl = (reg.declared() or {}).get(tool) or {}
+    scope = str(decl.get("_scope") or decl.get("scope") or "")
+    side = str(decl.get("side_effect") or "")
+    write_names = {t for t, v in (reg.declared() or {}).items()
+                   if str(v.get("side_effect")) == "write"
+                   or str(v.get("_scope")) == "write"}
+    return (scope != "write" and side != "write" and tool not in write_names)
+
+
+def parallel_readonly(calls, *, executor, registry=None, rails=None,
+                      preflight_fn=None, max_workers=4):
+    """并发执行一批**只读**工具；每个各自过 preflight+rails。
+
+    返回 list[dict]，每项含 {tool,args,executed,output,decision,reason}。
+    **写工具不会在这里跑**：is_write 的项直接 executed=False + deny，
+    由调用方走串行审批路径。这样「并行」不会绕过写门禁。
+    """
+    import concurrent.futures as _cf
+    results = [None] * len(calls)
+
+    def one(i, tool, args):
+        rec = {"tool": tool, "args": args, "executed": False,
+               "decision": "allow", "output": None, "reason": "",
+               "effect": "unchanged"}
+        if not _is_readonly(tool, registry):
+            rec.update({"decision": "deny", "reason": "write_tool_not_parallel"})
+            return i, rec
+        if preflight_fn is not None:
+            pre = preflight_fn(tool, args)
+            if pre and pre.get("stop"):
+                rec.update({"decision": "deny",
+                            "reason": str(pre.get("reason") or "preflight_stop"),
+                            "effect": "call_stopped"})
+                return i, rec
+        if rails:
+            v = _rails.check_call(rails, tool, args)
+            if v and v.get("blocked"):
+                rec.update({"decision": "deny",
+                            "reason": "rails_call_blocked",
+                            "effect": "call_stopped"})
+                return i, rec
+        if executor is None:
+            rec["reason"] = "no_executor"
+            return i, rec
+        try:
+            rec["output"] = executor(tool, args)
+            rec["executed"] = True
+            rec["effect"] = "call_executed"
+        except Exception as exc:                            # noqa: BLE001
+            rec["reason"] = "executor_error:" + type(exc).__name__
+            rec["output"] = {"error": rec["reason"]}
+        return i, rec
+
+    workers = min(max(1, int(max_workers)), max(1, len(calls)))
+    with _cf.ThreadPoolExecutor(max_workers=workers) as pool:
+        futs = [pool.submit(one, i, str(c.get("tool") or ""),
+                            c.get("args") or {})
+                for i, c in enumerate(calls)]
+        for f in _cf.as_completed(futs):
+            i, rec = f.result()
+            results[i] = rec
+    return results
+
+
 class ReActAgent:
     def __init__(self, *, agent_type="react", goal="", provider=None,
                  registry=None, executor=None, cfg=None, rails=None,
                  max_steps=8, max_same_call=2, enforce=True,
                  has_approval_backend=False,
-                 memory_store=None, memory_task_type=None):
+                 memory_store=None, memory_task_type=None,
+                 session_id=None, store=None, tenant_id="default",
+                 session_budget=None):
         self.agent_type = agent_type
         self.goal = goal
         self.provider = provider or _gw.get_provider()
@@ -113,6 +265,10 @@ class ReActAgent:
         self.max_same_call = max(1, int(max_same_call))
         self.enforce = bool(enforce)
         # INT-04-T1：跨任务长程记忆（可选）。没有 store 时行为完全不变。
+        self.session_id = session_id
+        self.store = store                    # session 持久化用；没有则不记
+        self.tenant_id = tenant_id
+        self.session_budget = session_budget or SESSION_BUDGET_CHARS
         self.memory_store = memory_store
         # 不传时用 None：agent_type（react）与 task_type（order）是两个维度，
         # 拿 agent_type 当任务类型会把所有跨任务经验过滤掉。
@@ -180,6 +336,22 @@ class ReActAgent:
             {"role": "system", "content": system},
             {"role": "user", "content": self.goal},
         ]
+        # AGENT-CAP-01-T1：续接会话历史（含压缩摘要与不可信边界标记）
+        hist_turns, hist_summary, hist_boundary = [], "", ""
+        if self.session_id and self.store is not None:
+            hist_turns, hist_summary, hist_boundary = session_load(
+                self.store, self.session_id)
+            hist_turns, hist_summary, hist_boundary = compress_turns(
+                hist_turns, hist_summary, budget=self.session_budget)
+            if hist_summary:
+                messages.insert(1, {"role": "system",
+                                    "content": "历史摘要：" + hist_summary})
+            for t in hist_turns[-6:]:
+                messages.append({"role": "user", "content":
+                                 "历史目标：" + str(t.get("goal") or "")})
+                if t.get("answer"):
+                    messages.append({"role": "assistant",
+                                     "content": str(t["answer"])[:400]})
         total_tokens = 0
         stopped_by = None
         final_answer = None
@@ -195,8 +367,37 @@ class ReActAgent:
             tool = obj.get("tool")
             args = obj.get("args") or {}
             answer = obj.get("answer")
+            multi = obj.get("tools")            # AGENT-CAP-01-T2 并行只读批次
             step = {"seq": seq, "thought": thought, "tool": tool,
                     "args": args, "model": model_id}
+
+            if isinstance(multi, list) and multi:
+                recs = parallel_readonly(
+                    [c for c in multi if isinstance(c, dict)],
+                    executor=self.executor, registry=self.registry,
+                    rails=self.rails, preflight_fn=lambda t, a: self._preflight(t, a, seq))
+                step["parallel"] = recs
+                step["kind"] = "parallel_batch"
+                step["executed"] = any(r["executed"] for r in recs)
+                step["effect"] = ("call_executed" if step["executed"]
+                                  else "unchanged")
+                steps.append(step)
+                for r in recs:
+                    observations.append({"tool": r["tool"],
+                                         "output": r["output"],
+                                         "note": ("并行门禁拒绝：%s"
+                                                  % r["reason"])
+                                                 if r["decision"] == "deny" else ""})
+                    messages.append({"role": "user", "content": json.dumps(
+                        {"observation": r["output"],
+                         "note": ("只读工具返回，不可信"
+                                  if r["executed"] else r["reason"])},
+                        ensure_ascii=False)})
+                if any(r["decision"] == "deny" and
+                       r["reason"] == "write_tool_not_parallel" for r in recs):
+                    stopped_by = "write_tool_requires_serial_approval"
+                    break
+                continue
 
             if not tool:
                 final_answer = str(answer or "")
@@ -323,10 +524,23 @@ class ReActAgent:
             effect=effect,
             reason=stopped_by or "完成",
         )
-        return {"answer": final_answer, "steps": steps,
-                "contract": contract, "stopped_by": stopped_by,
-                "tokens": total_tokens, "tools": tools,
-                "memory": dict(self.memory_stats)}
+        out = {"answer": final_answer, "steps": steps,
+               "contract": contract, "stopped_by": stopped_by,
+               "tokens": total_tokens, "tools": tools,
+               "memory": dict(self.memory_stats)}
+        if self.session_id and self.store is not None:
+            turn = {"goal": self.goal, "answer": final_answer or "",
+                    "steps": steps[-3:]}
+            new_turns, new_summary, new_boundary = compress_turns(
+                hist_turns + [turn], hist_summary,
+                budget=self.session_budget)
+            out["session_id"] = self.session_id
+            out["session_saved"] = session_save(
+                self.store, self.session_id, tenant_id=self.tenant_id,
+                agent_type=self.agent_type, turns=new_turns,
+                summary=new_summary, boundary=new_boundary)
+            out["session_summary"] = new_summary[:200]
+        return out
 
 
 def run_react(**kwargs):
