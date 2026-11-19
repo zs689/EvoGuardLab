@@ -77,6 +77,29 @@ DEFAULT_CONTRACTS = {
         "side_effect": "arbitrary",
         "requires_approval": True,
     },
+    # AGENT-E2E-01：自主修 Bug 标准工具集。fs.write 是写工具（需审批），
+    # writable_paths 用 "*" 表示「任意相对路径，由 SandboxExecutor 围栏兜底」。
+    "fs.read": {
+        "identities": ["coder"],
+        "allowed_domains": [], "allowed_resource_pattern": None,
+        "writable_paths": [], "max_amount": None,
+        "methods": ["read"], "side_effect": "none",
+        "requires_approval": False,
+    },
+    "fs.write": {
+        "identities": ["coder"],
+        "allowed_domains": [], "allowed_resource_pattern": None,
+        "writable_paths": ["*"], "max_amount": None,
+        "methods": ["write"], "side_effect": "write",
+        "requires_approval": True,
+    },
+    "code.run_in_sandbox": {
+        "identities": ["coder"],
+        "allowed_domains": [], "allowed_resource_pattern": None,
+        "writable_paths": [], "max_amount": None,
+        "methods": ["read"], "side_effect": "none",
+        "requires_approval": False,
+    },
 }
 
 # 这些参数键按结构化规则核对，不靠正则猜。
@@ -123,6 +146,11 @@ TOOL_SCHEMAS = {
                              "candidate_version", "idempotency_key"]},
     "shell.exec": {"required": ["cmd"],
                    "fields": ["cmd", "cwd", "approval_request_id"]},
+    # AGENT-E2E-01：自主修 Bug 标准工具集
+    "fs.read": {"required": ["path"], "fields": ["path"]},
+    "fs.write": {"required": ["path", "content"],
+                 "fields": ["path", "content", "approval_request_id"]},
+    "code.run_in_sandbox": {"required": ["code"], "fields": ["code"]},
 }
 
 
@@ -259,11 +287,16 @@ def _checks(agent, tool, args, contract, policy):
         add(key, "allowed_domain", host, host in domains,
             "允许域名：%s" % (domains or "无（该工具不许外联）"))
 
-    # 3) 可写路径白名单
+    # 3) 可写路径白名单（只对**写**工具检查；只读工具的 path 不是写目标）
     key, path = _find(args, PATH_KEYS)
-    if key:
+    if key and contract.get("side_effect") == "write":
         paths = contract.get("writable_paths") or []
-        add(key, "writable_path", path, str(path) in paths,
+        # AGENT-E2E-01：编码工具写的是工作目录内的相对文件名（mod.py 等），
+        # 无法预置精确值。约定 writable_paths 含 "*" 表示「任意相对路径，
+        # 由 SandboxExecutor 的 realpath 围栏兜底」——契约层只确认写工具
+        # 已带审批，路径越界由沙箱执行器拒绝，职责不重叠。
+        ok = (str(path) in paths) or ("*" in paths)
+        add(key, "writable_path", path, ok,
             "允许可写路径：%s" % (paths or "无"))
 
     # 4) 最大金额：优先看 canonical 名，避免「另一个别名更大却没被检查」

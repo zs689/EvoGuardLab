@@ -109,9 +109,13 @@ def _scan_evidence_grounding(tool, payload, fields=None):
 
 def _scan_code(tool, payload, fields=None):
     import code_guard
-    r = code_guard.scan_code(_pick(payload, fields))
-    return [(x["cwe"] or "code_issue", "error" if x["severity"] == "high" else "warn")
-            for x in r["findings"]]
+    # code_guard.scan_code 返回的是 findings **列表**，不是 dict。
+    # 旧代码按 r["findings"] 取值会 TypeError（list 不能用 str 下标），
+    # 一旦工具真含代码内容就崩 —— 之前无 code 扫描场景所以没暴露。
+    findings = code_guard.scan_code(_pick(payload, fields))
+    return [(x.get("cwe") or "code_issue",
+             "error" if x.get("severity") == "high" else "warn")
+            for x in findings]
 
 
 def _scan_schema(tool, payload, fields=None):
@@ -170,6 +174,15 @@ DEFAULT_RAILS = {
     "shell.exec": {
         # 任意命令：这里必须看，且要按 error 级挡
         "call": [{"scanner": "code", "severity": "error"}],
+        "result": ["regex", "hidden_ascii"],
+    },
+    # AGENT-E2E-01：自主修 Bug 标准工具集。未在此声明的工具会被
+    # execution.preflight 直接挡（fail-closed），所以这些必须登记。
+    "fs.read": {"call": [], "result": ["regex", "hidden_ascii", "action_scope"]},
+    "fs.write": {"call": [], "result": ["regex", "hidden_ascii"]},
+    "code.run_in_sandbox": {
+        # 待执行代码本身可能藏注入：调用侧做 code 扫描（warn 记录不误伤）
+        "call": [{"scanner": "code", "severity": "warn"}],
         "result": ["regex", "hidden_ascii"],
     },
 }
