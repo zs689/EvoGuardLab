@@ -592,6 +592,14 @@ class Store:
             # 复现：core.Store(path) 后 24 线程并发 create_experiment。
             # 详见 docs/review-remediation/perf-before-after.md。
             c.executescript(SCHEMA)
+            # EVO-LOOP-01-T2：旧库的 runs 表建于 skill_id 列引入之前，
+            # `CREATE TABLE IF NOT EXISTS` 会整表跳过、不会补列。这里幂等
+            # ALTER 补列，让精确归因在升级后的旧库上也能写入；否则
+            # _record_skill_id 的 UPDATE 会因 no such column 被静默吞掉，
+            # 永久回退到时间窗近似。PRAGMA 检查保证重复 init 安全。
+            run_cols = {r[1] for r in c.execute("PRAGMA table_info(runs)")}
+            if "skill_id" not in run_cols:
+                c.execute("ALTER TABLE runs ADD COLUMN skill_id TEXT")
 
     # ---------- 实验 ----------
     def create_experiment(self, name, agent_type, task_id, fault_type,

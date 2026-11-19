@@ -388,6 +388,19 @@ class PostgresStore:
                     "USING (tenant_id = current_setting('app.current_tenant', true)) "
                     "WITH CHECK (tenant_id = current_setting('app.current_tenant', true))"
                     % (table, table))
+        # EVO-LOOP-01-T2：PG 旧库的 runs 表同样可能缺 skill_id（CREATE TABLE
+        # IF NOT EXISTS 对已存在表整表跳过）。幂等补列，与 core.Store.init()
+        # 的 SQLite 迁移保持一致，保证精确归因在多副本 PG 下也能写入。
+        with self.conn() as c:
+            cur = c.cursor()
+            cur.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='runs' AND column_name='skill_id' "
+                "AND table_schema='public'")
+            exists = cur.fetchone()
+            cur.close()
+            if not exists:
+                c.execute("ALTER TABLE runs ADD COLUMN skill_id TEXT")
 
     def close(self):
         while True:
