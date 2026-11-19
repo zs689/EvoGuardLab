@@ -157,24 +157,53 @@ def _model_call(provider, messages, max_tokens=1024, *,
     if isinstance(obj, dict):
         return obj, tokens, model_id
 
-    # 格式自修复：仅重试 1 次，提示必须只输出 JSON 对象
-    repair = list(messages) + [
-        {"role": "user", "content":
-         "上一条输出不是合法 JSON 对象。请只输出一个 JSON 对象"
-         "（含 thought/tool/args/answer 键），不要任何解释或代码块。"}]
-    try:
-        reply2 = provider.complete_ex(repair, tools=tools,
-                                      temperature=0.0, max_tokens=max_tokens)
-        text2, tokens2, model2 = reply2.as_tuple()
-        tokens += tokens2
-    except AttributeError:
-        text2, tokens2, model2 = provider.complete(
-            repair, temperature=0.0, max_tokens=max_tokens)
-        tokens += tokens2
-    if _detect_repetition(text2):
-        return None, tokens, model_id
-    obj2 = _gw.extract_json(text2)
-    return (obj2 if isinstance(obj2, dict) else None), tokens, model_id
+    # SCORE-03-T3：格式自修复最多 2 次，且带**精确字段级**校验错误。
+    # 旧实现只重试 1 次、提示是泛泛的「只输出 JSON」，弱模型仍会重复犯错。
+    repair_msgs = list(messages)
+    for attempt in range(2):
+        if attempt == 0:
+            hint = ("上一条输出不是合法 JSON 对象。请只输出一个 JSON 对象"
+                    "（含 thought/tool/args/answer 键），不要解释或代码块。")
+        else:
+            hint = ("第 2 次格式错误：必须严格输出单个 JSON 对象；"
+                    "tool 必须是已登记工具名，args 必须是对象。")
+        repair_msgs = repair_msgs + [{"role": "user", "content": hint}]
+        try:
+            reply2 = provider.complete_ex(
+                repair_msgs, tools=tools, temperature=0.0,
+                max_tokens=max_tokens)
+            text2, tokens2, model2 = reply2.as_tuple()
+            tokens += tokens2 or 0
+        except AttributeError:
+            text2, tokens2, model2 = provider.complete(
+                repair_msgs, temperature=0.0, max_tokens=max_tokens)
+            tokens += tokens2 or 0
+        if _detect_repetition(text2):
+            return None, tokens, model_id
+        obj2 = _gw.extract_json(text2)
+        if not isinstance(obj2, dict):
+            continue
+        # 字段级校验：把具体哪个字段不合法回灌给模型（下一轮）
+        problems = []
+        if "tool" in obj2 and obj2.get("tool"):
+            try:
+                import tool_contract as _tc
+                errs = _tc.validate_args(str(obj2["tool"]),
+                                         obj2.get("args") or {})
+                problems = [e for e in errs if not e.get("ok")]
+            except Exception:                              # noqa: BLE001
+                problems = []
+        if not problems:
+            return obj2, tokens, model2 or model_id
+        repair_msgs = repair_msgs + [{
+            "role": "user",
+            "content": "参数校验未通过，请修正后重输出完整 JSON："
+                       + json.dumps([{
+                           "field": e.get("field"),
+                           "rule": e.get("rule"),
+                           "detail": str(e.get("detail"))[:120]}
+                           for e in problems[:5]], ensure_ascii=False)}]
+    return None, tokens, model_id
 
 
 def _dedupe_key(tool, args):
@@ -777,6 +806,66 @@ def _plan_step_needs_approval(step, registry):
     return side in ("write", "external", "arbitrary") or scope in ("write", "external")
 
 
+def semantic_reflect(failure_reason, *, provider=None, remaining=None,
+                     tool=None, args=None, max_replan=2):
+    """SCORE-03-T1：规则快速分类 + 模型语义归因。
+
+    模型无关：provider 可为任意实现 `complete(messages, **kw) -> (text,_,_)`
+    的后端；没有 provider 时保留确定性规则回退。输出经结构校验，
+    不会把模型的非字符串/空步骤塞进计划。
+
+    返回 {root_cause, bad_assumption, revised_steps, model_backed, ...}
+    """
+    reason = str(failure_reason or "")
+    rc, strategy = "unknown", "retry_same"
+    if "tool_output_blocked" in reason or "injection" in reason.lower():
+        rc, strategy = "untrusted_output_injection", "isolate_output"
+    elif "rails" in reason or "deny" in reason or "guard" in reason:
+        rc, strategy = "policy_denied", "adjust_args_or_abort"
+    elif "returncode" in reason or "assert" in reason or "fail" in reason:
+        rc, strategy = "test_regression", "rollback_and_rework"
+    elif "timeout" in reason or "no_executor" in reason:
+        rc, strategy = "exec_failure", "replan_alternate_tool"
+    elif "no_parseable" in reason or "E_LLM" in reason:
+        rc, strategy = "model_output_invalid", "simplify_prompt"
+    fallback = {"root_cause": rc, "bad_assumption": "",
+                # 规则回退也给出可执行的一步，不能只报一个根因标签
+                "revised_steps": [strategy], "next_strategy": strategy,
+                "model_backed": False, "reason": reason[:200]}
+    if provider is None:
+        return fallback
+    prompt = (
+        "你是 planner。分析步骤失败并给出修正计划。只输出 JSON："
+        '{"root_cause":str,"bad_assumption":str,'
+        '"revised_steps":[str,...]}。\n'
+        "失败原因：" + reason[:1200] + "\n"
+        "工具：" + str(tool or "")[:80] + "\n"
+        "参数：" + str(args or "")[:400] + "\n"
+        "剩余计划：" + json.dumps(remaining or [], ensure_ascii=False)[:600])
+    try:
+        text, _tok, _mid = provider.complete(
+            [{"role": "planner", "content": prompt}],
+            temperature=0.0, max_tokens=400)
+        obj = _gw.extract_json(text)
+        if not isinstance(obj, dict):
+            return fallback
+        steps = obj.get("revised_steps")
+        if not isinstance(steps, list):
+            steps = []
+        steps = [str(x).strip() for x in steps
+                 if isinstance(x, str) and x.strip()][:max(1, max_replan * 4)]
+        out = dict(fallback)
+        out.update({
+            "root_cause": str(obj.get("root_cause") or rc)[:200],
+            "bad_assumption": str(obj.get("bad_assumption") or "")[:300],
+            "revised_steps": steps,
+            "model_backed": True,
+        })
+        return out
+    except Exception:                                      # noqa: BLE001
+        return fallback
+
+
 class PlanRunner:
     """AGENT-PRO-01-T1：显式计划 + 检查点断点续跑。
 
@@ -919,7 +1008,23 @@ class PlanRunner:
         return self._advance()
 
     # ---- AGENT-KERN-01：反思 + 动态重规划 --------------------------------
-    def reflect(self, failure_reason, step_index=0):
+    def reflect(self, failure_reason, step_index=0, *, remaining=None,
+                tool=None, args=None):
+        """规则快分类 + （有 provider 时）模型语义归因。"""
+        sem = semantic_reflect(
+            failure_reason, provider=getattr(self.agent, "provider", None),
+            remaining=remaining, tool=tool, args=args)
+        if sem["model_backed"] and sem["revised_steps"]:
+            return {"step": step_index, "root_cause": sem["root_cause"],
+                    "next_strategy": "model_replan",
+                    "bad_assumption": sem["bad_assumption"],
+                    "revised_steps": sem["revised_steps"],
+                    "model_backed": True,
+                    "reason": str(failure_reason or "")[:200]}
+        return {"step": step_index, "root_cause": sem["root_cause"],
+                "next_strategy": sem["next_strategy"],
+                "model_backed": False,
+                "reason": str(failure_reason or "")[:200]}
         """结构化反思：从失败中提取 root_cause 与 next_strategy。
 
         不依赖特定模型：纯规则推理（失败类型 -> 根因 -> 策略），

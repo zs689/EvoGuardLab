@@ -1,0 +1,17 @@
+{
+  "backend": "real Docker container, python:3.11-alpine",
+  "checks": {
+    "multi_file_test_ran": true,
+    "host_workspace_unchanged": true,
+    "work_dir_mounted_read_only": true
+  },
+  "detail": {
+    "files": ["m.py", "test_m.py"],
+    "cmd": ["python", "-m", "unittest", "test_m", "-q"],
+    "stdout": "",
+    "stderr": "Ran 1 test in 0.000s / OK",
+    "returncode": 0,
+    "note": "compiled source copied into /work via read-only bind mount; container writes only to tmpfs /tmp"
+  },
+  "passed": true
+}

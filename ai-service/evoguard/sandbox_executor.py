@@ -427,6 +427,58 @@ class DockerCodeSandbox:
                     from exc
 
 
+    def run_workspace(self, work_dir, cmd, *, timeout_s=None):
+        """SCORE-03-T2：把受控工作目录**只读挂载**为 /work，容器内跑命令。
+
+        与 run() 同样：无网、只读根、非 root、限额、tmpfs。额外保证
+        宿主机工作区**不可能被容器写穿**（`-v work:/work:ro`），
+        容器内的测试缓存写 /tmp。cmd 必须是 list[str]（无 shell）。
+        """
+        import subprocess as _sp
+        import uuid
+        if not isinstance(work_dir, str) or not os.path.isdir(work_dir):
+            raise DockerSandboxError("invalid_work_dir")
+        if not isinstance(cmd, (list, tuple)) or not cmd                 or not all(isinstance(x, str) for x in cmd):
+            raise DockerSandboxError("cmd_must_be_argv_list")
+        root = os.path.realpath(work_dir)
+        limit = float(timeout_s or self.timeout_s)
+        name = "evo-ws-" + uuid.uuid4().hex[:12]
+        # 只允许 /work 内的相对路径命令；解释器用绝对路径无妨
+        cmdv = [str(x) for x in cmd]
+        argv = [
+            self.docker, "run", "--rm", "--name", name,
+            "--network=none", "--read-only",
+            "--memory=" + self.memory, "--cpus=" + self.cpus,
+            "--pids-limit=64", "--cap-drop=ALL",
+            "--security-opt", "no-new-privileges",
+            "--user", "65534:65534",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m",
+            "-v", root + ":/work:ro", "-w", "/work", self.image,
+        ] + cmdv
+        try:
+            r = _sp.run(argv, capture_output=True, timeout=limit, check=False)
+            out, err = r.stdout or b"", r.stderr or b""
+            if isinstance(out, str): out = out.encode("utf-8")
+            if isinstance(err, str): err = err.encode("utf-8")
+            return {"ok": r.returncode == 0,
+                    "stdout": out[:self.max_output_bytes].decode("utf-8", "replace"),
+                    "stderr": err[:self.max_output_bytes].decode("utf-8", "replace"),
+                    "returncode": r.returncode,
+                    "work_dir_read_only": True,
+                    "truncated": len(out) > self.max_output_bytes or
+                                 len(err) > self.max_output_bytes}
+        except _sp.TimeoutExpired:
+            _sp.run([self.docker, "rm", "-f", name],
+                    capture_output=True, timeout=10, check=False)
+            return {"ok": False, "stdout": "", "stderr": "timeout",
+                    "returncode": -1, "timeout": True}
+        except Exception as exc:                            # noqa: BLE001
+            _sp.run([self.docker, "rm", "-f", name],
+                    capture_output=True, timeout=10, check=False)
+            raise DockerSandboxError("workspace_run_failed:"
+                                     + type(exc).__name__) from exc
+
+
 class WorkspaceSnapshot:
     """AGENT-KERN-01-T1：工作区快照/回滚。
 
@@ -556,3 +608,43 @@ def describe():
                           "process isolation (需容器/低权限用户)"],
         "code_sandbox": "DockerCodeSandbox（可选，容器内核隔离；无 Docker 明确报错不降级）",
     }
+
+
+def fs_patch(path, old_text, new_text, *, root=None, snapshot=None,
+             max_bytes=MAX_BYTES):
+    """SCORE-03-T2：精准局部编辑（search/replace 必须唯一匹配）。
+
+    与整文件覆写相比：不会碰无关行，冲突（0 处或多处匹配）直接拒绝，
+    不做任何「猜一个最接近的位置」的模糊替换。写前自动触发快照，
+    退化时可回滚。root 限定路径围栏（realpath + 分隔符）。
+    """
+    import os as _os
+    base = _os.path.realpath(_os.path.abspath(root or _os.getcwd()))
+    target = _os.path.realpath(_os.path.abspath(path))
+    if not (target == base or target.startswith(base + _os.sep)):
+        raise SandboxError("path_outside_root:%s" % str(path)[:50])
+    if not _os.path.isfile(target):
+        raise SandboxError("not_a_file:%s" % str(path)[:50])
+    if _os.path.getsize(target) > max_bytes:
+        raise SandboxError("file_too_large")
+    if not isinstance(old_text, str) or not old_text:
+        raise SandboxError("old_text_empty")
+    if not isinstance(new_text, str):
+        raise SandboxError("new_text_must_be_str")
+    with open(target, "r", encoding="utf-8") as f:
+        src = f.read()
+    n = src.count(old_text)
+    if n == 0:
+        raise SandboxError("old_text_not_found")
+    if n > 1:
+        raise SandboxError("old_text_ambiguous:%d" % n)
+    if snapshot is not None:
+        try:
+            snapshot.capture()
+        except Exception:                                  # noqa: BLE001
+            raise SandboxError("snapshot_failed")
+    with open(target, "w", encoding="utf-8", newline="") as f:
+        f.write(src.replace(old_text, new_text, 1))
+    return {"ok": True, "path": target, "matches": 1,
+            "bytes_before": len(src.encode("utf-8")),
+            "bytes_after": len(src.replace(old_text, new_text, 1).encode("utf-8"))}
