@@ -35,6 +35,30 @@ _CACHE = {}
 _CJK = re.compile(r"[\u4e00-\u9fff]")
 
 
+def normalize_text(text):
+    """推理前标准化（SEC-BYPASS-02-T2）。
+
+    1) 去零宽/不可见字符（复用 security.py 的清洗，避免两边规则漂移）
+    2) NFKC：全角字母数字/标点 -> 半角
+    3) 折叠中文字符间的异常单空格（"忽 略 以 上" -> "忽略以上"）
+       只折叠**相邻两个 CJK 之间**的空格，不动 "hello world" 这种正常分隔。
+    """
+    t = str(text or "")
+    try:
+        try:
+            from . import security as _sec
+        except ImportError:
+            import security as _sec                        # type: ignore
+        t = _sec.sanitize_invisible(t)
+    except Exception:                                      # noqa: BLE001
+        # 清洗器不可用不能静默放过原文：至少做标准库的零宽剥离
+        t = re.sub(r"[\u200b-\u200f\u2060\ufeff]", "", t)
+    import unicodedata
+    t = unicodedata.normalize("NFKC", t)
+    t = re.sub(r"([\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])", r"\1", t)
+    return t
+
+
 def _feats(text, ngrams):
     t = re.sub(r"\s+", " ", str(text or "").lower())
     out = {}
@@ -109,11 +133,53 @@ def _model_for(text, m):
     return first, m["models"][first]
 
 
+def _score_with_lang(text, m):
+    """返回 (p, lang, normalized_p)。归一化 = p / 该模型阈值；>=1 即越线。
+
+    混排文本双模型取归一化最大值 —— 加一个汉字把 en 路由劫持到 zh
+    不会再降低风险分（两个模型都跑，取更能说明风险的那个）。
+    """
+    text = normalize_text(text)
+    langs = _route_langs(text, m)
+    if len(langs) > 1:
+        cands = []
+        for lang in langs:
+            model = m["models"][lang]
+            p = _score_one(text, model, m["ngrams"])
+            thr = model["threshold"] or 0.5
+            cands.append((p / thr, p, lang))
+        norm, p, lang = max(cands)
+        return p, lang, norm
+    lang = route_language(text)
+    if lang not in m["models"]:
+        lang = ("default" if "default" in m["models"]
+                else sorted(m["models"])[0])
+    model = m["models"][lang]
+    p = _score_one(text, model, m["ngrams"])
+    thr = model["threshold"] or 0.5
+    return p, lang, p / thr
+
+
 def score(text, *, weights_path=None):
-    """返回注入概率 p（0..1）。纯 Python 稀疏点积 + TF-IDF 归一化。"""
-    m = load(weights_path)
-    lang, model = _model_for(text, m)
-    fs = _feats(text, m["ngrams"])
+    """返回注入概率 p（0..1）。兼容旧 API；双模型时返回被选中模型的原始 p。"""
+    return _score_with_lang(text, load(weights_path))[0]
+
+
+def _route_langs(text, m):
+    """返回该文本要跑的语言模型列表（1 或 2 个）。"""
+    has_cjk = bool(_CJK.search(str(text or "")))
+    latin = re.findall(r"[A-Za-z]", str(text or ""))
+    total = max(1, len(re.findall(r"[A-Za-z\u4e00-\u9fff]", str(text or ""))))
+    latin_ratio = len(latin) / total
+    mixed = has_cjk and (latin_ratio >= 0.20 or len(latin) >= 4)
+    if mixed:
+        return [l for l in ("zh", "en") if l in m["models"]]
+    return [route_language(text)]
+
+
+def _score_one(text, model, ngrams):
+    """单模型打分（不做标准化——由上层统一做）。"""
+    fs = _feats(text, ngrams)
     num = 0.0
     sq = 0.0
     for g, cnt in fs.items():
@@ -131,19 +197,20 @@ def score(text, *, weights_path=None):
 def classify(text, *, high=None, low=0.15, weights_path=None):
     """分级判定；返回 {p, decision, need_llm, language, route}。
 
-    `high` 默认取**该语言模型校准过的阈值**（calib 集上 FPR<=0.05 的最大
-    recall 点）。留出集的 FPR 就是在这个阈值下测出来的，写死 0.85 会让
-    绝大多数真注入落进灰区、全部转给 4B 判官（慢且没必要）。
+    `high` 默认取**被选中语言模型校准过的阈值**。混排文本双模型取归一化
+    最大值，避免「加一个汉字换路由导致风险分下降」的绕过。
     """
     m = load(weights_path)
-    lang, model = _model_for(text, m)
+    p, lang, norm = _score_with_lang(text, m)
+    model = m["models"][lang]
     if high is None:
         high = model["threshold"]
-    p = score(text, weights_path=weights_path)
-    if p >= high:
+    # 混排时用归一化值判定更稳（两个模型判定线不同，原始 p 不可直接比）
+    measure = norm if len(_route_langs(normalize_text(text), m)) > 1 else p
+    if norm >= 1.0 or measure >= high:
         return {"p": round(p, 4), "decision": "block", "need_llm": False,
                 "language": lang, "route": "light_high_confidence"}
-    if p <= low:
+    if measure <= low:
         return {"p": round(p, 4), "decision": "allow", "need_llm": False,
                 "language": lang, "route": "light_high_confidence"}
     return {"p": round(p, 4), "decision": "review", "need_llm": True,
