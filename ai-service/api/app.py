@@ -1247,12 +1247,6 @@ class Handler(BaseHTTPRequestHandler):
         在无网/只读根/限内存 CPU 的临时容器里跑 Python；无 Docker 明确 503，
         绝不降级到宿主机执行。请求体大小、鉴权、限流由 _guarded 统一处理。
         """
-        try:
-            import sandbox_executor as _sbx
-            box = _sbx.DockerCodeSandbox()
-        except Exception as exc:                        # noqa: BLE001
-            return self._send(503, {"error": "sandbox_unavailable",
-                                    "detail": str(exc)[:200]})
         n = int(self.headers.get("Content-Length") or 0)
         try:
             body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
@@ -1261,7 +1255,9 @@ class Handler(BaseHTTPRequestHandler):
         code = str((body or {}).get("code") or "")
         if not code.strip():
             return self._err("E_BAD_REQUEST", "code 不能为空")
-        # SBX-SEC-01-T2：timeout 硬上限，越界直接 400（不接受 86400）
+        # SBX-SEC-01-T2：timeout 硬上限，越界直接 400（不接受 86400）。
+        # 必须在构造沙箱**之前**校验：否则 timeout=86400 且 Docker 不可用时
+        # 会先吃 503，掩盖真正的参数错误（测试曾因此偶发失败）。
         raw_timeout = (body or {}).get("timeout_s")
         timeout = None
         if raw_timeout is not None:
@@ -1286,6 +1282,13 @@ class Handler(BaseHTTPRequestHandler):
                                  "代码静态扫描命中高危模式，拒绝执行")
         except ImportError:
             pass                                        # 可选模块，缺失不阻断
+        # 参数全部校验通过后才构造沙箱（无 Docker 明确 503，不降级宿主机）
+        try:
+            import sandbox_executor as _sbx
+            box = _sbx.DockerCodeSandbox()
+        except Exception as exc:                        # noqa: BLE001
+            return self._send(503, {"error": "sandbox_unavailable",
+                                    "detail": str(exc)[:200]})
         try:
             out = box.run(code, timeout_s=timeout)
             self._send(200, out)

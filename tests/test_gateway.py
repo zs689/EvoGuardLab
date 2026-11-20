@@ -54,6 +54,66 @@ class TextJsonProvider(GW.Provider):
 
 
 class TestProviderSpec(unittest.TestCase):
+    def test_dotenv_does_not_override_system_env(self):
+        """系统环境变量优先级高于 .env（key 不会被 .env 里的占位符覆盖）。"""
+        import tempfile
+        f = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                                        suffix=".env", delete=False)
+        f.write("TEST_DOTENV_KEY=from_dotenv\n")
+        f.close()
+        self.addCleanup(os.unlink, f.name)
+        os.environ["TEST_DOTENV_KEY"] = "from_system"
+        self.addCleanup(os.environ.pop, "TEST_DOTENV_KEY", None)
+        GW.load_dotenv(f.name)
+        self.assertEqual(os.environ["TEST_DOTENV_KEY"], "from_system")
+
+    def test_dotenv_loads_missing_keys(self):
+        import tempfile
+        f = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                                        suffix=".env", delete=False)
+        f.write("# comment\nTEST_DOTENV_MISSING=loaded\n")
+        f.close()
+        self.addCleanup(os.unlink, f.name)
+        os.environ.pop("TEST_DOTENV_MISSING", None)
+        self.addCleanup(os.environ.pop, "TEST_DOTENV_MISSING", None)
+        loaded = GW.load_dotenv(f.name)
+        self.assertIn("TEST_DOTENV_MISSING", loaded)
+        self.assertEqual(os.environ["TEST_DOTENV_MISSING"], "loaded")
+
+    def test_provider_preset_one_line_switch(self):
+        """EVOGUARD_PROVIDER=<名字> 一行带出 base/model/keyenv。"""
+        os.environ["EVOGUARD_PROVIDER"] = "deepseek"
+        self.addCleanup(os.environ.pop, "EVOGUARD_PROVIDER", None)
+        s = GW.ProviderSpec.from_env()
+        self.assertEqual(s.backend, "openai_compat")
+        self.assertIn("deepseek.com", s.base_url)
+        self.assertEqual(s.model, "deepseek-chat")
+        self.assertEqual(s.api_key_env, "DEEPSEEK_API_KEY")
+        self.assertTrue(s.supports_tools)
+
+    def test_provider_preset_anthropic(self):
+        os.environ["EVOGUARD_PROVIDER"] = "anthropic"
+        self.addCleanup(os.environ.pop, "EVOGUARD_PROVIDER", None)
+        s = GW.ProviderSpec.from_env()
+        self.assertEqual(s.backend, "anthropic_compat")
+        self.assertEqual(s.api_key_env, "ANTHROPIC_API_KEY")
+
+    def test_explicit_env_overrides_preset(self):
+        """显式 EVOGUARD_MODEL_MODEL 覆盖预设默认模型。"""
+        os.environ["EVOGUARD_PROVIDER"] = "deepseek"
+        os.environ["AGENTLAB_LLM_MODEL"] = "my-custom-model"
+        self.addCleanup(os.environ.pop, "EVOGUARD_PROVIDER", None)
+        self.addCleanup(os.environ.pop, "AGENTLAB_LLM_MODEL", None)
+        s = GW.ProviderSpec.from_env()
+        self.assertEqual(s.model, "my-custom-model")
+
+    def test_local_preset_needs_no_key(self):
+        os.environ["EVOGUARD_PROVIDER"] = "ollama"
+        self.addCleanup(os.environ.pop, "EVOGUARD_PROVIDER", None)
+        s = GW.ProviderSpec.from_env()
+        self.assertIsNone(s.api_key_env)
+        self.assertEqual(s.backend, "ollama")
+
     def test_spec_from_env_role_routing(self):
         os.environ["EVOGUARD_MODEL_PLANNER_MODEL"] = "planner-m"
         os.environ["EVOGUARD_MODEL_EXECUTOR_MODEL"] = "executor-m"
@@ -82,6 +142,33 @@ class TestProviderSpec(unittest.TestCase):
         b = GW.get_provider(force="local",
                             spec=GW.ProviderSpec(backend="local", model="m2"))
         self.assertIsNot(a, b, "不同模型不应共用同一缓存实例")
+
+    def test_api_key_required_raises_when_missing(self):
+        """显式要求鉴权却没 key -> E_LLM_AUTH，不静默发无鉴权请求。"""
+        os.environ.pop("MY_REQ_KEY", None)
+        self.addCleanup(os.environ.pop, "MY_REQ_KEY", None)
+        spec = GW.ProviderSpec(backend="openai_compat", base_url="http://x/v1",
+                               model="m", api_key_env="MY_REQ_KEY")
+        p = GW.OpenAICompatProvider(spec)
+        with self.assertRaises(GW.LLMError) as cm:
+            p._headers()
+        self.assertEqual(cm.exception.code, "E_LLM_AUTH")
+
+    def test_api_key_sends_bearer(self):
+        os.environ["MY_REQ_KEY2"] = "sk-abc123"
+        self.addCleanup(os.environ.pop, "MY_REQ_KEY2", None)
+        spec = GW.ProviderSpec(backend="openai_compat", base_url="http://x/v1",
+                               model="m", api_key_env="MY_REQ_KEY2")
+        p = GW.OpenAICompatProvider(spec)
+        self.assertEqual(p._headers().get("Authorization"), "Bearer sk-abc123")
+
+    def test_local_endpoint_without_key_still_works(self):
+        """未指定 api_key_env 时允许无鉴权本地端点（Ollama/LM Studio）。"""
+        os.environ.pop("OPENAI_API_KEY", None)
+        spec = GW.ProviderSpec(backend="openai_compat",
+                               base_url="http://127.0.0.1:11434/v1", model="m")
+        p = GW.OpenAICompatProvider(spec)
+        self.assertNotIn("Authorization", p._headers())
 
     def test_api_key_not_in_info_or_repr(self):
         os.environ["MY_KEY_ENV"] = "sk-secret-should-not-leak"

@@ -17,6 +17,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "ai-service", "api"))
 sys.path.insert(0, os.path.join(ROOT, "ai-service", "evoguard"))
 
+# 隔离开发者本地 .env：本测试走 mock，不能被本机 EVOGUARD_PROVIDER 污染
+# （否则会去调真实云端 API，测试进程无 key -> 500）。必须在 import app 前设。
+os.environ["EVOGUARD_SKIP_DOTENV"] = "1"
+os.environ["AGENTLAB_LLM"] = "mock"
+os.environ.pop("EVOGUARD_PROVIDER", None)   # 防止被别的测试/早先的 .env 加载污染
+
 
 def _serve():
     """起一个真实 HTTP server（随机端口），返回 (server, port, thread)。"""
@@ -32,6 +38,12 @@ class Base(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         os.environ["AGENTLAB_DB_DIR"] = cls.tmp.name
+        # 清掉可能被其它测试污染的 provider 缓存（避免串用 deepseek）
+        try:
+            import gateway as _gw
+            _gw.reset_cache()
+        except Exception:
+            pass
         cls.srv, cls.port, cls.th = _serve()
 
     @classmethod

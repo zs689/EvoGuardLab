@@ -167,12 +167,17 @@ def guard_input_semantic(text, *, judge=None, persona_judge=None,
         except Exception as exc:                        # noqa: BLE001
             pv = {"persona_jailbreak": False, "confidence": 0.0,
                   "error": "persona_init:" + type(exc).__name__}
-    if v.get("error") or (pv and pv.get("error")):
+    # 只有**主判官**出错才把整个语义层降级为 report（转人工复核）。
+    # persona 判官不可用（如本机无本地模型）时不能拖累主判官的明确结论：
+    # 否则 harmful=True/conf=0.99 会被降成 report = 等价于放行攻击。
+    if v.get("error"):
         return {"decision": "report", "effect": "reported_only",
                 "attempted": False, "executed": False,
                 "reason": "semantic_unavailable:" + str(v["error"])[:60],
                 "findings": [{"code": "semantic_unavailable",
                               "severity": "warn"}], "judge": v}
+    if pv and pv.get("error"):
+        pv = None                      # 忽略 persona 信号，主判官结论照常生效
     harmful = bool(v.get("harmful"))
     persona = bool(pv and pv.get("persona_jailbreak"))
     conf = max(float(v.get("confidence") or 0.0),

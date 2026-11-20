@@ -26,14 +26,62 @@
   ollama_raw 原生 /api/chat + think:false，**不加** format=json。
              用来做「无 grammar 约束」对照，测模型自然格式违规率。
 """
+import io
 import json
 import os
 import re
+import sys
 import threading
 import urllib.error
 import urllib.request
 
 DEFAULT_BASE = "http://127.0.0.1:1234/v1"
+
+
+def load_dotenv(path=None):
+    """零依赖加载项目 .env（KEY=VALUE 逐行解析）。
+
+    只填**尚未设置**的变量：系统环境变量（如 User 级的 DEEPSEEK_API_KEY）
+    优先级最高，.env 仅作缺省。返回加载到的键名列表。
+    """
+    if path is None:
+        # 从本文件向上找项目根目录的 .env
+        here = os.path.dirname(os.path.abspath(__file__))
+        for _ in range(4):
+            here = os.path.dirname(here)
+            cand = os.path.join(here, ".env")
+            if os.path.isfile(cand):
+                path = cand
+                break
+    if not path or not os.path.isfile(path):
+        return []
+    loaded = []
+    try:
+        with io.open(path, encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k, v = k.strip(), v.strip().strip('"').strip("'")
+                if k and os.environ.get(k) is None:
+                    os.environ[k] = v
+                    loaded.append(k)
+    except OSError:
+        pass
+    return loaded
+
+
+# 测试/CI 隔离开发者本地 .env：避免「本机配了云端 provider 但测试进程没
+# key」导致测试走真实网络 500。两种隔离途径：
+#   1) 显式 EVOGUARD_SKIP_DOTENV=1
+#   2) unittest discover -s tests 模式（sys.argv 含 discover）——
+#      discover 不会导入 tests/__init__.py，所以必须在这里判断。
+_skip_dotenv = (os.environ.get("EVOGUARD_SKIP_DOTENV", "").strip().lower()
+                in ("1", "true", "on"))
+_in_discover = "discover" in [str(a) for a in sys.argv]
+if not _skip_dotenv and not _in_discover:
+    load_dotenv()
 
 _THINK_RE = re.compile(r"<think(?:ing)?[^>]*>.*?</think(?:ing)?\s*>", re.S)
 _THINK_OPEN_RE = re.compile(r"<think(?:ing)?[^>]*>.*", re.S)
@@ -322,6 +370,58 @@ class OllamaNativeProvider(Provider):
         return text, tokens or max(1, len(text) // 2), model
 
 
+#: 市面主流模型服务的预设档案（模型无关：按协议归类，不绑死厂商）。
+#: 用户只需 `EVOGUARD_PROVIDER=<名字>` + 设置对应 KEY 环境变量即可接入；
+#: 任何未列出的服务，只要说 OpenAI 兼容协议，用 openai_compat 自填 BASE 即可。
+#: 字段：backend / base_url / 默认 key 环境变量名 / 默认模型 / 是否支持原生 tools
+PROVIDER_PRESETS = {
+    # ---- OpenAI 兼容（Bearer + /v1/chat/completions）----
+    "openai":        ("openai_compat", "https://api.openai.com/v1",
+                      "OPENAI_API_KEY", "gpt-4o-mini", True),
+    "deepseek":      ("openai_compat", "https://api.deepseek.com/v1",
+                      "DEEPSEEK_API_KEY", "deepseek-chat", True),
+    "qwen":          ("openai_compat", "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                      "DASHSCOPE_API_KEY", "qwen-plus", True),
+    "glm":           ("openai_compat", "https://open.bigmodel.cn/api/paas/v4",
+                      "ZHIPU_API_KEY", "glm-4-flash", True),
+    "kimi":          ("openai_compat", "https://api.moonshot.cn/v1",
+                      "MOONSHOT_API_KEY", "moonshot-v1-8k", True),
+    "groq":          ("openai_compat", "https://api.groq.com/openai/v1",
+                      "GROQ_API_KEY", "llama-3.3-70b-versatile", True),
+    "openrouter":    ("openai_compat", "https://openrouter.ai/api/v1",
+                      "OPENROUTER_API_KEY", "openai/gpt-4o-mini", True),
+    "siliconflow":   ("openai_compat", "https://api.siliconflow.cn/v1",
+                      "SILICONFLOW_API_KEY", "Qwen/Qwen2.5-7B-Instruct", True),
+    "minimax":       ("openai_compat", "https://api.minimax.chat/v1",
+                      "MINIMAX_API_KEY", "MiniMax-Text-01", True),
+    "baichuan":      ("openai_compat", "https://api.baichuan-ai.com/v1",
+                      "BAICHUAN_API_KEY", "Baichuan4", True),
+    "volcengine":    ("openai_compat", "https://ark.cn-beijing.volces.com/api/v3",
+                      "ARK_API_KEY", "doubao-seed-1-6", True),
+    "gemini":        ("openai_compat", "https://generativelanguage.googleapis.com/v1beta/openai",
+                      "GEMINI_API_KEY", "gemini-2.0-flash", True),
+    "mistral":       ("openai_compat", "https://api.mistral.ai/v1",
+                      "MISTRAL_API_KEY", "mistral-small-latest", True),
+    "together":      ("openai_compat", "https://api.together.xyz/v1",
+                      "TOGETHER_API_KEY", "meta-llama/Llama-3.3-70B-Instruct-Turbo", True),
+    "local_openai":  ("openai_compat", "http://127.0.0.1:1234/v1",
+                      None, None, False),          # LM Studio / vLLM / llama.cpp
+    # ---- Anthropic 原生 Messages 协议 ----
+    "anthropic":     ("anthropic_compat", "https://api.anthropic.com/v1",
+                      "ANTHROPIC_API_KEY", "claude-3-5-haiku-latest", True),
+    # ---- 本地 Ollama（原生 /api/chat，无需 key）----
+    "ollama":        ("ollama", "http://127.0.0.1:11434",
+                      None, None, False),
+}
+
+
+def list_providers():
+    """返回所有预设（供配置向导/文档展示）。"""
+    return {k: {"backend": v[0], "base_url": v[1], "api_key_env": v[2],
+                "default_model": v[3], "supports_tools": v[4]}
+            for k, v in PROVIDER_PRESETS.items()}
+
+
 class ProviderSpec:
     """AGENT-PLUG-01：一行配置描述一个模型后端的能力档案。
 
@@ -345,19 +445,36 @@ class ProviderSpec:
 
     @classmethod
     def from_env(cls, role=None):
-        """按角色读环境变量；未设时回退默认模型。"""
+        """按角色读环境变量；`EVOGUARD_PROVIDER=<预设名>` 一行接入主流服务。
+
+        优先级：显式 EVOGUARD_MODEL_* > 预设值 > 全局 AGENTLAB_LLM_* > mock。
+        换 key 只需设置预设对应的环境变量，无需改代码或本文件。
+        """
         prefix = "EVOGUARD_MODEL_" + role.upper() if role else "AGENTLAB_LLM"
         def _g(k, d=None):
             return os.environ.get(prefix + "_" + k) or d
-        backend = (os.environ.get("AGENTLAB_LLM") or "mock").strip()
+
+        preset_name = (os.environ.get("EVOGUARD_PROVIDER") or "").strip().lower()
+        pre = PROVIDER_PRESETS.get(preset_name)
+        p_backend, p_base, p_keyenv, p_model, p_tools = pre if pre else (
+            None, None, None, None, None)
+        fallback_backend = (os.environ.get("AGENTLAB_LLM") or "mock").strip()
+
+        # supports_tools：显式 > 预设 > 关（保守，弱模型走 prompt-JSON 不会崩）
+        st = _g("SUPPORTS_TOOLS", None)
+        if st is None:
+            st = "1" if p_tools else "0"
         return cls(
-            backend=_g("BACKEND", backend),
-            base_url=_g("BASE", os.environ.get("AGENTLAB_LLM_BASE")),
-            model=_g("MODEL", os.environ.get("AGENTLAB_LLM_MODEL")),
-            api_key_env=_g("API_KEY_ENV", None),
-            supports_tools=str(_g("SUPPORTS_TOOLS", "")).lower() in ("1", "true", "on"),
-            supports_json_mode=str(_g("SUPPORTS_JSON", "")).lower() in ("1", "true", "on"),
-            supports_think_flag=str(_g("SUPPORTS_THINK", "")).lower() in ("1", "true", "on"),
+            backend=_g("BACKEND", p_backend or fallback_backend),
+            base_url=_g("BASE",
+                        p_base or os.environ.get("AGENTLAB_LLM_BASE")),
+            model=_g("MODEL", p_model or os.environ.get("AGENTLAB_LLM_MODEL")),
+            api_key_env=_g("API_KEY_ENV", p_keyenv),
+            supports_tools=str(st).lower() in ("1", "true", "on"),
+            supports_json_mode=str(_g("SUPPORTS_JSON", "")).lower()
+            in ("1", "true", "on"),
+            supports_think_flag=str(_g("SUPPORTS_THINK", "")).lower()
+            in ("1", "true", "on"),
             timeout=int(_g("TIMEOUT", 60)),
         )
 
@@ -403,10 +520,22 @@ class OpenAICompatProvider(Provider):
 
     def _headers(self):
         h = {"Content-Type": "application/json"}
-        env = self.spec.api_key_env or os.environ.get("OPENAI_API_KEY_ENV")
-        key = os.environ.get(env) if env else None
+        # API Key 解析优先级（换到云端开发时无需改代码）：
+        #   1) ProviderSpec.api_key_env 指定的变量名
+        #   2) OPENAI_API_KEY_ENV 指定的变量名（间接层）
+        #   3) 标准 OPENAI_API_KEY
+        # 显式 api_key_env 即"必须鉴权"；未指定则允许无鉴权本地端点
+        # （Ollama/LM Studio 的 /v1 不需要 key），兼容老行为。
+        env = (self.spec.api_key_env
+               or os.environ.get("OPENAI_API_KEY_ENV"))
+        key = os.environ.get(env) if env else os.environ.get("OPENAI_API_KEY")
         if key:
             h["Authorization"] = "Bearer " + key
+        elif self.spec.api_key_env or os.environ.get("OPENAI_API_KEY_REQUIRED"):
+            # 显式要求鉴权却拿不到 key：明确报错，不静默发无鉴权请求吃 401
+            raise LLMError("E_LLM_AUTH",
+                           "未找到 API Key：请在环境变量设置 %s"
+                           % (env or "OPENAI_API_KEY"))
         return h
 
     def _post(self, path, payload):
