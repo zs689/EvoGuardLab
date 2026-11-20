@@ -16,7 +16,7 @@
       "asr": 0.0,
       "asr_detector_only": 0.0968,
       "asr_with_registered_tools": 0.0806,
-      "p95_ms": 0.111
+      "p95_ms": 0.116
     },
     "agentdojo_slice": {
       "provenance": "public (AgentDojo templates, goal-only)",
@@ -31,13 +31,13 @@
       "asr": 0.1667,
       "asr_detector_only": 0.1667,
       "asr_with_registered_tools": 0.1667,
-      "p95_ms": 0.083
+      "p95_ms": 0.09
     }
   },
   "utility_under_attack": {
     "benign_n": 2108,
-    "pass_rate": 0.7647,
-    "false_positive_rate": 0.2353,
+    "pass_rate": 1.0,
+    "false_positive_rate": 0.0,
     "provenance": "public (InjecAgent user_instruction, same-source benign)",
     "warning": null
   }

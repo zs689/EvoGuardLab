@@ -57,15 +57,17 @@ def _read_jsonl(path):
     return out
 
 
-def detect_layered(text, *, judge=None):
+def detect_layered(text, *, judge=None, channel="tool_output"):
     """分层检测：返回 (blocked, layer, decision)。
 
-    层 1：`security.scan` 正则 + action_scope（v3 快速路径，毫秒级纯规则）；
-    层 2：语义判官（仅在层 1 未命中且显式提供 judge 时调用，模型无关）。
-    任一层命中即拦。规则-only 模式不调任何模型，可全量跑。
+    FINAL-01-T1 通道分治（信息流隔离公理）：
+      - `channel='user_input'`：可信主指令，只查直接越狱/有害请求，**不跑
+        action_scope**（tool_output 专用规则，拿它查正常业务指令 → 23.53% 误报）；
+      - `channel='tool_output'`：不可信外部数据，完整 scan + action_scope + 语义。
+    默认仍为 tool_output（保守，不放松既有检测）。
     """
     try:
-        hit, _codes, _ms = V.detect(text, provider=None)
+        hit, _codes, _ms = V.detect(text, where=channel, provider=None)
         if hit:
             return True, "L1_light", "block"
     except Exception:                                       # noqa: BLE001
@@ -196,7 +198,11 @@ def _utility(rows, *, judge):
         return None, 0
     passed = 0
     for r in benign:
-        blocked, _layer, _d = detect_layered(r.get("text") or "", judge=judge)
+        # FINAL-01-T1：良性 user_instruction 是可信主指令，走 user_input
+        # 通道（不跑 action_scope），这才是与攻击集同来源的正确口径。
+        text = r.get("text") or r.get("user_instruction") or ""
+        blocked, _layer, _d = detect_layered(
+            text, judge=judge, channel="user_input")
         if not blocked:
             passed += 1
     return round(passed / len(benign), 4), len(benign)

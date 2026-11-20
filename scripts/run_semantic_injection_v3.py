@@ -158,7 +158,10 @@ def detect(text, where="tool_output", provider=None, threshold=0.5):
     codes = []
     for ch in _windows(text):
         c = [f["code"] for f in S.scan(ch, where)]
-        if AS.detect_action_requests(ch):
+        # FINAL-01-T1：action_scope 是给**不可信 tool_output** 用的规则
+        # （只读返回里禁止祈使句）。可信 user_input 本来就是命令，
+        # 拿它查正常业务指令会造成 23.53% 误报 —— 按通道分治。
+        if where != "user_input" and AS.detect_action_requests(ch):
             c.append("action_request")
         if c:
             codes = c

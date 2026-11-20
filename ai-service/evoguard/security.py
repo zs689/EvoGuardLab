@@ -538,6 +538,12 @@ def _scan_view(s, where, only=None):
     for d in DETECTORS:
         if only and d["code"] not in only:
             continue
+        # FINAL-01-T1 通道分治：PII 外泄特征（邮箱/电话/账号等）是给
+        # **不可信 tool_output** 用的（防工具把敏感数据带回来）。可信
+        # user_input 里出现邮箱是用户本意（"读一下这个邮箱的邮件"），
+        # 拿它查主指令会造成 11.76% 误报。
+        if where == "user_input" and d["code"].startswith("pii_"):
+            continue
         if d["pre"] and not any(p in low for p in d["pre"]):
             continue
         m = d["re"].search(s)

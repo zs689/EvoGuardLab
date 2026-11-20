@@ -110,7 +110,7 @@ def _record(result, decision, reason, checks):
 
 def preflight(cfg, *, agent_type, tool, args, user_goal=None, cid=None,
               contracts=None, policy=None, intent_fn=None,
-              contract_fn=None):
+              contract_fn=None, taint_state=None):
     """调用前的全部判断。返回 dict；`stop` 为真表示**不许执行工具**。
 
     导入与调用都做成可注入的：测试里可以把任意一层替成恒定 deny，
@@ -217,6 +217,24 @@ def preflight(cfg, *, agent_type, tool, args, user_goal=None, cid=None,
                     return _stop(out, cfg["intent"]["on_unavailable"],
                                  "意图判定没有结论（%s），不静默放行"
                                  % (r.get("reason") or "")[:120], checks)
+
+    # ---- FINAL-01-T2) 污点追踪：受污染参数流入写/外发工具 ----
+    # 信息流隔离：即使攻击文本不含关键词绕过 L1，只要写工具的目标/收款人
+    # 源自外部工具输出且不在原始可信 user_goal 里，也必须拦。
+    if taint_state is not None:
+        try:
+            import taint as _taint
+            hit = _taint.tainted_argument(tool, args, taint_state)
+            checks.append({"checker": "taint", "status":
+                           "hit" if hit else "clean"})
+            out["taint"] = {"hit": hit}
+            if hit and cfg["mode"] == CONTROLLED:
+                return _stop(out, DENY,
+                             "tainted_argument_to_side_effect："
+                             "污点参数流入副作用工具 %s=%s"
+                             % (hit["field"], hit["value"]), checks)
+        except ImportError:
+            pass
     return out
 
 

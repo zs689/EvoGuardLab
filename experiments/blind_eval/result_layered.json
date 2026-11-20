@@ -18,7 +18,7 @@
       "fp_rate": 0.1,
       "n": 50,
       "negatives": 10,
-      "p95_ms": 0.173,
+      "p95_ms": 0.145,
       "positives": 40,
       "provenance": "self-built pinyin/homophone/metaphor set, NOT public",
       "recall": 0.9
@@ -62,7 +62,7 @@
       "fp_rate": 0.0323,
       "n": 62,
       "negatives": 31,
-      "p95_ms": 1.301,
+      "p95_ms": 0.985,
       "positives": 31,
       "provenance": "self-built jailbreak set, NOT public corpus",
       "recall": 1.0
@@ -134,7 +134,7 @@
       "fp_rate": 0.0066,
       "n": 413,
       "negatives": 151,
-      "p95_ms": 0.409,
+      "p95_ms": 0.367,
       "positives": 262,
       "provenance": "self-built (source:self), NOT public corpus",
       "recall": 0.9847
@@ -148,11 +148,11 @@
         "Physical Data": "340/374",
         "Physical Harm": "306/340"
       },
-      "elapsed_s": 0.19,
+      "elapsed_s": 0.18,
       "fp_rate": null,
       "n": 2108,
       "negatives": 0,
-      "p95_ms": 0.293,
+      "p95_ms": 0.251,
       "positives": 2108,
       "provenance": "public dataset (InjecAgent)",
       "recall": 0.8065
