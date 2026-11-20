@@ -98,8 +98,17 @@ class TestClosedLoop(unittest.TestCase):
         training = newdomain_cases("train", 3, "file")
         target = newdomain_cases("tgt", 3, "http")
         guard = newdomain_cases("grd", 3, "sql")
+        # EVO-REBUILD-01-T1：线上闭环强制信息增量门禁，所以这里用带真实
+        # 证据（KeyError 键名）的失败轨迹 —— 这正是线上会遇到的情形。
+        steps = [
+            {"seq": 1, "logical": 1, "name": "file.read", "status": "ok",
+             "output": {"path": "m.py"}},
+            {"seq": 2, "logical": 2, "name": "http.fetch", "status": "error",
+             "error_type": "KeyError",
+             "output": {"stderr": "KeyError: 'user_name'"}},
+        ]
         out = SS.closed_loop(
-            self.store, self.steps,
+            self.store, steps,
             target_cases=target, guard_cases=guard,
             training_cases=training,
             run_case=lambda c, sk: (True if c["task_id"].startswith("grd")
@@ -107,6 +116,20 @@ class TestClosedLoop(unittest.TestCase):
             task_type="newdomain")
         self.assertEqual(out["stage"], "promotion")
         self.assertTrue(out["promotion"]["promoted"])
+
+    def test_closed_loop_rejects_flat_skill(self):
+        """无信息增量的空壳技能不得走完闭环晋升。"""
+        training = newdomain_cases("train", 3, "file")
+        target = newdomain_cases("tgt", 3, "http")
+        guard = newdomain_cases("grd", 3, "sql")
+        out = SS.closed_loop(
+            self.store, self.steps,       # timeout，无任何私有环境证据
+            target_cases=target, guard_cases=guard,
+            training_cases=training,
+            run_case=lambda c, sk: True,
+            task_type="newdomain")
+        self.assertEqual(out["stage"], "synthesis")
+        self.assertFalse(out["synthesis"]["accepted"]["accepted"])
 
     def test_describe_lists_new_domain(self):
         d = SS.describe()

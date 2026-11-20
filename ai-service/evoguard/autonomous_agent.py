@@ -771,6 +771,20 @@ class ReActAgent:
                         hook_post = fn(tool, dict(args), out)
                 except Exception:                            # noqa: BLE001
                     hook_post = None
+                # EVO-REBUILD-01-T1：失败时才按 error_signature 注入**单行**
+                # 私有环境事实（环境约定）。不塞 system prompt，不注入整段规约。
+                try:
+                    _hf = self.skill_hooks.get("env_hint")
+                    _err = ""
+                    if isinstance(out, dict):
+                        _err = str(out.get("error") or out.get("stderr") or "")
+                    if _hf and _err.strip():
+                        _h = _hf(_err)
+                        if _h and isinstance(out, dict):
+                            out = dict(out, env_invariant_hint=_h)
+                            step["env_hint"] = _h
+                except Exception:                            # noqa: BLE001
+                    pass
             step.update({"kind": "tool", "executed": True,
                          "effect": "call_executed", "output": out})
             if hook_pre:

@@ -31,10 +31,48 @@ def is_actionable(skill):
     return True
 
 
+def signature_of(error_text):
+    """从错误文本提取错误签名（如 ZeroDivisionError / KeyError）。"""
+    m = re.search(r"\b([A-Za-z]+(?:Error|Exception))\b", str(error_text or ""))
+    return m.group(1) if m else ""
+
+
+def env_hint_for(skill, error_text):
+    """命中 error_signature 时返回**单行**私有环境事实；不命中返回 None。
+
+    EVO-REBUILD-01-T1：只注入 1 条 env_invariant，且在失败时才注入——
+    绝不把整段规约塞进 system prompt（那样实测有害）。
+    """
+    if not isinstance(skill, dict):
+        return None
+    invs = skill.get("env_invariants") or []
+    if not isinstance(invs, list) or not invs:
+        return None
+    sig = str(skill.get("error_signature") or "")
+    got = signature_of(error_text)
+    if sig and got and got.lower() not in sig.lower():
+        return None                       # 签名不匹配：不注入（避免无关干扰）
+    if sig and not got:
+        return None
+    for x in invs:
+        if isinstance(x, dict) and str(x.get("rule") or "").strip():
+            return str(x["rule"]).strip()[:200]
+    return None
+
+
 def hooks_from_skill(skill):
-    """把结构化 Skill 转成控制流钩子。无有效经验时返回空钩子。"""
+    """把结构化 Skill 转成控制流钩子 + 按需注入的 env_hint。"""
     if not is_actionable(skill):
-        return {"pre_write": None, "post_write": None, "actionable": False}
+        # 有 env_invariant 也可用（即使 fix_pattern 是 unknown）
+        invs = (skill or {}).get("env_invariants") or []
+        if not (isinstance(invs, list) and any(
+                isinstance(x, dict) and str(x.get("rule") or "").strip()
+                for x in invs)):
+            return {"pre_write": None, "post_write": None,
+                    "env_hint": None, "actionable": False}
+        return {"pre_write": None, "post_write": None,
+                "env_hint": (lambda err: env_hint_for(skill, err)),
+                "actionable": True}
 
     check = str(skill.get("verification_check") or "").strip()
     fix = str(skill.get("fix_pattern") or "").strip()
@@ -53,4 +91,5 @@ def hooks_from_skill(skill):
         return None
 
     return {"pre_write": pre_write, "post_write": post_write,
+            "env_hint": (lambda err: env_hint_for(skill, err)),
             "actionable": True}

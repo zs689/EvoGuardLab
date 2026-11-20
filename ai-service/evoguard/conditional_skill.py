@@ -160,11 +160,50 @@ def validate_permissions(skill, policy):
     return errors
 
 
-def accept(skill, policy):
-    """模型提出候选 → 外部执行器校验。不合规直接抛 SkillRejected。"""
+def validate_info_gain(skill):
+    """EVO-REBUILD-01-T1：拒收「空泛套话」技能。
+
+    实测证据：往上下文塞泛泛流程提示（"先 patch 再测"）在 DeepSeek 上
+    ΔSuccess=-20pp（有害）。因此技能必须携带**模型不可能自带**的信息：
+      1) 带真实证据的 `env_invariant`（私有环境约定）；或
+      2) 可执行的 `pre_check`（确定性前置/后置检查）。
+    两者都没有 = 对强模型零信息增量，直接拒收。
+    """
+    errors = []
+    invs = skill.get("env_invariants")
+    ok_inv = False
+    if isinstance(invs, list):
+        for x in invs:
+            if (isinstance(x, dict)
+                    and str(x.get("rule") or "").strip()
+                    and str(x.get("evidence") or "").strip()):
+                ok_inv = True
+                break
+    checks = skill.get("pre_checks")
+    ok_chk = False
+    if isinstance(checks, list):
+        for x in checks:
+            if isinstance(x, dict) and str(x.get("action") or "").strip():
+                ok_chk = True
+                break
+    if not (ok_inv or ok_chk):
+        errors.append(
+            "技能无信息增量：必须含至少一条带证据的 env_invariant 或"
+            "可执行 pre_check（泛泛流程提示一律拒收）")
+    return errors
+
+
+def accept(skill, policy, *, require_info_gain=False):
+    """模型提出候选 → 外部执行器校验。不合规直接抛 SkillRejected。
+
+    `require_info_gain=True` 时额外执行信息增量门禁（合成路径默认开）。
+    默认 False 以保持既有声明式技能用例的兼容性。
+    """
     if not isinstance(skill, dict):
         raise SkillRejected(["技能必须是对象（收到 %s）" % type(skill).__name__])
     errors = validate_schema(skill) + validate_permissions(skill, policy)
+    if require_info_gain:
+        errors += validate_info_gain(skill)
     if errors:
         raise SkillRejected(errors)
     return {"accepted": True, "fingerprint": fingerprint(skill),

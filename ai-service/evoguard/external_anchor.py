@@ -45,20 +45,42 @@ class ExternalAnchorSink:
                "ts": round(time.time(), 3)}
         signed = "%s|%s|%s" % (rec["seq"], rec["tail_hash"], rec["ts"])
         rec["hmac"] = _sign(signed, self.key)
+        self._write(rec)
+        return rec
+
+    def append_event(self, kind, payload=None):
+        """EVO-REBUILD-01-T2：记录一条**库外**只追加事件锚点（如自动回滚）。
+
+        与链尾锚点共用同一文件，但带 `kind`，便于异地取证时区分
+        「审计链尾快照」与「自愈事件」。
+        """
+        rows = _read_all(self.path)
+        seq = int(rows[-1].get("seq") or 0) + 1 if rows else 1
+        rec = {"seq": seq, "kind": str(kind or "event"),
+               "payload": payload if isinstance(payload, dict) else {},
+               "ts": round(time.time(), 3)}
+        signed = "%s|%s|%s|%s" % (
+            rec["seq"], rec["kind"],
+            json.dumps(rec["payload"], ensure_ascii=False, sort_keys=True),
+            rec["ts"])
+        rec["hmac"] = _sign(signed, self.key)
+        self._write(rec)
+        return rec
+
+    def _write(self, rec):
         parent = os.path.dirname(os.path.abspath(self.path))
         if parent and not os.path.isdir(parent):
             os.makedirs(parent, exist_ok=True)
         with open(self.path, "a", encoding="utf-8", newline="\n") as f:
             f.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
-        return rec
 
     def latest(self):
         rows = read_anchor(self.path)
         return rows[-1] if rows else None
 
 
-def read_anchor(path):
-    """读取全部锚点行（坏行跳过，不伪造）。"""
+def _read_all(path):
+    """读取文件里全部合法 JSON 行（锚点与事件混存）。坏行跳过，不伪造。"""
     rows = []
     if not path or not os.path.isfile(path):
         return rows
@@ -71,8 +93,21 @@ def read_anchor(path):
                 r = json.loads(line)
             except ValueError:
                 continue
-            if isinstance(r, dict) and "tail_hash" in r:
+            if isinstance(r, dict) and "seq" in r:
                 rows.append(r)
+    return rows
+
+
+def read_anchor(path):
+    """读取**链尾锚点**行（含 tail_hash），供 AuditStore.verify 交叉核对。"""
+    return [r for r in _read_all(path) if "tail_hash" in r]
+
+
+def read_events(path, kind=None):
+    """读取库外事件锚点行（如 auto_rollback），可选按 kind 过滤。"""
+    rows = [r for r in _read_all(path) if r.get("kind")]
+    if kind:
+        rows = [r for r in rows if r.get("kind") == kind]
     return rows
 
 

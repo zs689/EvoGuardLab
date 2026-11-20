@@ -20,6 +20,7 @@
 """
 import copy
 import json
+import re
 
 try:
     from . import skills as _sk
@@ -39,7 +40,7 @@ NEW_DOMAIN_TOOLS = ("file.read", "http.fetch", "sql.query", "sql.update")
 
 def synthesize(store, steps, *, task_type="newdomain",
                failure_type=None, expected_total=None, policy=None,
-               repair_steps=None):
+               repair_steps=None, env_spec=None, require_info_gain=False):
     """从失败轨迹合成一个候选 Skill（未落库、未晋升）。
 
     返回 {diagnosis, skill, accepted}；门禁拒绝时 accepted 里带 errors。
@@ -75,21 +76,181 @@ def synthesize(store, steps, *, task_type="newdomain",
     })
     # SCORE-04-T1：从**真实的失败->成功成对轨迹**提取可执行经验。
     # 没有成功轨迹时如实标 unknown_*，绝不编造「修复模式」。
-    structured = _extract_structured(diag, steps, repair_steps, cause)
+    structured = _extract_structured(diag, steps, repair_steps, cause,
+                                     env_spec=env_spec)
     skill.update(structured)
     # 候选只能声明只读工具：写/外发工具必须走审批，不能由技能声明。
     skill["allowed_tools"] = list(NEW_DOMAIN_TOOLS[:3])
     pol = policy or {"allowed_tools": list(NEW_DOMAIN_TOOLS),
                      "write_tools": ["sql.update"]}
     try:
-        accepted = _cs.accept(skill, pol)
+        accepted = _cs.accept(skill, pol, require_info_gain=require_info_gain)
     except _cs.SkillRejected as e:
         accepted = {"accepted": False, "errors": list(e.args[0])
                     if e.args and isinstance(e.args[0], list) else [str(e)]}
     return {"diagnosis": diag, "skill": skill, "accepted": accepted}
 
 
-def _extract_structured(diag, steps, repair_steps, cause):
+def _stderr_of(step):
+    """取一个步骤的错误文本（stderr 优先，其次 error/output）。"""
+    out = step.get("output")
+    if isinstance(out, dict):
+        return str(out.get("stderr") or out.get("error") or "")
+    if isinstance(out, str):
+        return out
+    return ""
+
+
+# EVO-REBUILD-01-T1：私有环境约定的识别特征。
+# 与「通用工程常识」的区别：这些是模型预训练**不可能知道**的项目/环境事实，
+# 必须从真实失败证据里提取，提不到就不产出（绝不编造）。
+_NAMING_EV = re.compile(r"KeyError:\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]")
+_ATTR_EV = re.compile(r"AttributeError:.*?['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]")
+_PAGING_EV = re.compile(
+    r"(?:offset|page|per_?page|page_?size).{0,80}?"
+    r"(?:>=\s*1|must be\b|invalid|out of range|422)", re.I | re.S)
+_TZ_EV = re.compile(
+    r"(?:timezone|tzinfo|iso\s*8601|invalid date|naive datetime|"
+    r"date format|tz-aware)", re.I)
+_CFG_EV = re.compile(
+    r"(?:yaml|toml|json|ini|env).{0,60}?(?:parse|decode|scan|format).{0,30}?error",
+    re.I | re.S)
+
+
+_CODEY = ("import ", "def ", "exec(", "eval(", "__", "os.", "sys.",
+          "subprocess", "lambda ", "compile(")
+
+
+def _sanitize_evidence(text):
+    """清洗观测证据，避免 traceback 片段触发 conditional_skill 的代码特征黑名单。
+
+    证据是「观察到的事实」而非代码，但仍按最严门禁处理：压成单行、
+    限长、把类代码标记替换成占位符。不因此放宽任何校验。
+    """
+    t = " ".join(str(text or "").split())[:160]
+    for m in _CODEY:
+        t = t.replace(m, "·")
+    return t
+
+
+def extract_env_invariants(fail_steps, repair_steps=None, env_spec=None):
+    """从**真实失败轨迹**提取私有环境约定（env_invariant）。
+
+    只输出有证据的条目：每条都必须能指回一段真实 stderr/错误文本。
+    提不到就返回空列表 —— 空列表会被 conditional_skill 的信息增量门禁拒收，
+    这正是「泛泛流程提示一律不要」的落实。
+
+    `env_spec` 允许调用方显式提供项目私有规约
+    （[{domain, rule, match}]），仍要求轨迹里命中 `match` 才算有证据，
+    避免把「没发生过的规约」写进技能。
+    """
+    fails = [s for s in (fail_steps or []) if isinstance(s, dict)]
+    texts = []
+    for s in fails:
+        if s.get("status") == "ok" and not s.get("error_type"):
+            continue
+        t = _stderr_of(s)
+        if t.strip():
+            texts.append(t)
+    if not texts:
+        return []
+    blob = "\n".join(texts)
+    invs = []
+
+    def _add(domain, rule, evidence):
+        ev = _sanitize_evidence(evidence)
+        for x in invs:
+            if x["domain"] == domain and x["rule"] == rule:
+                return
+        invs.append({"domain": domain, "rule": rule[:160], "evidence": ev})
+
+    # 1) 显式规约：要求轨迹里真有命中（evidence 非空）
+    for spec in (env_spec or []):
+        if not isinstance(spec, dict):
+            continue
+        match = str(spec.get("match") or "")
+        rule = str(spec.get("rule") or "").strip()
+        if not rule:
+            continue
+        hit = ""
+        if match:
+            m = re.search(match, blob, re.I | re.S)
+            hit = m.group(0) if m else ""
+        if hit:
+            _add(str(spec.get("domain") or "project_rule"), rule, hit)
+
+    # 2) 命名约定：真实 KeyError/AttributeError 的键名就是环境事实
+    m = _NAMING_EV.search(blob) or _ATTR_EV.search(blob)
+    if m:
+        key = m.group(1)
+        if "_" in key or key.islower():
+            _add("naming",
+                 "字段/键名必须与既有定义完全一致（本项目用 snake_case，"
+                 "如 %s），不要自行改成 camelCase" % key,
+                 m.group(0))
+        else:
+            _add("naming",
+                 "字段/键名必须与既有定义完全一致（如 %s）" % key, m.group(0))
+
+    # 3) 分页约定
+    m = _PAGING_EV.search(blob)
+    if m:
+        _add("pagination",
+             "本项目分页参数从 1 开始且存在上限，越界会被服务端拒绝",
+             m.group(0))
+
+    # 4) 时区/日期格式约定
+    m = _TZ_EV.search(blob)
+    if m:
+        _add("timezone",
+             "日期时间必须带时区并按 ISO 8601 传输（UTC），不接受 naive datetime",
+             m.group(0))
+
+    # 5) 配置格式约定
+    m = _CFG_EV.search(blob)
+    if m:
+        _add("config_format",
+             "配置必须是本项目既定格式并可被严格解析，缩进/引号错误直接失败",
+             m.group(0))
+
+    return invs[:4]
+
+
+def extract_pre_checks(fail_steps, repair_steps=None):
+    """从修复轨迹提取**可执行**前置/后置检查（pre_check）。
+
+    只记录真实发生过、且能复用的动作：修完跑过测试、改动跨多个文件。
+    没有真实修复动作就返回空（不编造检查项）。
+    """
+    repairs = [s for s in (repair_steps or []) if isinstance(s, dict)
+               and s.get("status") == "ok"]
+    if not repairs:
+        return []
+    checks = []
+    test_tools = [str(s.get("name") or "") for s in repairs
+                  if str(s.get("name") or "").startswith("code.")
+                  or "test" in str(s.get("name") or "")]
+    if test_tools:
+        checks.append({"action": "run_tests_after_write",
+                       "trigger": "write",
+                       "tool": sorted(set(test_tools))[0],
+                       "detail": "写操作后必须跑一次验证，再宣称完成"})
+    files = []
+    for s in repairs:
+        out = s.get("output")
+        if isinstance(out, dict) and out.get("path"):
+            p = str(out["path"])
+            if p not in files:
+                files.append(p)
+    if len(files) >= 2:
+        checks.append({"action": "check_coupled_files",
+                       "trigger": "write",
+                       "files": files[:4],
+                       "detail": "这些文件存在隐式耦合，改一个必须同步核对其余"})
+    return checks
+
+
+def _extract_structured(diag, steps, repair_steps, cause, env_spec=None):
     """从失败/成功成对轨迹提取四类结构化字段（不做模型调用）。
 
     error_signature：异常类型 + 首次坏步的错误类型（可精确检索）
@@ -132,6 +293,10 @@ def _extract_structured(diag, steps, repair_steps, cause):
         "error_signature": "|".join(sorted(sig)),
         "diagnostic_steps": tools,
         "fix_pattern": " -> ".join(fix) if fix else "unknown_no_repair_trace",
+        # EVO-REBUILD-01-T1：两类高信息增量产物。提不到具体证据就是空列表，
+        # 交给 conditional_skill 的信息增量门禁拒收（不再输出泛泛提示）。
+        "env_invariants": extract_env_invariants(fail, ok, env_spec),
+        "pre_checks": extract_pre_checks(fail, ok),
         "verification_check": " -> ".join(verify)
                               if verify else "unknown_no_verification_trace",
         "structured_from": "paired_trace" if ok else "failure_only",
@@ -140,12 +305,24 @@ def _extract_structured(diag, steps, repair_steps, cause):
 
 def evaluate_and_promote(store, skill, target_cases, guard_cases,
                          run_case, *, training_cases=(),
-                         auto_rollback_on_regression=True):
-    """独立验证 → 晋升；出现退化则回滚。返回完整审计 dict。"""
+                         auto_rollback_on_regression=True,
+                         require_info_gain=False):
+    """独立验证 → 晋升；出现退化则回滚。返回完整审计 dict。
+
+    EVO-REBUILD-01-T1：晋升前强制信息增量门禁——泛泛流程提示即使 A/B
+    数字好看也不许上线（实测这类提示在真模型上 -20pp）。
+    """
     ev = _sk.evaluate(store, skill, target_cases, guard_cases,
                       run_case, training_cases=training_cases)
     out = {"evaluation": ev, "promoted": False, "rolled_back": False,
            "status": ev["verdict"]}
+    if require_info_gain:
+        gain_errors = _cs.validate_info_gain(skill)
+        if gain_errors:
+            out["promoted"] = False
+            out["status"] = "REJECT"
+            out["info_gain_blocked"] = gain_errors
+            return out
     if ev["verdict"] == "PROMOTE":
         _sk.save(store, skill)
         _sk.promote(store, skill["id"], evaluation_id=ev["id"])
@@ -374,16 +551,19 @@ def monitor_and_rollback(store, skill_id, online_runs=None, *,
 
 def closed_loop(store, steps, *, target_cases, guard_cases, run_case,
                 training_cases=(), task_type="newdomain",
-                expected_total=None, policy=None):
-    """一步到位：合成 → 门禁 → 独立验证 → 晋升/回滚。"""
+                expected_total=None, policy=None, env_spec=None,
+                require_info_gain=True):
+    """一步到位：合成 → 门禁 → 独立验证 → 晋升/回滚（线上路径，强制信息增量）。"""
     s = synthesize(store, steps, task_type=task_type,
-                   expected_total=expected_total, policy=policy)
+                   expected_total=expected_total, policy=policy,
+                   env_spec=env_spec, require_info_gain=require_info_gain)
     if not s["accepted"].get("accepted") or s["skill"] is None:
         return {"stage": "synthesis", "synthesis": s,
                 "promotion": None}
     p = evaluate_and_promote(
         store, s["skill"], target_cases, guard_cases, run_case,
-        training_cases=training_cases)
+        training_cases=training_cases,
+        require_info_gain=require_info_gain)
     return {"stage": "promotion", "synthesis": s, "promotion": p}
 
 
@@ -391,3 +571,92 @@ def describe():
     return {"version": 1, "tools": list(NEW_DOMAIN_TOOLS),
             "stages": ["diagnose", "synthesize", "sandbox_accept",
                        "independent_eval", "promote_or_rollback"]}
+
+
+# ---------------- EVO-REBUILD-01-T2：无人值守自动监控 ----------------
+#: 进程内节流计数：(store 标识, skill_id) -> 已累积的运行次数
+_AUTO_COUNTS = {}
+#: 自动监控窗口：每 N 次运行检查一次（越权则立即检查）
+AUTO_MONITOR_WINDOW = 5
+
+
+def _count_unauthorized(store, run_id):
+    """统计某次运行里被门禁拦下的步骤数（越权信号）。"""
+    try:
+        with store.conn() as c:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(steps)")}
+            if "kind" not in cols:
+                return 0
+            row = c.execute(
+                "SELECT COUNT(*) FROM steps WHERE run_id=? AND "
+                "kind IN ('denied','rails_denied','loop_guard')",
+                (run_id,)).fetchone()
+            return int(row[0] or 0) if row else 0
+    except Exception:                                  # noqa: BLE001
+        return 0
+
+
+def _write_auto_anchor(payload):
+    """把自动回滚事件写进**库外**只追加锚点（异地取证）。"""
+    path = __import__("os").environ.get("EVOGUARD_AUDIT_ANCHOR_FILE")
+    if not path:
+        return False
+    try:
+        import external_anchor as _ea
+        _ea.ExternalAnchorSink(path).append_event("auto_rollback", payload)
+        return True
+    except Exception:                                  # noqa: BLE001
+        return False
+
+
+def auto_monitor_after_run(store, run_id, *, window=None,
+                           force_on_unauthorized=True, anchor=True):
+    """每次 run 落盘后自动检查该技能是否退化，退化即回滚/止血。
+
+    触发条件（任一）：
+      1) 该 run 出现越权/门禁拦截步骤（`unauthorized > 0`）—— 立即检查；
+      2) 该技能累积运行次数达到窗口（默认 5）—— 定期体检。
+    触发后调用 `monitor_and_rollback`，并把结果写入库外审计锚点。
+    全程 try/except：监控失败绝不影响主运行链路。
+    """
+    win = int(window or AUTO_MONITOR_WINDOW)
+    try:
+        with store.conn() as c:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(runs)")}
+            if "skill_id" not in cols:
+                return {"skipped": "no_skill_id_column"}
+            row = c.execute("SELECT skill_id FROM runs WHERE id=?",
+                            (run_id,)).fetchone()
+        skill_id = row[0] if row else None
+        if not skill_id:
+            return {"skipped": "run_has_no_skill"}
+
+        unauthorized = _count_unauthorized(store, run_id)
+        key = (str(getattr(store, "path", "") or id(store)), str(skill_id))
+        n = int(_AUTO_COUNTS.get(key, 0)) + 1
+        _AUTO_COUNTS[key] = n
+
+        trigger = bool(force_on_unauthorized and unauthorized > 0) or \
+            (n % win == 0)
+        if not trigger:
+            return {"skill_id": skill_id, "checked": False,
+                    "runs_since_check": n, "unauthorized": unauthorized}
+
+        out = monitor_and_rollback(store, skill_id)
+        out.update({"auto": True, "unauthorized": unauthorized,
+                    "runs_since_check": n, "window": win})
+        if anchor:
+            out["anchored"] = _write_auto_anchor({
+                "skill_id": skill_id, "run_id": run_id,
+                "degraded": out.get("degraded"),
+                "rolled_back": out.get("rolled_back"),
+                "disabled": out.get("disabled"),
+                "status": out.get("status"),
+                "reasons": (out.get("reasons") or [])[:4],
+                "unauthorized": unauthorized,
+            })
+        return out
+    except Exception as exc:                           # noqa: BLE001
+        # 监控自身故障不能拖垮业务运行，但要如实返回原因
+        return {"error": "auto_monitor_failed:%s" % type(exc).__name__,
+                "detail": str(exc)[:160]}

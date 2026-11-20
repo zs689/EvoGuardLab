@@ -79,6 +79,34 @@ def loads(text, default=None):
         return default
 
 
+#: EVO-REBUILD-01-T2：最近一次自动监控结果（观测/测试用，不改 run 结构）
+AUTO_MONITOR_LAST = {}
+AUTO_MONITOR_ENV = "EVOGUARD_AUTO_MONITOR"
+
+
+def _auto_monitor(store, rid):
+    """run 落盘后自动体检技能退化。默认开启，`EVOGUARD_AUTO_MONITOR=0` 关闭。
+
+    任何异常都吞掉并留痕：自愈监控不能成为业务运行的新故障点。
+    """
+    off = str(os.environ.get(AUTO_MONITOR_ENV, "1")).strip().lower()
+    if off in ("0", "false", "off", "no"):
+        AUTO_MONITOR_LAST.clear()
+        AUTO_MONITOR_LAST.update({"skipped": "disabled_by_env"})
+        return None
+    try:
+        import skill_synthesis as _ss
+        out = _ss.auto_monitor_after_run(store, rid)
+        AUTO_MONITOR_LAST.clear()
+        AUTO_MONITOR_LAST.update(out or {})
+        return out
+    except Exception as exc:                            # noqa: BLE001
+        AUTO_MONITOR_LAST.clear()
+        AUTO_MONITOR_LAST.update({"error": type(exc).__name__,
+                                  "detail": str(exc)[:160]})
+        return None
+
+
 def as_chain(value):
     """把「策略」统一成 list[str]。
 
@@ -674,7 +702,11 @@ class Store:
                 "ended_at=?,note=? WHERE id=?",
                 (1 if success else 0, dumps(answer), dumps(expect), tokens,
                  latency_ms, now(), note, rid))
-        return self.get_run(rid)
+        run = self.get_run(rid)
+        # EVO-REBUILD-01-T2：run 落盘后自动体检技能退化（无人值守自愈）。
+        # 失败/关闭都不影响主链路，只在模块级留痕供观测。
+        _auto_monitor(self, rid)
+        return run
 
     def list_runs(self, experiment_id):
         with self.conn() as c:
