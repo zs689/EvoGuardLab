@@ -224,7 +224,11 @@ def preflight(cfg, *, agent_type, tool, args, user_goal=None, cid=None,
     if taint_state is not None:
         try:
             import taint as _taint
-            hit = _taint.tainted_argument(tool, args, taint_state)
+            # TAINT-FIX-01-T1：把该工具的契约传下去，让副作用判定走
+            # side_effect/scope 动态读取，而不是硬编码工具名。
+            _c = (contracts or {}).get(tool) if contracts else None
+            hit = _taint.tainted_argument(tool, args, taint_state,
+                                          contract=_c)
             checks.append({"checker": "taint", "status":
                            "hit" if hit else "clean"})
             out["taint"] = {"hit": hit}

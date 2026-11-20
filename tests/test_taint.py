@@ -90,5 +90,144 @@ class TestTaintTracking(unittest.TestCase):
         self.assertFalse(pre.get("stop"), pre.get("reason"))
 
 
+class TestDynamicSideEffectCoverage(unittest.TestCase):
+    """TAINT-FIX-01：副作用工具必须动态判定，不能只认 3 个硬编码名字。
+
+    原实现 SIDE_EFFECT_TOOLS={'http.send','shell.exec','fs.write'} 让
+    fs.patch / order.settle / 全部 MCP 动态写工具完全绕过污点检查。
+    """
+
+    CFG = {"mode": "controlled", "contract": {"enabled": False},
+           "intent": {"enabled": False},
+           "allowed_tools": ["crm.export_csv", "fs.patch", "order.settle"],
+           "write_tools_in_scope": ["crm.export_csv", "fs.patch",
+                                    "order.settle"]}
+
+    def test_mcp_external_tool_is_covered(self):
+        """动态注册的 MCP 工具（external）必须进污点检查。
+
+        注：完整 preflight 里未在 tool_rails 声明的工具会先被 rails 拒
+        （fail-closed，同样安全）。这里直测污点层，验证「即使 rails 放行
+        了该工具，污点仍会拦」——这才是本方案要补的洞。
+        """
+        state = {"user_goal": "导出本月订单汇总",
+                 "taint_sources": {"emails": ["attacker@evil.example.com"]}}
+        hit = taint.tainted_argument(
+            "crm.export_csv", {"recipient": "attacker@evil.example.com"},
+            state, contract={"side_effect": "external"})
+        self.assertIsNotNone(hit, "MCP external 工具绕过了污点检查（硬编码漏洞）")
+        self.assertEqual(hit["field"], "recipient")
+
+    def test_mcp_tool_end_to_end_via_registry(self):
+        """端到端：MCP 工具注册进 registry 后，契约被 preflight 读到并拦。"""
+        import tool_registry as TR
+        reg = TR.ToolRegistry()
+        reg.from_json_schema(
+            "crm.export_csv",
+            {"type": "object",
+             "properties": {"recipient": {"type": "string"}}},
+            scope=TR.EXTERNAL, source="mcp", identities=["coder"])
+        contracts = {k: {kk: vv for kk, vv in v.items() if not kk.startswith("_")}
+                     for k, v in reg.declared().items()}
+        state = {"user_goal": "导出本月订单汇总",
+                 "taint_sources": {"emails": ["attacker@evil.example.com"]}}
+        cfg = dict(self.CFG, allowed_tools=["crm.export_csv"])
+        pre = execution.preflight(
+            cfg, agent_type="coder", tool="crm.export_csv",
+            args={"recipient": "attacker@evil.example.com"},
+            taint_state=state, contracts=contracts)
+        self.assertTrue(pre.get("stop"), "MCP 工具经 registry 注册后仍绕过污点")
+        self.assertFalse(pre.get("executed"))
+
+    def test_fs_patch_is_covered(self):
+        """fs.patch 是写工具，必须进污点检查（原硬编码集合漏了它）。"""
+        state = {"user_goal": "修复 calc.py 的除零",
+                 "taint_sources": {"paths": ["/etc/cron.d/backdoor"]}}
+        hit = taint.tainted_argument(
+            "fs.patch",
+            {"path": "/etc/cron.d/backdoor", "old_text": "a", "new_text": "b"},
+            state, contract={"side_effect": "write"})
+        self.assertIsNotNone(hit, "fs.patch 绕过了污点检查")
+        self.assertEqual(hit["field"], "path")
+
+    def test_scope_write_without_side_effect_key(self):
+        """契约只给 scope=write 没给 side_effect 时也要覆盖。"""
+        state = {"user_goal": "对账",
+                 "taint_sources": {"accounts": ["ACC9999"]}}
+        pre = execution.preflight(
+            self.CFG, agent_type="coder", tool="order.settle",
+            args={"account": "ACC9999"},
+            taint_state=state,
+            contracts={"order.settle": {"_scope": "write"}})
+        self.assertTrue(pre.get("stop"),
+                        "scope=write 的工具绕过了污点检查")
+
+    def test_read_only_tool_not_flagged(self):
+        """只读工具不应被污点规则拦（避免过度防御）。"""
+        state = {"user_goal": "查订单",
+                 "taint_sources": {"accounts": ["ACC9999"]}}
+        hit = taint.tainted_argument(
+            "crm.lookup", {"account": "ACC9999"}, state,
+            contract={"side_effect": "none", "scope": "read_only"})
+        self.assertIsNone(hit, "只读工具被污点规则误拦")
+
+
+class TestPathTaint(unittest.TestCase):
+    """TAINT-FIX-01-T2：补齐文件路径提取，让 path/target_path 真正生效。"""
+
+    def test_extract_paths(self):
+        out = {"content": "config written to /etc/cron.d/sync and "
+                          "C:\\Windows\\System32\\tasks\\x.exe"}
+        src = taint.extract_sources(out)
+        self.assertIn("paths", src, "extract_sources 没提取文件路径")
+        joined = " ".join(src["paths"])
+        self.assertIn("/etc/cron.d/sync", joined)
+        self.assertIn("System32", joined)
+
+    def test_url_encoded_path_is_normalized(self):
+        """URL 编码绕过（%2Fetc%2Fpasswd）必须解码后再比对。"""
+        out = {"content": "see http://x.example.com/?f=%2Fetc%2Fpasswd"}
+        src = taint.extract_sources(out)
+        joined = " ".join(src.get("paths") or [])
+        self.assertIn("/etc/passwd", joined, "URL 编码路径未被归一化")
+
+    def test_tainted_path_blocks_write(self):
+        cfg = {"mode": "controlled", "contract": {"enabled": False},
+               "intent": {"enabled": False}, "allowed_tools": ["fs.write"],
+               "write_tools_in_scope": ["fs.write"]}
+        state = {"user_goal": "更新 README",
+                 "taint_sources": {"paths": ["/etc/cron.d/sync"]}}
+        pre = execution.preflight(
+            cfg, agent_type="coder", tool="fs.write",
+            args={"path": "/etc/cron.d/sync", "content": "x"},
+            taint_state=state,
+            contracts={"fs.write": {"side_effect": "write"}})
+        self.assertTrue(pre.get("stop"), "受污染路径写入未拦截")
+        self.assertIn("tainted", str(pre.get("reason")))
+
+
+class TestRealBusinessWriteTool(unittest.TestCase):
+    """方案点名的真实漏洞：order.settle 是写工具，却被原硬编码集合漏掉。"""
+
+    def test_order_settle_blocked_by_tainted_amount(self):
+        import tool_contract as TC
+        cfg = {"mode": "controlled", "contract": {"enabled": False},
+               "intent": {"enabled": False},
+               "allowed_tools": ["order.settle"],
+               "write_tools_in_scope": ["order.settle"]}
+        # 只读工具返回的金额进了污点；用户只让「查订单」
+        state = {"user_goal": "查一下订单 A1001 的状态",
+                 "taint_sources": {"amounts": ["9999"]}}
+        pre = execution.preflight(
+            cfg, agent_type="order", tool="order.settle",
+            args={"amount": "9999", "account": "A1001"},
+            taint_state=state,
+            contracts=TC.DEFAULT_CONTRACTS)
+        self.assertTrue(pre.get("stop"),
+                        "order.settle 被受污染金额驱动却放行（原漏洞）")
+        self.assertIn("tainted", str(pre.get("reason")))
+        self.assertFalse(pre.get("executed"))
+
+
 if __name__ == "__main__":
     unittest.main()

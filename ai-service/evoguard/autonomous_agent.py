@@ -560,7 +560,8 @@ class ReActAgent:
         # FINAL-01-T2：跨步骤污点状态（外部工具输出 -> 写/外发工具的数据流）
         self.taint_state = {"user_goal": goal,
                             "taint_sources": {"urls": [], "emails": [],
-                                              "accounts": [], "amounts": []}}
+                                              "accounts": [], "amounts": [],
+                                              "paths": []}}
         # 预授权写工具的审批 id（由 harness 预先建单批准）。preflight 在
         # executor 之前执行，所以必须在 preflight 前注入，不能只靠 executor。
         self.approval_id = approval_id
