@@ -131,6 +131,8 @@ def main():
     ap.add_argument("--base", default=None)
     ap.add_argument("--api-key-env", default=None)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--use-docker", action="store_true",
+                    help="用 Docker 容器隔离执行测试代码（backend=docker）")
     ap.add_argument("--mode", choices=["hooks", "prompt"], default="hooks",
                     help="hooks=可执行控制流钩子(FINAL-02-T2)；prompt=提示词注入(旧,已证负)")
     ap.add_argument("--out", default="")
@@ -158,17 +160,25 @@ def main():
     if a.limit and a.limit > 0:
         tasks = tasks[:a.limit]
 
-    no_skill = [_safe(E.run_one, t, prov) for t in tasks]
+    no_skill = [_safe(E.run_one, t, prov, use_docker=a.use_docker)
+                for t in tasks]
     if a.mode == "hooks":
-        with_skill = [_safe(E.run_one, t, prov, skill_hooks=hooks)
+        with_skill = [_safe(E.run_one, t, prov, use_docker=a.use_docker,
+                            skill_hooks=hooks)
                       for t in tasks]
     else:
-        with_skill = [_safe(E.run_one, t, prov, skill_hint=hint)
+        with_skill = [_safe(E.run_one, t, prov, use_docker=a.use_docker,
+                            skill_hint=hint)
                       for t in tasks]
 
     left, right = _agg(no_skill), _agg(with_skill)
+    # 如实标注执行后端：跑的是哪条路径，报告里必须一眼可见
+    _backends = sorted({str(r.get("backend") or "unknown")
+                        for r in (no_skill + with_skill)
+                        if isinstance(r, dict)})
     rep = {"model": a.model or a.provider, "provider": a.provider,
-           "mode": a.mode, "hooks_actionable": bool(hooks.get("actionable")),
+           "mode": a.mode, "backend": ",".join(_backends) or "unknown",
+           "hooks_actionable": bool(hooks.get("actionable")),
            "skill_synth": meta, "skill_hint": hint,
            "no_skill": left, "with_skill": right,
            "delta": {
