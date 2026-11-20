@@ -360,8 +360,12 @@ class DockerCodeSandbox:
                 "docker_daemon_unreachable:%s"
                 % r.stderr.decode("utf-8", "replace")[:120])
 
-    def run(self, code, *, timeout_s=None):
-        """在容器里执行 Python 源码，返回 {ok, stdout, stderr, returncode, ...}。"""
+    def run(self, code, *, timeout_s=None, work_dir=None):
+        """在容器里执行 Python 源码，返回 {ok, stdout, stderr, returncode, ...}。
+
+        `work_dir` 给定时，该目录以**只读**方式挂到 /work 并加入 PYTHONPATH，
+        使容器内的 `import` 能看到 Agent 刚写入的文件（否则只能反复重写）。
+        """
         if not isinstance(code, str) or not code.strip():
             raise DockerSandboxError("empty_code")
         # SBX-SEC-01-T1：并发上限，超限立即拒绝（不排队无限拉容器）
@@ -372,17 +376,28 @@ class DockerCodeSandbox:
                 raise SandboxOverloaded(
                     "sandbox_overloaded：并发容器已达上限 %d" % _MAX_CONCURRENT)
         try:
-            return self._run_inner(code, timeout_s=timeout_s)
+            return self._run_inner(code, timeout_s=timeout_s,
+                                   work_dir=work_dir)
         finally:
             if got and _SANDBOX_SEMAPHORE is not None:
                 _SANDBOX_SEMAPHORE.release()
 
-    def _run_inner(self, code, *, timeout_s=None):
+    def _run_inner(self, code, *, timeout_s=None, work_dir=None):
         import subprocess as _sp
         import tempfile
         import uuid
         limit = float(timeout_s or self.timeout_s)
         name = "evo-sbx-" + uuid.uuid4().hex[:12]
+        mounts = []
+        if work_dir:
+            # DOCKER-OPT-01：把 Agent 实际改动的受控工作目录**只读**挂进
+            # /work，否则 Agent 改完文件后无法在容器里 import 验证 ——
+            # 它只能反复重写同一段代码，最终被 loop_guard 熔断。
+            # 隔离边界不变：仍然 --read-only / --network=none / 非 root，
+            # 工作目录挂载为 :ro，容器不可能写穿宿主机。
+            root = os.path.realpath(work_dir)
+            if os.path.isdir(root):
+                mounts = ["-v", root + ":/work:ro", "-w", "/work"]
         with tempfile.TemporaryDirectory(prefix="evo-sbx-") as tmp:
             script = os.path.join(tmp, "script.py")
             with open(script, "w", encoding="utf-8", newline="\n") as f:
@@ -395,10 +410,16 @@ class DockerCodeSandbox:
                 "--security-opt", "no-new-privileges",
                 # SBX-SEC-01-T1：非 root（nobody）+ 受限 tmpfs
                 "--user", "65534:65534",
-                "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m",
-                "-v", script + ":/work/script.py:ro",
-                "-w", "/work", self.image,
-                "python", "/work/script.py",
+                # 只读工作区里不能写 __pycache__（会抛 PermissionError
+                # 掩盖真实错误）；包路径要指向只读挂载的 /work。
+                "-e", "PYTHONDONTWRITEBYTECODE=1",
+                "-e", "PYTHONPATH=/work",
+                "-e", "HOME=/tmp",
+                "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m",
+            ] + mounts + [
+                "-v", script + ":/opt/script.py:ro",
+                self.image,
+                "python", "/opt/script.py",
             ]
             try:
                 r = _sp.run(cmd, capture_output=True, timeout=limit, check=False)
@@ -587,7 +608,9 @@ def register_coding_tools(registry, *, root, docker_sandbox=None):
         if tool == "code.run_in_sandbox":
             if docker_sandbox is None:
                 return {"error": "docker_sandbox_unavailable"}
-            r = docker_sandbox.run(str(args.get("code") or ""))
+            # DOCKER-OPT-01：带上受控工作目录（只读挂载），让容器内的
+            # import 能看到 Agent 刚写入的文件。
+            r = docker_sandbox.run(str(args.get("code") or ""), work_dir=root)
             return {"stdout": r.get("stdout", ""), "stderr": r.get("stderr", ""),
                     "returncode": r.get("returncode"), "ok": r.get("ok")}
         return {"error": "unknown_tool:" + tool}

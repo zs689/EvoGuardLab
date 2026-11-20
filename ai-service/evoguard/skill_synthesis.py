@@ -107,14 +107,21 @@ def _stderr_of(step):
 _NAMING_EV = re.compile(r"KeyError:\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]")
 _ATTR_EV = re.compile(r"AttributeError:.*?['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]")
 _PAGING_EV = re.compile(
-    r"(?:offset|page|per_?page|page_?size).{0,80}?"
-    r"(?:>=\s*1|must be\b|invalid|out of range|422)", re.I | re.S)
+    r"(?:offset|page|per_?page|page_?size|\bsize\b).{0,80}?"
+    r"(?:>=\s*1|must|invalid|out of range|422|start at 1|clamp)", re.I | re.S)
 _TZ_EV = re.compile(
     r"(?:timezone|tzinfo|iso\s*8601|invalid date|naive datetime|"
-    r"date format|tz-aware)", re.I)
+    r"date format|tz-aware|ending with z)", re.I)
 _CFG_EV = re.compile(
     r"(?:yaml|toml|json|ini|env).{0,60}?(?:parse|decode|scan|format).{0,30}?error",
     re.I | re.S)
+# EVO-BENCH-01：金额「单位」约定（分 vs 元）——预训练里没有哪个是默认。
+_UNIT_EV = re.compile(
+    r"(?:cents|centavos|divide by 100|convert to yuan|unit mismatch)", re.I)
+# 多登记处耦合：声明与校验表必须同步，只改一处会静默失效。
+_COUPLING_EV = re.compile(
+    r"(?:whitelist|allowlist|\ballowed\b|required table|not treated like|"
+    r"missing from|must also|must be added to|sync(?:hronize)? with)", re.I)
 
 
 _CODEY = ("import ", "def ", "exec(", "eval(", "__", "os.", "sys.",
@@ -195,16 +202,24 @@ def extract_env_invariants(fail_steps, repair_steps=None, env_spec=None):
     # 3) 分页约定
     m = _PAGING_EV.search(blob)
     if m:
+        ev = m.group(0)
+        mm = re.search(r"clamp(?:ed)? to (\d+)", blob, re.I)
+        lim = mm.group(1) if mm else "存在上限"
         _add("pagination",
-             "本项目分页参数从 1 开始且存在上限，越界会被服务端拒绝",
-             m.group(0))
+             "本项目分页从 1 开始计页，每页最多 %s 条，超过必须截断" % lim,
+             ev)
 
     # 4) 时区/日期格式约定
     m = _TZ_EV.search(blob)
     if m:
+        ev = m.group(0)
+        # 证据里出现「以 Z 结尾/ending with Z」时，把这条具体写进规约
+        ztail = ""
+        if re.search(r"ending with z|ends? with z", blob, re.I):
+            ztail = "，且字符串必须以 Z 结尾"
         _add("timezone",
-             "日期时间必须带时区并按 ISO 8601 传输（UTC），不接受 naive datetime",
-             m.group(0))
+             "日期时间必须带时区并按 ISO 8601 传输（UTC）%s，"
+             "不接受 naive datetime" % ztail, ev)
 
     # 5) 配置格式约定
     m = _CFG_EV.search(blob)
@@ -212,6 +227,33 @@ def extract_env_invariants(fail_steps, repair_steps=None, env_spec=None):
         _add("config_format",
              "配置必须是本项目既定格式并可被严格解析，缩进/引号错误直接失败",
              m.group(0))
+
+    # 6) 金额单位约定（分 vs 元）
+    m = _UNIT_EV.search(blob)
+    if m:
+        _add("unit",
+             "金额对外单位与本项目内部一致（分），不要做除以 100 的元换算",
+             m.group(0))
+
+    # 7) 多登记处耦合
+    m = _COUPLING_EV.search(blob)
+    if m:
+        ev = m.group(0)
+        # 证据里点名了哪个登记处就写哪个，避免「白名单」这类泛称对不上代码
+        named = []
+        for name in ("FIELDS", "REQUIRED", "ALLOWED", "VALID_FIELDS"):
+            if name in blob:
+                named.append(name)
+        if "REQUIRED" in named and "FIELDS" in named:
+            rule = ("新字段必须同时登记到 FIELDS 与 REQUIRED 两处"
+                    "（REQUIRED 控制必填校验），只改 FIELDS 会放行空值")
+        elif named:
+            rule = ("同一字段在 %s 多处登记，必须全部同步，"
+                    "只改一处会静默失效" % "/".join(named[:3]))
+        else:
+            rule = ("同一字段有多个登记处（声明与校验表），必须全部同步，"
+                    "只改一处会静默失效")
+        _add("coupling", rule, ev)
 
     return invs[:4]
 

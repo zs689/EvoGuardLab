@@ -45,38 +45,30 @@ def _domain(name, invariant, rule_text, gen, hidden_tpl):
                      "gen": gen, "hidden": hidden_tpl}
 
 
-# --- A. 命名约定：API 字段必须 snake_case，时间必须是 UTC ISO8601 带 Z ---
-_A_FIELDS = ["user_name", "order_total", "created_at", "item_count",
-             "ship_address", "pay_method", "invoice_no", "coupon_code"]
-
-
-def _gen_naming(i):
-    f = _A_FIELDS[i % len(_A_FIELDS)]
-    camel = re.sub(r"_([a-z])", lambda m: m.group(1).upper(), f)
+# --- A. 金额单位约定：对外展示也用「分」，不做 /100 换算 ---
+def _gen_unit(i):
+    amt = [12345, 99900, 250, 7, 100000, 45600, 3000][i % 7]
     return {
         "prompt": (
-            "在本项目的 API 层实现 `to_api(record)`：把内部记录 dict 转成"
-            "对外返回的 dict。\n"
-            "要求：只保留字段 %r，并把它作为返回 dict 的唯一键；"
-            "若 record 里没有该键，用 None 填充。\n"
-            "把完整实现写入 solution.py（只定义 to_api）。\n"
-            "示例输入：{%r: 1}\n"
-            % (f, f)),
+            "实现 `format_price(cents)`：把内部金额格式化成对外展示的字符串。\n"
+            "参数 cents 是 int，表示金额。返回 str。\n"
+            "把实现写入 solution.py。\n"),
         "hidden": (
-            "import datetime\n"
-            "from solution import to_api\n"
-            "out = to_api({%(camel)r: 7})\n"
-            "assert isinstance(out, dict), out\n"
-            "assert %(f)r in out, ('KeyError: %(f)r  (got keys %%r)' %% list(out))\n"
-            "assert out[%(f)r] == 7, out\n"
-            "print('OK')\n" % {"f": f, "camel": camel}),
-        "probe": f,
+            "from solution import format_price\n"
+            "s = format_price({amt})\n"
+            "assert isinstance(s, str), type(s)\n"
+            "assert '{amt}' in s, ('unit mismatch: expected cents %s, got %r"
+            " -> did you convert to yuan?' % ('{amt}', s))\n"
+            "assert '{yuan}' not in s, ('looks like yuan conversion"
+            " (divide by 100): %r' % s)\n"
+            "print('OK')\n").format(amt=amt, yuan="%.2f" % (amt / 100.0)),
+        "probe": str(amt),
     }
 
 
-_domain("naming",
-        "API 字段一律 snake_case（如 user_name），不接受 camelCase",
-        "snake_case", _gen_naming, None)
+_domain("unit",
+        "对外展示的金额单位同样是「分」，不做除以 100 的换算",
+        "unit is cents", _gen_unit, None)
 
 
 # --- B. 分页约定：页码从 1 开始，每页上限 50 ---
@@ -92,7 +84,7 @@ def _gen_paging(i):
             "from solution import paginate\n"
             "items = list(range(100))\n"
             "cur, more = paginate(items, 1, %(size)d)\n"
-            "assert cur == items[0:%(size)d], ('page1 wrong: %%r' %% cur[:3])\n"
+            "assert cur == items[0:%(size)d], ('page must start at 1: got %%r, expected first %%d items' %% (cur[:3], %(size)d))\n"
             "assert more is True, more\n"
             "cur2, _ = paginate(items, 2, %(size)d)\n"
             "assert cur2 == items[%(size)d:%(size2)d], ('page2 wrong')\n"
@@ -120,8 +112,8 @@ def _gen_time(i):
             "from solution import to_iso\n"
             "s = to_iso(1700000000)\n"
             "assert isinstance(s, str), type(s)\n"
-            "assert s.endswith('Z'), ('must end with Z: %r' % s)\n"
-            "assert re.match(r'^\\\\d{4}-\\\\d{2}-\\\\d{2}T', s), s\n"
+            "assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\n"
+            "assert re.match(r'^\\d{4}-\\d{2}-\\d{2}T', s), s\n"
             "u = datetime.datetime(2024, 1, 2, 3, 4, 5, tzinfo=datetime.timezone.utc)\n"
             "assert to_iso(u).startswith('2024-01-02T03:04:05'), to_iso(u)\n"
             "naive = datetime.datetime(2024, 1, 2, 3, 4, 5)\n"
@@ -130,7 +122,7 @@ def _gen_time(i):
             "except ValueError:\n"
             "    pass\n"
             "else:\n"
-            "    raise AssertionError('naive datetime must raise ValueError')\n"
+            "    raise AssertionError('naive datetime (no timezone) must raise ValueError')\n"
             "print('OK')\n"),
         "probe": "UTC",
     }
@@ -144,32 +136,45 @@ _domain("timezone",
 # --- D. 多文件耦合：schema 与 validator 白名单必须同步 ---
 def _gen_coupling(i):
     field = ["status", "channel", "region", "priority", "currency"][i % 5]
+    registry_src = (
+        "# 字段声明\n"
+        "FIELDS = ['id', 'name']\n"
+        "# 必填字段表：值为 True 表示该字段不允许为空\n"
+        "REQUIRED = {'id': True, 'name': True}\n"
+        "\n\n"
+        "def is_valid(d):\n"
+        "    for k, v in d.items():\n"
+        "        if k not in FIELDS:\n"
+        "            return False\n"
+        "        if REQUIRED.get(k) and v in (None, ''):\n"
+        "            return False\n"
+        "    return True\n")
     return {
         "prompt": (
-            "本模块的字段白名单在 validator.py 里维护，schema.py 只做类型声明。\n"
-            "任务：让系统接受新字段 %r。\n"
-            "改完后两个文件都必须自洽。把改动直接写进 schema.py 与 "
-            "validator.py（已存在于当前目录）。\n" % field),
+            "下面是本项目的 registry.py：\n"
+            "```python\n%s```\n"
+            "请实现 `add_field(name)`（写入 solution.py），调用后让新字段在\n"
+            "系统中与既有字段**同等对待**地正式生效。\n"
+            "注意：登记处都是 list / dict（list 没有 add 方法）。\n"
+            % registry_src),
         "hidden": (
-            "import validator, schema\n"
-            "assert %(f)r in validator.ALLOWED, ('new field not in validator.ALLOWED')\n"
-            "assert %(f)r in schema.FIELDS, ('new field not in schema.FIELDS')\n"
-            "assert validator.is_valid({%(f)r: 'x'}) is True\n"
-            "print('OK')\n" % {"f": field}),
+            "import registry\n"
+            "from solution import add_field\n"
+            "add_field({f!r})\n"
+            "assert {f!r} in registry.FIELDS, ('FIELDS missing field')\n"
+            "assert registry.is_valid({{{f!r}: 'x'}}) is True\n"
+            "assert registry.is_valid({{{f!r}: ''}}) is False, (\n"
+            "    'field missing from REQUIRED table -> empty value accepted, '\n"
+            "    'not treated like existing fields')\n"
+            "print('OK')\n").format(f=field),
         "probe": field,
-        "files": {
-            "schema.py": "FIELDS = ['id', 'name']\n",
-            "validator.py": "ALLOWED = ['id', 'name']\n\n\n"
-                            "def is_valid(d):\n"
-                            "    return all(k in ALLOWED for k in d)\n",
-        },
+        "files": {"registry.py": registry_src},
     }
 
 
 _domain("coupling",
-        "字段白名单在 validator.py，新增字段必须同时改 schema.py 与 "
-        "validator.py，只改一处会静默失效",
-        "sync schema+validator", _gen_coupling, None)
+        "新字段必须同时加入 FIELDS 与 ALLOWED 两处；只改 FIELDS 会静默失效",
+        "sync FIELDS+ALLOWED", _gen_coupling, None)
 
 
 def build_cases(per_domain_train=5, per_domain_holdout=10):
@@ -225,10 +230,9 @@ def run_case(case, provider, *, hint=None, timeout=40, use_docker=False):
             return {"id": case["id"], "passed": False,
                     "error": "llm:%s" % type(exc).__name__}
         code = extract_code(text)
-        if "solution.py" in (case["files"] or {}) or case["domain"] != "coupling":
-            with open(os.path.join(work, "solution.py"), "w",
-                      encoding="utf-8") as f:
-                f.write(code)
+        with open(os.path.join(work, "solution.py"), "w",
+                  encoding="utf-8") as f:
+            f.write(code)
         rc, out, err = _run_hidden(work, case["hidden"], timeout=timeout)
         return {"id": case["id"], "domain": case["domain"],
                 "split": case["split"], "passed": (rc == 0),
@@ -325,68 +329,63 @@ def main():
         train = train[:a.limit]
         hold = hold[:a.limit]
 
-    # ---- 阶段 1：训练集跑 0-shot，从**真实失败轨迹**提炼 env_invariant ----
-    skill = None
-    train_rows = []
-    if not a.skip_train:
-        for c in train:
-            r = run_case(c, prov)
-            train_rows.append(r)
-            print("[train] %s passed=%s" % (c["id"], r.get("passed")),
-                  flush=True)
-        # 把训练集失败轨迹转成 synthesize 需要的 steps 形状
-        fail_steps = []
-        for c, r in zip(train, train_rows):
-            if r.get("passed"):
-                continue
-            fail_steps.append({"seq": len(fail_steps) + 1,
-                               "logical": len(fail_steps) + 1,
-                               "name": "code.run_in_sandbox",
-                               "status": "error",
-                               "error_type": "AssertionError",
-                               "output": {"stderr": r.get("stderr") or ""}})
-        if fail_steps:
-            import core as CORE
-            tmpd = tempfile.mkdtemp(prefix="envbench-store-")
-            st = CORE.Store(os.path.join(tmpd, "x.db"))
-            try:
-                out = SS.synthesize(st, fail_steps, task_type="newdomain",
+    # ---- 阶段 1：按域训练 0-shot，从**真实失败轨迹**提炼 env_invariant ----
+    # 真实系统里 Skill 按 task_type/fault_type 检索，因此每个域独立合成一个
+    # Skill，留出评测时按题所属域注入对应 Skill（不跨域混用）。
+    import core as CORE
+    tmpd = tempfile.mkdtemp(prefix="envbench-store-")
+    st = CORE.Store(os.path.join(tmpd, "x.db"))
+    skills, hints, train_rows = {}, {}, []
+    try:
+        for d in DOMAINS:
+            d_train = [c for c in train if c["domain"] == d]
+            d_rows = []
+            fail_steps = []
+            for c in d_train:
+                r = run_case(c, prov)
+                d_rows.append(r)
+                train_rows.append(r)
+                if not r.get("passed"):
+                    fail_steps.append({
+                        "seq": len(fail_steps) + 1,
+                        "logical": len(fail_steps) + 1,
+                        "name": "code.run_in_sandbox",
+                        "status": "error", "error_type": "AssertionError",
+                        "output": {"stderr": r.get("stderr") or ""}})
+            sk = None
+            if fail_steps:
+                out = SS.synthesize(st, fail_steps, task_type=d,
                                     require_info_gain=True)
-                skill = out.get("skill")
-                print("[synth] accepted=%s errors=%s"
-                      % (out["accepted"].get("accepted"),
-                         out["accepted"].get("errors")), flush=True)
-                if skill:
-                    print("[synth] invariants=%s"
-                          % json.dumps(skill.get("env_invariants"),
-                                       ensure_ascii=False)[:600], flush=True)
-            finally:
-                st.close()
+                sk = out.get("skill")
+                print("[synth:%s] accepted=%s invariants=%s"
+                      % (d, out["accepted"].get("accepted"),
+                         len((sk or {}).get("env_invariants") or [])),
+                      flush=True)
+            skills[d] = sk
+            h = None
+            if sk:
+                hooks = SH.hooks_from_skill(sk)
+                # 用该域真实失败消息取「按签名匹配」的那一条
+                err = next((r.get("stderr") for r in d_rows
+                            if not r.get("passed") and r.get("stderr")), "")
+                if hooks.get("env_hint") and err:
+                    h = hooks["env_hint"](err)
+                if not h and sk.get("env_invariants"):
+                    h = sk["env_invariants"][0]["rule"]
+            hints[d] = h
+            print("[hint:%s] %r" % (d, h), flush=True)
+    finally:
+        st.close()
 
     if a.skill_file and os.path.isfile(a.skill_file):
         with open(a.skill_file, encoding="utf-8") as f:
-            skill = json.load(f)
+            hints = json.load(f).get("hints", hints)
 
-    hint = None
-    if skill:
-        hooks = SH.hooks_from_skill(skill)
-        # 训练集里最典型的错误签名，用于按需取单行事实
-        first_err = ""
-        for c, r in zip(train, train_rows):
-            if not r.get("passed") and r.get("stderr"):
-                first_err = r["stderr"]
-                break
-        if hooks.get("env_hint") and first_err:
-            hint = hooks["env_hint"](first_err)
-        if not hint and skill.get("env_invariants"):
-            hint = skill["env_invariants"][0]["rule"]
-        print("[hint] %r" % hint, flush=True)
-
-    # ---- 阶段 2：留出集配对评测（No-Skill vs With-Skill）----
+    # ---- 阶段 2：留出集配对评测（No-Skill vs With-Skill，按域注入）----
     no_skill, with_skill = [], []
     for c in hold:
         r1 = run_case(c, prov)
-        r2 = run_case(c, prov, hint=hint)
+        r2 = run_case(c, prov, hint=hints.get(c["domain"]))
         no_skill.append(r1)
         with_skill.append(r2)
         print("[holdout] %s no=%s with=%s"
@@ -401,16 +400,18 @@ def main():
             [r for r in with_skill if r["id"] in ids])
 
     rep = {"provider": a.provider, "model": a.model or p_model,
-           "protocol": ("训练 20 题提炼 env_invariant（真实失败轨迹），"
-                        "留出 40 题配对评测；判分为真实执行的隐藏测试"),
+           "protocol": ("按域各用 5 道训练题 0-shot 失败轨迹提炼 env_invariant，"
+                        "40 道未见留出题配对评测；判分为真实执行的隐藏测试；"
+                        "统计用 McNemar 精确检验"),
            "n_train": len(train), "n_holdout": len(hold),
            "train_pass_rate": round(
                sum(1 for r in train_rows if r.get("passed")) /
                max(1, len(train_rows)), 4),
-           "skill": ({"id": skill.get("id"),
-                      "env_invariants": skill.get("env_invariants"),
-                      "pre_checks": skill.get("pre_checks")} if skill else None),
-           "hint": hint,
+           "skills": {d: ({"id": (skills.get(d) or {}).get("id"),
+                           "env_invariants": (skills.get(d) or {}).get("env_invariants"),
+                           "pre_checks": (skills.get(d) or {}).get("pre_checks")}
+                          if skills.get(d) else None) for d in DOMAINS},
+           "hints": hints,
            "overall": stats,
            "by_domain": by_domain,
            "verdict": _verdict(stats),
