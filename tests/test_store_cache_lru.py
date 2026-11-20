@@ -22,20 +22,29 @@ import app as APP                                            # noqa: E402
 
 
 class TestStoreCacheLRU(unittest.TestCase):
+    @staticmethod
+    def _sync(name, value):
+        """FINAL-04-T1：app 的符号来自 app_core；改测试配置要同步改源模块。"""
+        import app_core as CORE
+        setattr(APP, name, value)
+        setattr(CORE, name, value)
+
     def setUp(self):
+        import app_core as CORE
         self._old_max = APP._STORE_CACHE_MAX
         self._old_root = APP.TENANT_DB_ROOT
         self.tmp = tempfile.mkdtemp(prefix="evo-store-lru-")
-        APP.TENANT_DB_ROOT = self.tmp
+        self._sync("TENANT_DB_ROOT", self.tmp)
+        # _STORES 是同一个 dict 对象，clear 一次即可
         APP._STORES.clear()
 
     def tearDown(self):
         APP._STORES.clear()
-        APP._STORE_CACHE_MAX = self._old_max
-        APP.TENANT_DB_ROOT = self._old_root
+        self._sync("_STORE_CACHE_MAX", self._old_max)
+        self._sync("TENANT_DB_ROOT", self._old_root)
 
     def test_lru_evicts_least_recently_used(self):
-        APP._STORE_CACHE_MAX = 2
+        self._sync("_STORE_CACHE_MAX", 2)
         APP.get_store("t1")
         APP.get_store("t2")
         # 命中 t1，把它刷成最近使用；此时 LRU 顺序 [t2, t1]
@@ -52,7 +61,7 @@ class TestStoreCacheLRU(unittest.TestCase):
         self.assertLessEqual(len(APP._STORES), 2)
 
     def test_default_store_never_evicted(self):
-        APP._STORE_CACHE_MAX = 1
+        self._sync("_STORE_CACHE_MAX", 1)
         default_key = APP.tenant_db_path("default")
         APP.get_store("default")
         for i in range(5):
@@ -62,7 +71,7 @@ class TestStoreCacheLRU(unittest.TestCase):
         self.assertLessEqual(len(APP._STORES), 2, "非 default 条目仍受上限约束")
 
     def test_zero_means_unbounded(self):
-        APP._STORE_CACHE_MAX = 0
+        self._sync("_STORE_CACHE_MAX", 0)
         for i in range(5):
             APP.get_store("tenant%d" % i)
         self.assertEqual(len(APP._STORES), 5)

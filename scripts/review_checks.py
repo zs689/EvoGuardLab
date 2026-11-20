@@ -29,6 +29,17 @@ sys.path.insert(0, EVO)
 
 
 def _read(rel):
+    # FINAL-04-T1：app.py 已拆成 app_core/routes_agent/routes_enterprise。
+    # 静态门禁检查的是「接线是否存在」，读合并源码即可，语义不变。
+    if rel == "ai-service/api/app.py":
+        parts = []
+        for name in ("app.py", "app_core.py", "routes_agent.py",
+                     "routes_enterprise.py"):
+            p = os.path.join(ROOT, "ai-service", "api", name)
+            if os.path.isfile(p):
+                with io.open(p, encoding="utf-8") as f:
+                    parts.append(f.read())
+        return "\n".join(parts)
     with io.open(os.path.join(ROOT, rel), encoding="utf-8") as f:
         return f.read()
 

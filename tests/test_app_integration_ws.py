@@ -159,11 +159,16 @@ class TestGrepWiring(unittest.TestCase):
     """静态断言：新模块在主入口里确有真实调用（防回退成孤岛）。"""
 
     def test_app_imports_new_modules(self):
-        with open(os.path.join(ROOT, "ai-service", "api", "app.py"),
-                  encoding="utf-8") as f:
-            src = f.read()
+        # FINAL-04-T1：app.py 已拆分为 app_core/routes_agent/routes_enterprise，
+        # 接线证明读取拆分后的全部模块源码（接口未变，只是源码位置移动）。
+        src = ""
+        for name in ("app.py", "app_core.py", "routes_agent.py",
+                     "routes_enterprise.py"):
+            with open(os.path.join(ROOT, "ai-service", "api", name),
+                      encoding="utf-8") as f:
+                src += f.read()
         for mod in ("autonomous_agent", "skill_synthesis", "redis_backend"):
-            self.assertIn(mod, src, "app.py 没有引用 %s" % mod)
+            self.assertIn(mod, src, "拆分后的模块没有引用 %s" % mod)
 
     def test_rails_enable_evidence_grounding(self):
         import tool_rails as TR

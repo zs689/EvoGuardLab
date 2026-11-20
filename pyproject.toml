@@ -52,7 +52,10 @@ include-package-data = false
 # 可变数据（业务库、实验输出）一律不进 wheel，写到用户指定目录或当前目录。
 [tool.setuptools.data-files]
 "share/evoguardlab/scripts" = ["scripts/defense_demo.py"]
-"share/evoguardlab/api" = ["ai-service/api/app.py"]
+"share/evoguardlab/api" = ["ai-service/api/app.py",
+                           "ai-service/api/app_core.py",
+                           "ai-service/api/routes_agent.py",
+                           "ai-service/api/routes_enterprise.py"]
 "share/evoguardlab/frontend" = ["frontend/index.html"]
 "share/evoguardlab/config" = ["config/thresholds_v1.json",
                               "config/thresholds_v2_calibrated.json"]

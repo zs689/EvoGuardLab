@@ -671,6 +671,10 @@ class ResilientProvider(Provider):
                  queue_timeout=2.0, name=None):
         self.inner = inner
         self.name = name or getattr(inner, "name", type(inner).__name__)
+        # 能力标志必须穿透包装层，否则 Agent 侧 getattr(provider,
+        # "supports_tools") 恒为 False，原生 tool_calls 永远走不到。
+        self.supports_tools = bool(getattr(inner, "supports_tools", False))
+        self.is_mock = bool(getattr(inner, "is_mock", False))
         if breaker is None:
             from enterprise import resilience as R
             breaker = R.CircuitBreaker(

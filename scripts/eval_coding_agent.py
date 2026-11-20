@@ -268,7 +268,7 @@ def _make_gate(work):
 
 
 def run_one(task, provider, *, reflect, use_docker=False, max_steps=12,
-            skill_hint=None):
+            skill_hint=None, skill_hooks=None):
     work = tempfile.mkdtemp(prefix="evo-eval-%s-" % task["id"])
     _write_files(work, task["files"])
     reg = TR.ToolRegistry()
@@ -284,10 +284,27 @@ def run_one(task, provider, *, reflect, use_docker=False, max_steps=12,
                       replace=True)
     store, aid = _make_gate(work)
 
+    # Docker 不可用时，用本地子进程跑测试代码（仅限评测脚本的受控临时目录）。
+    # 这是**诚实降级**：报告里 backend 标为 local-subprocess，不冒充容器隔离。
+    local_backend = [False]
+    if docker is None and not use_docker:
+        local_backend[0] = True
+
     def executor(tool, args):
         if tool == "fs.write":
             args = dict(args)
             args.setdefault("approval_request_id", aid)
+        if tool == "code.run_in_sandbox" and local_backend[0]:
+            code = str(args.get("code") or "")
+            try:
+                r = subprocess.run([sys.executable, "-c", code], cwd=work,
+                                   capture_output=True, timeout=30, check=False)
+                return {"stdout": r.stdout.decode("utf-8", "replace")[:4000],
+                        "stderr": r.stderr.decode("utf-8", "replace")[:2000],
+                        "returncode": r.returncode, "ok": r.returncode == 0}
+            except subprocess.TimeoutExpired:
+                return {"stdout": "", "stderr": "timeout",
+                        "returncode": -1, "ok": False}
         return ex(tool, args)
 
     goal = (task["task"] + "\n可用工具：fs.read(path) / fs.write(path,content) / "
@@ -298,20 +315,30 @@ def run_one(task, provider, *, reflect, use_docker=False, max_steps=12,
         goal=goal,
         provider=provider, registry=reg, executor=executor,
         agent_type="coder", enforce=True, has_approval_backend=True,
-        self_reflect=reflect, max_steps=max_steps)
+        self_reflect=reflect, max_steps=max_steps,
+        approval_id=aid, skill_hooks=skill_hooks)
     try:
         out = agent.run()
     except Exception as exc:                                # noqa: BLE001
         out = {"steps": [], "stopped_by": "agent_error:%s"
-               % type(exc).__name__}
+               % type(exc).__name__,
+               "error_detail": "%s %s" % (
+                   getattr(exc, "code", ""), str(exc)[:200])}
     passed, err = _run_hidden(work, task["hidden"])
     attack_steps = [s for s in out.get("steps", [])
                     if s.get("tool") in ATTACK_TOOLS]
     attack_exec = sum(1 for s in attack_steps if s.get("executed"))
     store.close()
     return {"id": task["id"], "kind": task.get("kind"),
+            "backend": ("docker" if docker else
+                        "local-subprocess" if local_backend[0] else "unavailable"),
             "passed": bool(passed), "hidden_stderr": err,
             "stopped_by": out.get("stopped_by"),
+            "error_detail": out.get("error_detail"),
+            "deny_reason": next((str((s.get("preflight") or {}).get("reason")
+                                     or s.get("reason"))[:150]
+                                 for s in out.get("steps", [])
+                                 if s.get("kind") == "denied"), None),
             "steps_used": len(out.get("steps", [])),
             "attack_attempted": len(attack_steps),
             "attack_executed": attack_exec,
@@ -346,9 +373,11 @@ def _emit(rep, out_path):
     text = json.dumps(rep, ensure_ascii=False, indent=2)
     print(text)
     if out_path:
+        import redact as _redact
+        clean = _redact.redact(text)
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         with io.open(out_path, "w", encoding="utf-8", newline="\n") as f:
-            f.write(text + "\n")
+            f.write(clean + "\n")
 
 
 def main():
@@ -374,12 +403,18 @@ def main():
                "results": [row]}, a.out)
         return 0
 
+    # 按 provider 名查预设，自动带出 key 环境变量/base/model；显式参数覆盖。
+    # 否则 --provider deepseek 会发无鉴权请求吃 401，被误记成 agent_error。
+    pre = GW.PROVIDER_PRESETS.get((a.provider or "").lower())
+    p_backend, p_base, p_keyenv, p_model, p_tools = pre if pre else (
+        a.provider or "ollama", a.base, a.api_key_env, a.model, False)
+    st = os.environ.get("EVOGUARD_MODEL_SUPPORTS_TOOLS")
     spec = GW.ProviderSpec(
-        backend=a.provider or "ollama", base_url=a.base, model=a.model,
-        api_key_env=a.api_key_env,
-        supports_tools=str(os.environ.get("EVOGUARD_MODEL_SUPPORTS_TOOLS", ""))
-        .lower() in ("1", "true", "on"))
-    prov = GW.get_provider(force=a.provider, spec=spec)
+        backend=p_backend, base_url=a.base or p_base, model=a.model or p_model,
+        api_key_env=a.api_key_env or p_keyenv,
+        supports_tools=(str(st).lower() in ("1", "true", "on")
+                        if st is not None else bool(p_tools)))
+    prov = GW.get_provider(force=p_backend, spec=spec)
 
     tasks = _all_tasks()
     if a.limit and a.limit > 0:

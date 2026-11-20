@@ -101,6 +101,39 @@ def _detect_repetition(text, *, min_repeat=3, window=24):
     return text.count(tail) >= min_repeat
 
 
+def tool_name_for_model(name):
+    """工具名适配模型协议：把 `fs.read` -> `fs_read`（点号不合法）。
+
+    多家 API（DeepSeek/OpenAI）要求 tool name 匹配 ^[a-zA-Z0-9_-]+$，
+    但本系统工具名带命名空间点号。发送前转换，返回时反解。
+    """
+    return str(name).replace(".", "_")
+
+
+def tool_name_from_model(name, registry=None, agent_type=None):
+    """把模型返回的 tool name 还原成本系统真实名。"""
+    raw = str(name or "")
+    try:
+        names = sorted((registry.allowed_tools(agent_type)
+                        if registry else []) or [])
+    except Exception:                                       # noqa: BLE001
+        names = []
+    for n in names:
+        if tool_name_for_model(n) == raw:
+            return n
+    # 兜底：只在无下划线版本唯一时还原
+    return raw.replace("_", ".", 1) if "." not in raw else raw
+
+
+def _normalize_tool_name(obj, registry, agent_type):
+    """模型输出里的 tool 名统一还原（原生/文本两条路径都走这里）。"""
+    if not isinstance(obj, dict) or not obj.get("tool"):
+        return obj
+    obj = dict(obj)
+    obj["tool"] = tool_name_from_model(obj["tool"], registry, agent_type)
+    return obj
+
+
 def _tools_spec(registry, agent_type):
     """把 registry 里该 Agent 的工具转成 OpenAI `tools` 数组（原生调用用）。"""
     declared = registry.declared() or {}
@@ -111,10 +144,19 @@ def _tools_spec(registry, agent_type):
     out = []
     for name in names:
         d = declared.get(name) or {}
-        props = {k: {"type": "string"} for k in (d.get("param_keys") or [])}
+        pkeys = list(d.get("param_keys") or [])
+        props = {k: {"type": "string"} for k in pkeys}
+        required = [k for k in (d.get("required") or []) if k in pkeys]
+        # 没有显式 required 时，param_keys 全部视为必填（工具契约要求）；
+        # 否则模型会生成空 arguments（DeepSeek 实测），工具调用必然失败。
+        if not required:
+            required = pkeys
         out.append({"type": "function", "function": {
-            "name": name, "description": "tool %s" % name,
-            "parameters": {"type": "object", "properties": props}}})
+            "name": tool_name_for_model(name),
+            "description": "%s — params: %s" % (name, ", ".join(pkeys)),
+            "parameters": {"type": "object", "properties": props,
+                           "required": required,
+                           "additionalProperties": False}}})
     return out
 
 
@@ -146,8 +188,18 @@ def _model_call(provider, messages, max_tokens=1024, *,
     # 原生 tool_calls：转成下游统一的 {tool,args} 结构
     if calls:
         first = calls[0]
-        obj = {"thought": "", "tool": first.get("name"),
-               "args": first.get("args") or {},
+        call_args = first.get("args") or {}
+        # 有些模型把 prompt-JSON 的壳套进原生 arguments（{"args":{...}}），
+        # 解包一层，否则工具收到嵌套参数 -> 契约判无 path 而拒绝。
+        if (isinstance(call_args, dict) and set(call_args) == {"args"}
+                and isinstance(call_args.get("args"), dict)):
+            call_args = call_args["args"]
+        if not isinstance(call_args, dict):
+            call_args = {}
+        obj = {"thought": "",
+               "tool": tool_name_from_model(first.get("name"),
+                                            registry, agent_type),
+               "args": call_args,
                "tool_calls": calls}
         return obj, tokens, model_id
 
@@ -155,7 +207,7 @@ def _model_call(provider, messages, max_tokens=1024, *,
         return None, tokens, model_id
     obj = _gw.extract_json(text)
     if isinstance(obj, dict):
-        return obj, tokens, model_id
+        return _normalize_tool_name(obj, registry, agent_type), tokens, model_id
 
     # SCORE-03-T3：格式自修复最多 2 次，且带**精确字段级**校验错误。
     # 旧实现只重试 1 次、提示是泛泛的「只输出 JSON」，弱模型仍会重复犯错。
@@ -194,7 +246,8 @@ def _model_call(provider, messages, max_tokens=1024, *,
             except Exception:                              # noqa: BLE001
                 problems = []
         if not problems:
-            return obj2, tokens, model2 or model_id
+            return (_normalize_tool_name(obj2, registry, agent_type),
+                    tokens, model2 or model_id)
         repair_msgs = repair_msgs + [{
             "role": "user",
             "content": "参数校验未通过，请修正后重输出完整 JSON："
@@ -456,7 +509,8 @@ class ReActAgent:
                  has_approval_backend=False,
                  memory_store=None, memory_task_type=None,
                  session_id=None, store=None, tenant_id="default",
-                 session_budget=None, plan_first=False, self_reflect=False):
+                 session_budget=None, plan_first=False, self_reflect=False,
+                 approval_id=None, skill_hooks=None):
         self.agent_type = agent_type
         self.goal = goal
         self.provider = provider or _gw.get_provider()
@@ -507,9 +561,19 @@ class ReActAgent:
         self.taint_state = {"user_goal": goal,
                             "taint_sources": {"urls": [], "emails": [],
                                               "accounts": [], "amounts": []}}
+        # 预授权写工具的审批 id（由 harness 预先建单批准）。preflight 在
+        # executor 之前执行，所以必须在 preflight 前注入，不能只靠 executor。
+        self.approval_id = approval_id
+        # FINAL-02-T2：可执行 Skill 钩子（非提示词注入）
+        self.skill_hooks = skill_hooks or {}
 
     def _preflight(self, tool, args, seq, observation=None):
         """契约 → 意图 → 审批。工具调用的唯一放行点。"""
+        # 预授权审批 id 必须在契约校验**之前**注入，否则写工具会被判
+        # approval_request_id 缺失（preflight 早于 executor）。
+        if self.approval_id and tool == "fs.write" and isinstance(args, dict):
+            args = dict(args)
+            args.setdefault("approval_request_id", self.approval_id)
         # 把注册表里的契约传给 preflight：否则它默认读 tool_contract
         # 的硬编码 DEFAULT_CONTRACTS，动态注册的工具会被当成「身份不合规」
         # 一律拒绝（两层契约源不一致）。这是接线，不是放宽门禁。
@@ -685,12 +749,33 @@ class ReActAgent:
                 steps.append(step)
                 stopped_by = "no_executor"
                 break
+            # FINAL-02-T2：可执行 Skill 钩子（写前建议 / 写后校验）
+            hook_pre = None
+            hook_post = None
+            if self.skill_hooks.get("actionable"):
+                try:
+                    fn = self.skill_hooks.get("pre_write")
+                    if fn:
+                        hook_pre = fn(tool, dict(args))
+                except Exception:                            # noqa: BLE001
+                    hook_pre = None
             try:
                 out = self.executor(tool, args)
             except Exception as exc:                        # noqa: BLE001
                 out = {"error": repr(exc)[:200]}
+            if self.skill_hooks.get("actionable"):
+                try:
+                    fn = self.skill_hooks.get("post_write")
+                    if fn:
+                        hook_post = fn(tool, dict(args), out)
+                except Exception:                            # noqa: BLE001
+                    hook_post = None
             step.update({"kind": "tool", "executed": True,
                          "effect": "call_executed", "output": out})
+            if hook_pre:
+                step["skill_hook_pre"] = hook_pre
+            if hook_post:
+                step["skill_hook_post"] = hook_post
 
             # --- 返回侧 rails（工具输出是不可信内容）---
             rverdict = (_rails.check_result(self.rails, tool, out)

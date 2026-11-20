@@ -560,18 +560,22 @@ def register_coding_tools(registry, *, root, docker_sandbox=None):
         "allowed_resource_pattern": None, "writable_paths": [],
         "max_amount": None, "methods": ["read"], "side_effect": "none",
         "requires_approval": False,
+        "param_keys": ["path"], "required": ["path"],
     }, scope="read_only", source="coding_bench")
     reg.register("fs.write", {
         "identities": ["coder"], "allowed_domains": [],
         "allowed_resource_pattern": None, "writable_paths": ["*"],
         "max_amount": None, "methods": ["write"], "side_effect": "write",
         "requires_approval": True,
+        "param_keys": ["path", "content", "approval_request_id"],
+        "required": ["path", "content"],
     }, scope="write", source="coding_bench")
     reg.register("code.run_in_sandbox", {
         "identities": ["coder"], "allowed_domains": [],
         "allowed_resource_pattern": None, "writable_paths": [],
         "max_amount": None, "methods": ["read"], "side_effect": "none",
         "requires_approval": False,
+        "param_keys": ["code"], "required": ["code"],
     }, scope="read_only", source="coding_bench")
 
     def executor(tool, args):

@@ -16,7 +16,11 @@ CONTRACT = os.path.join(ROOT, "docs", "api-contract-v1.json")
 
 
 def _routes_from_source():
-    with open(APP, encoding="utf-8") as f:
+    # FINAL-04-T1：ROUTES 字面量随模块级内容搬到 app_core.py
+    routes_src = os.path.join(os.path.dirname(APP), "app_core.py")
+    if not os.path.isfile(routes_src):
+        routes_src = APP
+    with open(routes_src, encoding="utf-8") as f:
         tree = ast.parse(f.read())
     for node in tree.body:
         if not isinstance(node, ast.Assign):
@@ -40,8 +44,14 @@ class TestAPIContract(unittest.TestCase):
     def setUpClass(cls):
         with open(CONTRACT, encoding="utf-8") as f:
             cls.c = json.load(f)
-        with open(APP, encoding="utf-8") as f:
-            cls.src = f.read()
+        # FINAL-04-T1：源码已拆分到多个模块，契约断言读取合并源码。
+        src_parts = []
+        for name in ("app.py", "app_core.py", "routes_agent.py",
+                     "routes_enterprise.py"):
+            with open(os.path.join(os.path.dirname(APP), name),
+                      encoding="utf-8") as f:
+                src_parts.append(f.read())
+        cls.src = "\n".join(src_parts)
         cls.code_routes = {(m, _to_path(p)) for m, p, _ in _routes_from_source()}
         cls.doc_routes = {(r["method"], r["path"])
                           for r in cls.c["routes"]}

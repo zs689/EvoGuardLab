@@ -245,8 +245,12 @@ class AuditStore(AuditSink):
     record = emit
 
     # ---------------- 防篡改校验 ----------------
-    def verify(self, limit=None):
+    def verify(self, limit=None, external_anchor=None):
         """从头重算整条链，返回 (ok, 详情)。
+
+        FINAL-04-T2：`external_anchor` 为库外只追加锚点记录时，交叉核对
+        锚点的 seq/tail_hash 与库内链尾 —— 持 DB 写权者重写整库并重算
+        哈希链后，库内 verify 会通过，但无法通过这一步。
 
         - `checked`：实际参与校验的行数
         - `unhashed`：迁移前写入、没有哈希的旧行（如实计数，不假装校验过）
@@ -315,9 +319,25 @@ class AuditStore(AuditSink):
                                 "archived_gaps": archived}
                     prev_hash = stored_hash
                     checked += 1
-        return True, {"reason": "ok", "first_bad_id": None,
-                      "checked": checked, "unhashed": unhashed,
-                      "archived_gaps": archived}
+        result = {"reason": "ok", "first_bad_id": None,
+                  "checked": checked, "unhashed": unhashed,
+                  "archived_gaps": archived, "tail_hash": prev_hash}
+        # FINAL-04-T2：库外锚点交叉核对（异地不可抵赖）
+        if external_anchor is not None:
+            try:
+                import external_anchor as _ea
+                if not _ea.verify_anchor(external_anchor):
+                    return False, dict(result, reason="external_anchor_forged")
+                if (int(external_anchor.get("seq") or -1) != checked or
+                        str(external_anchor.get("tail_hash") or "") != prev_hash):
+                    return False, dict(
+                        result, reason="external_anchor_mismatch",
+                        anchor_seq=external_anchor.get("seq"),
+                        anchor_tail=external_anchor.get("tail_hash"))
+                result["external_anchor_ok"] = True
+            except ImportError:
+                pass
+        return True, result
 
     # ---------------- 查询 ----------------
     def query(self, tenant_id, since=None, limit=100):

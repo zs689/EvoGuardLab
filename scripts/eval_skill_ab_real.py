@@ -29,13 +29,27 @@ sys.path.insert(0, HERE)
 import gateway as GW                                        # noqa: E402
 import core as CORE                                         # noqa: E402
 import skill_synthesis as SS                                # noqa: E402
+import skill_hooks as SH                                    # noqa: E402
 import eval_coding_agent as E                               # noqa: E402
 
 TRAIN_TASK_STEPS = [
-    {"seq": 1, "logical": 1, "name": "fs.write", "status": "ok",
+    {"seq": 1, "logical": 1, "name": "fs.read", "status": "ok",
+     "output": {"path": "mod.py"}},
+    {"seq": 2, "logical": 2, "name": "fs.write", "status": "ok",
      "output": {"written": True}},
-    {"seq": 2, "logical": 2, "name": "code.run_in_sandbox", "status": "error",
-     "error_type": "timeout", "output": {"returncode": 1}},
+    {"seq": 3, "logical": 3, "name": "code.run_in_sandbox", "status": "error",
+     "error_type": "zero_division",
+     "output": {"returncode": 1,
+                "stderr": "ZeroDivisionError: division by zero at ratio()"}},
+]
+
+# 同一训练题的「修复后成功」轨迹：用 fs.patch 精准替换除法分母判断，
+# 再跑 code.run_in_sandbox 验证。只有成对轨迹才能合成真实 fix_pattern。
+TRAIN_REPAIR_STEPS = [
+    {"seq": 4, "logical": 4, "name": "fs.patch", "status": "ok",
+     "output": {"patched": True, "path": "mod.py"}},
+    {"seq": 5, "logical": 5, "name": "code.run_in_sandbox", "status": "ok",
+     "output": {"returncode": 0, "stdout": "OK"}},
 ]
 
 
@@ -63,6 +77,17 @@ ERROR_FAMILY_CASES = {
 }
 
 
+def build_skill(store, *, repair_steps=None, error_family=None):
+    """合成结构化 Skill 对象（供可执行钩子使用）。"""
+    steps = list(TRAIN_TASK_STEPS)
+    if error_family:
+        steps[1] = dict(steps[1], error_type=error_family)
+    out = SS.synthesize(store, steps, task_type="newdomain",
+                        repair_steps=repair_steps if repair_steps is not None
+                        else TRAIN_REPAIR_STEPS)
+    return out.get("skill"), out.get("accepted")
+
+
 def build_skill_hint(store, *, repair_steps=None, error_family=None):
     """从失败->成功成对轨迹合成结构化 Skill，并渲染可注入提示。
 
@@ -73,7 +98,8 @@ def build_skill_hint(store, *, repair_steps=None, error_family=None):
     if error_family:
         steps[1] = dict(steps[1], error_type=error_family)
     out = SS.synthesize(store, steps, task_type="newdomain",
-                        repair_steps=repair_steps)
+                        repair_steps=repair_steps if repair_steps is not None
+                        else TRAIN_REPAIR_STEPS)
     sk = out.get("skill")
     if not sk:
         return None, out.get("accepted")
@@ -105,16 +131,26 @@ def main():
     ap.add_argument("--base", default=None)
     ap.add_argument("--api-key-env", default=None)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--mode", choices=["hooks", "prompt"], default="hooks",
+                    help="hooks=可执行控制流钩子(FINAL-02-T2)；prompt=提示词注入(旧,已证负)")
     ap.add_argument("--out", default="")
     a = ap.parse_args()
 
-    spec = GW.ProviderSpec(backend=a.provider, base_url=a.base, model=a.model,
-                           api_key_env=a.api_key_env)
-    prov = GW.get_provider(force=a.provider, spec=spec)
+    # 按预设带出 key 环境变量/base/model（同 eval_coding_agent）
+    pre = GW.PROVIDER_PRESETS.get((a.provider or "").lower())
+    p_backend, p_base, p_keyenv, p_model, _p_tools = pre if pre else (
+        a.provider, a.base, a.api_key_env, a.model, False)
+    spec = GW.ProviderSpec(
+        backend=p_backend, base_url=a.base or p_base, model=a.model or p_model,
+        api_key_env=a.api_key_env or p_keyenv,
+        supports_tools=bool(_p_tools) if pre else False)
+    prov = GW.get_provider(force=p_backend, spec=spec)
 
     tmp = tempfile.mkdtemp(prefix="skab-")
     store = CORE.Store(os.path.join(tmp, "sk.db"))
+    skill, accepted = build_skill(store)
     hint, meta = build_skill_hint(store)
+    hooks = SH.hooks_from_skill(skill) if a.mode == "hooks" else {}
     store.close()
 
     # 留出隔离：评测集是 15 题（与合成 skill 的训练轨迹不同题）
@@ -123,10 +159,16 @@ def main():
         tasks = tasks[:a.limit]
 
     no_skill = [_safe(E.run_one, t, prov) for t in tasks]
-    with_skill = [_safe(E.run_one, t, prov, skill_hint=hint) for t in tasks]
+    if a.mode == "hooks":
+        with_skill = [_safe(E.run_one, t, prov, skill_hooks=hooks)
+                      for t in tasks]
+    else:
+        with_skill = [_safe(E.run_one, t, prov, skill_hint=hint)
+                      for t in tasks]
 
     left, right = _agg(no_skill), _agg(with_skill)
     rep = {"model": a.model or a.provider, "provider": a.provider,
+           "mode": a.mode, "hooks_actionable": bool(hooks.get("actionable")),
            "skill_synth": meta, "skill_hint": hint,
            "no_skill": left, "with_skill": right,
            "delta": {
@@ -142,9 +184,11 @@ def main():
     text = json.dumps(rep, ensure_ascii=False, indent=2)
     print(text)
     if a.out:
+        import redact as _redact
+        clean = _redact.redact(text)
         os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
         with io.open(a.out, "w", encoding="utf-8", newline="\n") as f:
-            f.write(text + "\n")
+            f.write(clean + "\n")
     return 0
 
 

@@ -35,9 +35,16 @@ class _ServerCase(unittest.TestCase):
                      "REAL_REPORT", "REAL_ANALYSIS", "REAL_ATTRIBUTION",
                      "REPORT"):
             if hasattr(APP, name):
+                import app_core as _CORE
                 cls._saved[name] = getattr(APP, name)
-                setattr(APP, name, os.path.join(cls.tmp, os.path.basename(
-                    getattr(APP, name))))
+                _new = os.path.join(cls.tmp, os.path.basename(
+                    getattr(APP, name)))
+                # FINAL-04-T1：handler 已拆到 mixin，三者同步
+                setattr(APP, name, _new)
+                setattr(_CORE, name, _new)
+                import routes_enterprise as _RE
+                if hasattr(_RE, name):
+                    setattr(_RE, name, _new)
         # 服务默认把每个请求写 stderr，测试里没意义，先静音（跑完还原）
         cls._saved_log = APP.Handler.log_message
         APP.Handler.log_message = lambda *a, **k: None

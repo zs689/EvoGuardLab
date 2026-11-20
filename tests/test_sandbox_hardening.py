@@ -58,9 +58,14 @@ class TestSandboxHardening(unittest.TestCase):
                         "无全局并发信号量")
 
     def _app_src(self):
-        with open(os.path.join(ROOT, "ai-service", "api", "app.py"),
-                  encoding="utf-8") as f:
-            return f.read()
+        # FINAL-04-T1：app.py 已拆分，静态检查读合并源码
+        parts = []
+        for name in ("app.py", "app_core.py", "routes_agent.py",
+                     "routes_enterprise.py"):
+            with open(os.path.join(ROOT, "ai-service", "api", name),
+                      encoding="utf-8") as f:
+                parts.append(f.read())
+        return "\n".join(parts)
 
     def test_timeout_hard_limit_in_app(self):
         """app.py handler 对 timeout_s 做 1..MAX clamp，86400 返回 400。"""

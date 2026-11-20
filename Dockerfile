@@ -22,6 +22,9 @@ COPY pyproject.toml README.md LICENSE evoguard_cli.py ./
 COPY ai-service/evoguard ./ai-service/evoguard
 COPY ai-service/evoguard_inspect ./ai-service/evoguard_inspect
 COPY ai-service/api/app.py ./ai-service/api/app.py
+COPY ai-service/api/app_core.py ./ai-service/api/app_core.py
+COPY ai-service/api/routes_agent.py ./ai-service/api/routes_agent.py
+COPY ai-service/api/routes_enterprise.py ./ai-service/api/routes_enterprise.py
 COPY config ./config
 COPY frontend ./frontend
 COPY docs/taxonomy.md ./docs/taxonomy.md

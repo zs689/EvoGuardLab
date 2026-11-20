@@ -35,14 +35,19 @@ REQUIRED = [
 ]
 REQUIRED_DATA = [
     "share/evoguardlab/api/app.py",
+    # FINAL-04-T1：app.py 拆分出的模块必须一起进 wheel，否则服务起不来
+    "share/evoguardlab/api/app_core.py",
+    "share/evoguardlab/api/routes_agent.py",
+    "share/evoguardlab/api/routes_enterprise.py",
     "share/evoguardlab/scripts/defense_demo.py",
     "share/evoguardlab/frontend/index.html",
     "share/evoguardlab/config/thresholds_v1.json",
     "share/evoguardlab/docs/taxonomy.md",
     "share/evoguardlab/experiments/metrics.json",
 ]
+# "sandbox" 用精确目录片段，避免误伤合法模块 evoguard/sandbox_executor.py
 FORBIDDEN_HINTS = (".env", ".git/", "data/external/", "data/tenants/",
-                   "tests/", "__pycache__/", ".pyc", "sandbox")
+                   "tests/", "__pycache__/", ".pyc", "sandbox/")
 
 
 # 制品里的源码符号：防止「清单有文件、内容却是旧版」。
@@ -52,7 +57,8 @@ SOURCE_SYMBOLS = {
     "evoguard/core.py": ("_ConnPool", "_interprocess_lock",
                          "只关空闲队列", "pool_flag"),
     "evoguard/gateway.py": ("ResilientProvider", "E_CIRCUIT_OPEN"),
-    "api/app.py": ("MAX_DETAIL_ITEMS", "real_model_state"),
+    # MAX_DETAIL_ITEMS/real_model_state 随模块级内容搬到 app_core.py
+    "api/app_core.py": ("MAX_DETAIL_ITEMS", "real_model_state"),
 }
 
 
