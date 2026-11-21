@@ -209,7 +209,29 @@ def extract_code(text):
     return text or ""
 
 
-def coupling_probe(work):
+def _symbol_lines(path):
+    """AST 只读查模块级符号定义行号（失败返回空 dict）。"""
+    import ast as _ast
+    out = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            tree = _ast.parse(f.read())
+        for node in tree.body:
+            names = []
+            if isinstance(node, _ast.Assign):
+                names = [t.id for t in node.targets
+                         if isinstance(t, _ast.Name)]
+            elif isinstance(node, _ast.AnnAssign) and \
+                    isinstance(node.target, _ast.Name):
+                names = [node.target.id]
+            for n in names:
+                out[n] = getattr(node, "lineno", 0)
+    except Exception:                                      # noqa: BLE001
+        pass
+    return out
+
+
+def coupling_probe(work, *, precise=False):
     """运行时契约探针：实际执行一次 add_field，检查两处登记是否同步。
 
     MOD-EVO-01 补救：静态 AST 断言看不到「运行时修改模块对象」，必须
@@ -243,6 +265,21 @@ def coupling_probe(work):
     if line:
         detail = line[len("PROBE:"):]
         problems = [] if detail == "OK" else detail.split("|")
+        if precise and problems:
+            # ZERO-05-T2：用 AST 找真实定义行号（不执行代码），把
+            # "哪个文件的哪一行少了哪个符号"直接告诉模型，别让它猜。
+            loc = _symbol_lines(os.path.join(work, "registry.py"))
+            decorated = []
+            for msg in problems:
+                if "FIELDS" in msg or "REQUIRED" in msg:
+                    decorated.append(
+                        "registry.py:L%s 定义 FIELDS、L%s 定义 REQUIRED；"
+                        "两处必须同步（%s）"
+                        % (loc.get("FIELDS", "?"),
+                           loc.get("REQUIRED", "?"), msg))
+                else:
+                    decorated.append(msg)
+            problems = decorated
         return {"ok": not problems, "problems": problems}
     return {"ok": False,
             "problems": [err.strip().splitlines()[-1][:140]
@@ -315,7 +352,7 @@ def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
             if case.get("domain") == "coupling":
                 # 运行时探针：把「哪个表没登记」这种精确检查结果回灌。
                 # 只给检查结论，不给修复代码 —— 不是答案剧透。
-                pr = coupling_probe(work)
+                pr = coupling_probe(work, precise=True)
                 if pr["problems"]:
                     feedback = ("运行时契约检查未通过：" +
                                 json.dumps(pr["problems"], ensure_ascii=False)

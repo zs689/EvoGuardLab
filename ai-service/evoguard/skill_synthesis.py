@@ -51,6 +51,30 @@ def synthesize(store, steps, *, task_type="newdomain",
                 "accepted": {"accepted": False,
                              "errors": ["轨迹无违例，无可合成的经验"]}}
     cause = failure_type or diag["root_cause"]
+    # ZERO-05-T1：零增益候选**入口预筛**。历史数据 77 个候选仅 7 个
+    # PROMOTE、83% 零增益；这些几乎全是「没有具体证据的泛泛套话」。
+    # 在构造完整 skill 之前先廉价判一次，省掉无谓计算并给出明确理由。
+    if require_info_gain:
+        # 用同一个提取器先廉价判一次「有没有具体证据」，而不是看
+        # 有没有 repair_steps —— 失败轨迹里的 KeyError 键名/边界数字
+        # 本身就是可提取证据，不能误杀（既有测试覆盖了这个情形）。
+        fail_here = [x for x in (steps or []) if isinstance(x, dict)]
+        ok_here = [x for x in (repair_steps or []) if isinstance(x, dict)]
+        cheap_inv = extract_env_invariants(fail_here, ok_here, env_spec)
+        cheap_fix = _extract_structured(diag, steps, repair_steps, cause)
+        concrete_fix = str(cheap_fix.get("fix_pattern") or "") not in (
+            "", "unknown_no_repair_trace")
+        if not (cheap_inv or concrete_fix):
+            return {
+                "diagnosis": diag, "skill": None,
+                "accepted": {
+                    "accepted": False,
+                    "errors": ["入口剪枝（信息增量门禁）：失败轨迹无可提取的"
+                               "具体环境证据或修复模式；按历史 83% 零增益"
+                               "规律拒绝生成泛泛套话技能"],
+                    "pruned_at": "synthesize_entry",
+                },
+            }
     # 只读工具越界时不要给出工具名，避免把「观察到的一次」泛化成
     # 「所有新领域工具都这样」—— 声明里只记策略作用域。
     exp = {"id": "synth_" + str(diag.get("first_bad_step")),
