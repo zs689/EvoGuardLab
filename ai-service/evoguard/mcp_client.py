@@ -169,3 +169,97 @@ class MCPClient:
     def __exit__(self, *a):
         self.close()
         return False
+
+
+class HttpMCPClient:
+    """MOD-MCP-01-T1：纯标准库 JSON-RPC over HTTP 的 MCP 客户端。
+
+    与 Stdio MCPClient 接口一致（list_tools/call_tool/register_tools/
+    as_executor/close）。网络访问复用 NetworkSandbox 的域名白名单 +
+    SSRF 内网拦截；Bearer Token 只从参数传入，不写日志、不落盘。
+    """
+    def __init__(self, url, *, allowed_domains=(), token=None, timeout=10,
+                 max_bytes=1 << 20, allow_loopback=False):
+        from sandbox_executor import NetworkSandbox, SandboxError
+        self.url = str(url or "")
+        self.token = str(token) if token else None
+        self.timeout = float(timeout)
+        self.max_bytes = int(max_bytes)
+        self._net = NetworkSandbox(allowed_domains=allowed_domains,
+                                   timeout=timeout, max_bytes=max_bytes)
+        # 默认严格 SSRF；仅在显式 allow_loopback=True 且域名也在白名单里时
+        # 放行 127.0.0.1/localhost（本地桩 Server/本地部署场景）。
+        if allow_loopback:
+            import urllib.parse as _up
+            from sandbox_executor import SandboxError
+            host = (_up.urlparse(self.url).hostname or "").lower()
+            if host not in {"127.0.0.1", "localhost", "::1"}:
+                raise SandboxError("allow_loopback_only_for_localhost")
+            if host not in {str(d).lower() for d in allowed_domains}:
+                raise SandboxError("domain_not_allowlisted:%s" % host)
+        else:
+            self._net.check_url(self.url)      # SSRF/域名白名单：构造即校验
+        self._id = 0
+        self.tools = []
+
+    def _request(self, method, params=None):
+        import urllib.request as _ur
+        self._id += 1
+        body = json.dumps({"jsonrpc": "2.0", "id": self._id,
+                           "method": method, "params": params or {}},
+                          ensure_ascii=False).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if self.token:
+            headers["Authorization"] = "Bearer " + self.token
+        req = _ur.Request(self.url, data=body, headers=headers,
+                          method="POST")
+        with _ur.urlopen(req, timeout=self.timeout) as resp:
+            raw = resp.read(self.max_bytes + 1)
+        if len(raw) > self.max_bytes:
+            raise MCPError("http_mcp_response_too_large")
+        msg = json.loads(raw.decode("utf-8", "replace"))
+        if msg.get("error"):
+            raise MCPError("http_mcp_rpc_error:" +
+                           str(msg["error"])[:120])
+        return msg.get("result") or {}
+
+    def initialize(self):
+        return self._request("initialize", {"protocolVersion": "2024-11-05",
+                                            "capabilities": {},
+                                            "clientInfo": {"name": "evoguard"}})
+
+    def list_tools(self):
+        self.tools = list((self._request("tools/list", {})).get("tools") or [])
+        return self.tools
+
+    def call_tool(self, name, args=None):
+        return self._request("tools/call", {"name": str(name),
+                                            "arguments": args or {}})
+
+    call = call_tool                       # 与 Stdio MCPClient 的 call() 对齐
+
+    def register_tools(self, registry, *, agent_type="mcp"):
+        if not self.tools:
+            self.list_tools()
+        import mcp_proxy as _proxy
+        _proxy.register_tools(self.tools, registry=registry,
+                              agent_type=agent_type)
+        return registry
+
+    def as_executor(self, *, registry=None, rails=None):
+        """返回 ReActAgent executor；返回侧仍走 mcp_proxy 污点/注入护栏。"""
+        def executor(tool, args):
+            result = self.call_tool(tool, args)
+            try:
+                import mcp_proxy as _proxy
+                v = _proxy.guard_result(tool, result, rails=rails)
+                if v.get("blocked"):
+                    return {"error": "mcp_result_blocked",
+                            "reason": v.get("reason")}
+            except Exception:                              # noqa: BLE001
+                pass
+            return result
+        return executor
+
+    def close(self):
+        return None                        # HTTP 无持久进程

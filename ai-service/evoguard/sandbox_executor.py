@@ -14,6 +14,7 @@
 不假称是 OS 级沙箱（那不是 Python 层能保证的）；这是**应用层路径围栏**，
 配合容器/低权限用户才是完整隔离。这一点写在 describe() 里。
 """
+import contextlib
 import os
 import re
 import shutil
@@ -448,6 +449,12 @@ class DockerCodeSandbox:
                     from exc
 
 
+    @contextlib.contextmanager
+    def session(self, work_dir, *, timeout_s=None):
+        """MOD-MCP-01-T2：复用同一容器跑多条命令，退出必清理。"""
+        with docker_session(self, work_dir, timeout_s=timeout_s) as s:
+            yield s
+
     def run_workspace(self, work_dir, cmd, *, timeout_s=None):
         """SCORE-03-T2：把受控工作目录**只读挂载**为 /work，容器内跑命令。
 
@@ -499,6 +506,88 @@ class DockerCodeSandbox:
             raise DockerSandboxError("workspace_run_failed:"
                                      + type(exc).__name__) from exc
 
+
+@contextlib.contextmanager
+def docker_session(box, work_dir, *, timeout_s=None):
+    """MOD-MCP-01-T2：受控会话复用（同任务内免重复冷启动）。
+
+    隔离参数与 run_workspace 完全一致：--network=none、--read-only、
+    非 root、cap-drop ALL、pids-limit、tmpfs，工作目录 /work:ro。
+    退出时**必定** docker rm -f（finally），不留残留容器。
+    """
+    import contextlib as _cl
+    import subprocess as _sp
+    import uuid as _uuid
+    if not isinstance(work_dir, str) or not os.path.isdir(work_dir):
+        raise DockerSandboxError("invalid_work_dir")
+    root = os.path.realpath(work_dir)
+    name = "evo-sess-" + _uuid.uuid4().hex[:12]
+    limit = float(timeout_s or box.timeout_s)
+    argv = [
+        box.docker, "run", "-d", "--name", name,
+        "--network=none", "--read-only",
+        "--memory=" + box.memory, "--cpus=" + box.cpus,
+        "--pids-limit=64", "--cap-drop=ALL",
+        "--security-opt", "no-new-privileges",
+        "--user", "65534:65534",
+        "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m",
+        "-v", root + ":/work:ro", "-w", "/work", box.image,
+        "tail", "-f", "/dev/null",
+    ]
+    try:
+        r = _sp.run(argv, capture_output=True, timeout=limit, check=False)
+        if r.returncode != 0:
+            raise DockerSandboxError(
+                "session_start_failed:" +
+                (r.stderr or b"").decode("utf-8", "replace")[:120])
+    except Exception as exc:
+        _sp.run([box.docker, "rm", "-f", name],
+                capture_output=True, timeout=10, check=False)
+        if isinstance(exc, DockerSandboxError):
+            raise
+        raise DockerSandboxError("session_start_failed:" +
+                                 type(exc).__name__) from exc
+
+    class _Session:
+        def __init__(self, docker_bin, cname, timeout, max_bytes):
+            box.docker, box.name = docker_bin, cname
+            box.timeout, box.max_bytes = timeout, max_bytes
+            box.closed = False
+
+        def run(self, cmd, *, timeout_s=None):
+            if box.closed:
+                raise DockerSandboxError("session_closed")
+            if not isinstance(cmd, (list, tuple)) or not cmd \
+                    or not all(isinstance(x, str) for x in cmd):
+                raise DockerSandboxError("cmd_must_be_argv_list")
+            argv2 = [box.docker, "exec", box.name] + [str(x) for x in cmd]
+            try:
+                r = _sp.run(argv2, capture_output=True,
+                            timeout=float(timeout_s or box.timeout),
+                            check=False)
+                out, err = r.stdout or b"", r.stderr or b""
+                if isinstance(out, str): out = out.encode("utf-8")
+                if isinstance(err, str): err = err.encode("utf-8")
+                return {"ok": r.returncode == 0,
+                        "stdout": out[:box.max_bytes].decode(
+                            "utf-8", "replace"),
+                        "stderr": err[:box.max_bytes].decode(
+                            "utf-8", "replace"),
+                        "returncode": r.returncode,
+                        "reused_container": True}
+            except _sp.TimeoutExpired:
+                return {"ok": False, "stdout": "", "stderr": "timeout",
+                        "returncode": -1, "timeout": True}
+        def close(self):
+            box.closed = True
+
+    sess = _Session(box.docker, name, limit, box.max_output_bytes)
+    try:
+        yield sess
+    finally:
+        sess.close()
+        _sp.run([box.docker, "rm", "-f", name],
+                capture_output=True, timeout=10, check=False)
 
 class WorkspaceSnapshot:
     """AGENT-KERN-01-T1：工作区快照/回滚。
