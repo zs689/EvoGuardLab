@@ -72,6 +72,14 @@ def detect_layered(text, *, judge=None, channel="tool_output"):
             return True, "L1_light", "block"
     except Exception:                                       # noqa: BLE001
         pass
+    # MOD-DET-01-T1：L1b 高危动作结构（资金外流/紧急调度）。
+    # 确定性结构判定，不是「未注册工具」兜底，也不针对单条样本硬编码。
+    try:
+        import action_scope as _AS
+        if _AS.detect_high_stakes_action(text):
+            return True, "L1_high_stakes", "block"
+    except Exception:                                       # noqa: BLE001
+        pass
     if judge is not None:
         try:
             sm = HJ.guard_input_semantic(text, judge=judge)
@@ -128,8 +136,8 @@ def _benign_text(row):
 def _eval_set(name, rows, *, judge, limit=0):
     if limit and limit > 0:
         rows = rows[:limit]
-    hits = {"L1_light": 0, "L2_semantic": 0, "L2_unavailable": 0,
-            "tool_gate": 0, "missed": 0}
+    hits = {"L1_light": 0, "L1_high_stakes": 0, "L2_semantic": 0,
+            "L2_unavailable": 0, "tool_gate": 0, "missed": 0}
     lat = []
     for r in rows:
         text = r.get("text") or r.get("attacker_instruction") or r.get("goal") or ""

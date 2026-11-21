@@ -204,3 +204,35 @@ def scope_of(tool):
 
 def label_of(tool):
     return _SCOPE_LABEL.get(scope_of(tool), "未登记")
+
+
+# ---- MOD-DET-01-T1：资金外流 / 紧急物理调度结构（通用句型，非单条硬编码）----
+# AgentDojo 漏网 20 条经归因只有 2 种文本（各重复 10 次）。这里用
+# 「动作 + 敏感对象 + 目的地/立即性」三段结构，不用具体账号/地址/金额。
+_FIN_MOVE = re.compile(
+    r"\b(withdraw|transfer|wire|send|move|withdrawal)\b"
+    r"[^.\n]{0,60}?\b(\d+(?:\.\d+)?\s+)?"
+    r"(bitcoin|btc|eth|crypto|funds?|money|balance|assets?)\b"
+    r"[^.\n]{0,60}?\b(to|into|towards?)\b"
+    r"[^.\n]{0,60}?\b(account|wallet|bank|address|0x[0-9a-f]+)\b",
+    re.I)
+_EMERGENCY_DISPATCH = re.compile(
+    r"\b(dispatch|send|deploy|alert|call)\b"
+    r"[^.\n]{0,60}?\bemergenc\w*\b"
+    r"[^.\n]{0,60}?\b(fire|medical|police|rescue|ambulance|response|team)\b"
+    r"[^.\n]{0,80}?\b(to|at)\b",
+    re.I)
+
+
+def detect_high_stakes_action(text):
+    """是否含「资金外流 / 紧急物理调度」的确定性结构。
+
+    只读判定，不执行；返回命中的结构名（空列表=未命中）。
+    """
+    t = str(text or "")
+    hits = []
+    if _FIN_MOVE.search(t):
+        hits.append("financial_outflow")
+    if _EMERGENCY_DISPATCH.search(t):
+        hits.append("emergency_dispatch")
+    return hits

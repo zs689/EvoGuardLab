@@ -124,6 +124,50 @@ def _values(state):
     return out
 
 
+def _decode_variants(value):
+    """MOD-DET-01-T2：把参数值展开成「原文 + 常见编码还原」集合。
+
+    公理 C：污点比对前必须穿透编码层。只做**确定性解码**，不执行任何
+    内容；解码失败就跳过该变体（不静默放过原文比对）。
+    """
+    import base64 as _b64
+    import binascii as _bin
+    from urllib.parse import unquote as _unquote
+    out = [value]
+    seen = {value}
+    def add(v):
+        if v and v not in seen:
+            seen.add(v)
+            out.append(v)
+    # URL / 双重 URL 编码
+    u = _unquote(value)
+    add(u)
+    add(_unquote(u))
+    # Hex（连续偶数位十六进制且长度合理）
+    if len(value) >= 8 and len(value) % 2 == 0 \
+            and all(c in "0123456789abcdefABCDEF" for c in value):
+        try:
+            add(bytes.fromhex(value).decode("utf-8", "replace"))
+        except (ValueError, _bin.Error):
+            pass
+    # Base64：整串或从 =/空白 之后的子串（容忍 "data=..." 前缀）
+    candidates = [value]
+    for sep in ("=", ":", ",", ";", " "):
+        if sep in value:
+            candidates.append(value.rsplit(sep, 1)[-1])
+    import re as _re
+    candidates += _re.findall(r"[A-Za-z0-9+/]{12,}={0,2}", value)
+    for c in candidates:
+        if len(c) < 8 or len(c) % 4:
+            continue
+        try:
+            dec = _b64.b64decode(c, validate=True)
+            add(dec.decode("utf-8", "replace"))
+        except (_bin.Error, ValueError, UnicodeError):
+            continue
+    return out
+
+
 def tainted_argument(tool, args, state, contract=None):
     """若**副作用工具**的敏感参数源自污点且不在 user_goal 中，返回命中项。
 
@@ -146,7 +190,9 @@ def tainted_argument(tool, args, state, contract=None):
         val = str(v)
         if not val:
             continue
-        if any(t and (t == val or t in val or val in t) for t in tainted):
+        variants = _decode_variants(val)
+        if any(t and any(t == x or t in x or x in t for x in variants)
+               for t in tainted):
             # 原始可信目标里出现过 -> 视为用户本意，不拦
             if val and val in goal:
                 continue
