@@ -361,6 +361,30 @@ class DockerCodeSandbox:
                 "docker_daemon_unreachable:%s"
                 % r.stderr.decode("utf-8", "replace")[:120])
 
+    def _base_docker_args(self, name, *, label_ts=None):
+        """ZERO-06：三条沙箱路径共享的**完全一致**隔离参数。
+
+        任何一条路径单独加参数都会造成边界不一致（历史上
+        run() 有 PYTHONDONTWRITEBYTECODE 而 run_workspace() 没有，
+        导致只读工作区里 __pycache__ PermissionError 掩盖真实错误）。
+        """
+        import time as _t
+        exp = int(label_ts or (_t.time() + 1800))
+        return [
+            self.docker, "run", "--name", name,
+            "--network=none", "--read-only",
+            "--memory=" + self.memory, "--cpus=" + self.cpus,
+            "--pids-limit=64", "--cap-drop=ALL",
+            "--security-opt", "no-new-privileges",
+            "--user", "65534:65534",
+            "-e", "PYTHONDONTWRITEBYTECODE=1",
+            "-e", "PYTHONPATH=/work",
+            "-e", "HOME=/tmp",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m",
+            "--label", "evoguard.sandbox=1",
+            "--label", "evoguard.expires=" + str(exp),
+        ]
+
     def run(self, code, *, timeout_s=None, work_dir=None):
         """在容器里执行 Python 源码，返回 {ok, stdout, stderr, returncode, ...}。
 
@@ -403,21 +427,7 @@ class DockerCodeSandbox:
             script = os.path.join(tmp, "script.py")
             with open(script, "w", encoding="utf-8", newline="\n") as f:
                 f.write(code)
-            cmd = [
-                self.docker, "run", "--rm", "--name", name,
-                "--network=none", "--read-only",
-                "--memory=" + self.memory, "--cpus=" + self.cpus,
-                "--pids-limit=64", "--cap-drop=ALL",
-                "--security-opt", "no-new-privileges",
-                # SBX-SEC-01-T1：非 root（nobody）+ 受限 tmpfs
-                "--user", "65534:65534",
-                # 只读工作区里不能写 __pycache__（会抛 PermissionError
-                # 掩盖真实错误）；包路径要指向只读挂载的 /work。
-                "-e", "PYTHONDONTWRITEBYTECODE=1",
-                "-e", "PYTHONPATH=/work",
-                "-e", "HOME=/tmp",
-                "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m",
-            ] + mounts + [
+            cmd = self._base_docker_args(name) + ["--rm"] + mounts + [
                 "-v", script + ":/opt/script.py:ro",
                 self.image,
                 "python", "/opt/script.py",
@@ -473,14 +483,7 @@ class DockerCodeSandbox:
         name = "evo-ws-" + uuid.uuid4().hex[:12]
         # 只允许 /work 内的相对路径命令；解释器用绝对路径无妨
         cmdv = [str(x) for x in cmd]
-        argv = [
-            self.docker, "run", "--rm", "--name", name,
-            "--network=none", "--read-only",
-            "--memory=" + self.memory, "--cpus=" + self.cpus,
-            "--pids-limit=64", "--cap-drop=ALL",
-            "--security-opt", "no-new-privileges",
-            "--user", "65534:65534",
-            "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m",
+        argv = self._base_docker_args(name) + ["--rm",
             "-v", root + ":/work:ro", "-w", "/work", self.image,
         ] + cmdv
         try:
@@ -507,6 +510,52 @@ class DockerCodeSandbox:
                                      + type(exc).__name__) from exc
 
 
+_SESSION_LABEL = "evoguard.sandbox=1"
+_SESSION_NAMES = set()
+_SESSION_LOCK = threading.Lock()
+_SESSION_TTL_S = 1800
+
+
+def _reap_orphan_containers(docker_bin):
+    """回收带本工具 label 且已过 TTL 的残留容器（只回收我们自己的）。"""
+    import subprocess as _sp
+    import time as _t
+    try:
+        r = _sp.run([docker_bin, "ps", "-a", "--filter",
+                     "label=" + _SESSION_LABEL, "--format",
+                     "{{.Names}}|{{.Label .Labels \"evoguard.expires\"}}"],
+                    capture_output=True, timeout=10, text=True, check=False)
+    except Exception:                                      # noqa: BLE001
+        return 0
+    now = _t.time()
+    n = 0
+    for line in (r.stdout or "").splitlines():
+        parts = line.split("|")
+        if len(parts) != 2:
+            continue
+        try:
+            exp = float(parts[1])
+        except (ValueError, TypeError):
+            continue
+        if exp <= now:
+            _sp.run([docker_bin, "rm", "-f", parts[0]],
+                    capture_output=True, timeout=10, check=False)
+            n += 1
+    return n
+
+
+def _atexit_reap():
+    """进程退出时兜底清理本进程创建、还活着的会话容器。"""
+    import subprocess as _sp
+    with _SESSION_LOCK:
+        names = list(_SESSION_NAMES)
+    for name in names:
+        # 不知道用哪个 docker bin：从已登记的沙箱取，取不到就跳过
+        bin_ = getattr(_atexit_reap, "docker_bin", "docker")
+        _sp.run([bin_, "rm", "-f", name],
+                capture_output=True, timeout=5, check=False)
+
+
 @contextlib.contextmanager
 def docker_session(box, work_dir, *, timeout_s=None):
     """MOD-MCP-01-T2：受控会话复用（同任务内免重复冷启动）。
@@ -523,14 +572,13 @@ def docker_session(box, work_dir, *, timeout_s=None):
     root = os.path.realpath(work_dir)
     name = "evo-sess-" + _uuid.uuid4().hex[:12]
     limit = float(timeout_s or box.timeout_s)
-    argv = [
-        box.docker, "run", "-d", "--name", name,
-        "--network=none", "--read-only",
-        "--memory=" + box.memory, "--cpus=" + box.cpus,
-        "--pids-limit=64", "--cap-drop=ALL",
-        "--security-opt", "no-new-privileges",
-        "--user", "65534:65534",
-        "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m",
+    import atexit as _atexit
+    _atexit_reap.docker_bin = box.docker
+    _atexit.register(_atexit_reap)
+    _reap_orphan_containers(box.docker)   # 建新会话前先回收过期孤儿
+    with _SESSION_LOCK:
+        _SESSION_NAMES.add(name)
+    argv = box._base_docker_args(name) + ["-d",
         "-v", root + ":/work:ro", "-w", "/work", box.image,
         "tail", "-f", "/dev/null",
     ]
@@ -586,6 +634,8 @@ def docker_session(box, work_dir, *, timeout_s=None):
         yield sess
     finally:
         sess.close()
+        with _SESSION_LOCK:
+            _SESSION_NAMES.discard(name)
         _sp.run([box.docker, "rm", "-f", name],
                 capture_output=True, timeout=10, check=False)
         # docker rm -f 可能异步返回：轮询确认真的消失，
