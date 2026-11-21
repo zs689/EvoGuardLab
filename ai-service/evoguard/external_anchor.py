@@ -111,14 +111,44 @@ def read_events(path, kind=None):
     return rows
 
 
+def _signed_payload(rec):
+    """按记录类型重建签名原文（链尾 3 段 / 事件 4 段）。"""
+    if rec.get("kind"):
+        return "%s|%s|%s|%s" % (
+            rec.get("seq"), rec.get("kind"),
+            json.dumps(rec.get("payload") or {}, ensure_ascii=False,
+                       sort_keys=True), rec.get("ts"))
+    return "%s|%s|%s" % (rec.get("seq"), rec.get("tail_hash"),
+                         rec.get("ts"))
+
+
 def verify_anchor(rec, *, path=None, key=None):
-    """校验单条锚点自身的 HMAC（防锚点文件被伪造）。"""
+    """校验单条锚点：结构完整性 + （有密钥时）HMAC 防伪。
+
+    无密钥时**不能**无脑通过：至少要核对 seq/ts 存在且类型对，
+    并且链尾行必须有 tail_hash、事件行必须有 kind —— 否则
+    "存在性/一致性核对"只是注释里的谎话。
+    """
     if not isinstance(rec, dict):
         return False
+    seq, ts = rec.get("seq"), rec.get("ts")
+    if not isinstance(seq, int) or isinstance(seq, bool) or seq < 1:
+        return False
+    if not isinstance(ts, (int, float)) or isinstance(ts, bool):
+        return False
+    is_event = bool(rec.get("kind"))
+    if is_event:
+        if not isinstance(rec.get("kind"), str) or not rec["kind"]:
+            return False
+        if not isinstance(rec.get("payload"), dict):
+            return False
+    else:
+        if not isinstance(rec.get("tail_hash"), str) or not rec["tail_hash"]:
+            return False
     need = key or _key()
     if not need:
-        return True                     # 未配置密钥时只做存在性/一致性核对
-    signed = "%s|%s|%s" % (rec.get("seq"), rec.get("tail_hash"), rec.get("ts"))
+        return True                     # 无密钥：只做上面的真实结构核对
+    signed = _signed_payload(rec)
     want = _sign(signed, key)
     return bool(rec.get("hmac")) and _hmac.compare_digest(
         str(rec.get("hmac")), want)
