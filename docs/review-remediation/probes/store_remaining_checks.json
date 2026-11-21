@@ -11,7 +11,7 @@
         "integrity": "ok",
         "kill_rc": 0,
         "kill_stderr": "",
-        "kill_stdout": "�ɹ�: ����ֹ PID 4248 (���� PID 26368 �ӽ���)�Ľ��̡�",
+        "kill_stdout": "�ɹ�: ����ֹ PID 2552 (���� PID 23088 �ӽ���)�Ľ��̡�",
         "mode": "pool",
         "rows": 120
       },
@@ -24,7 +24,7 @@
         "integrity": "ok",
         "kill_rc": 0,
         "kill_stderr": "",
-        "kill_stdout": "�ɹ�: ����ֹ PID 29664 (���� PID 26368 �ӽ���)�Ľ��̡�",
+        "kill_stdout": "�ɹ�: ����ֹ PID 26004 (���� PID 23088 �ӽ���)�Ľ��̡�",
         "mode": "pool_wal",
         "rows": 120
       },
@@ -32,7 +32,7 @@
       "pass": true
     },
     {
-      "detail": "60s / 8 线程共 20657 次写：created 8→8，堆峰值 0.18 MiB，错误 0",
+      "detail": "60s / 8 线程共 16049 次写：created 8→8，堆 0.133→0.178 MiB（增长 +0.045），错误 0",
       "evidence": {
         "errors": [],
         "final_pool": {
@@ -42,10 +42,17 @@
           "idle": 8,
           "size": 8
         },
+        "heap_first_mb": 0.133,
+        "heap_growth_mb": 0.045,
+        "heap_last_mb": 0.178,
+        "heap_peak_mb": 0.183,
+        "heap_stable": true,
+        "observer_excluded": true,
+        "observer_note": "采样点写 JSONL 不驻留内存；tracemalloc 停止后才读回",
         "samples": [
           {
-            "db_bytes": 225280,
-            "heap_mb": 0.158,
+            "db_bytes": 246296,
+            "heap_mb": 0.133,
             "pool": {
               "closed": false,
               "created": 8,
@@ -53,12 +60,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 1459,
+            "rows": 1306,
             "t_s": 5.0
           },
           {
-            "db_bytes": 389656,
-            "heap_mb": 0.166,
+            "db_bytes": 381632,
+            "heap_mb": 0.088,
             "pool": {
               "closed": false,
               "created": 8,
@@ -66,12 +73,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 3107,
+            "rows": 2647,
             "t_s": 10.0
           },
           {
-            "db_bytes": 544768,
-            "heap_mb": 0.052,
+            "db_bytes": 492345,
+            "heap_mb": 0.178,
             "pool": {
               "closed": false,
               "created": 8,
@@ -79,12 +86,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 4843,
+            "rows": 3984,
             "t_s": 15.0
           },
           {
-            "db_bytes": 717336,
-            "heap_mb": 0.066,
+            "db_bytes": 635850,
+            "heap_mb": 0.135,
             "pool": {
               "closed": false,
               "created": 8,
@@ -92,12 +99,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 6534,
+            "rows": 5333,
             "t_s": 20.0
           },
           {
-            "db_bytes": 881176,
-            "heap_mb": 0.095,
+            "db_bytes": 729667,
+            "heap_mb": 0.087,
             "pool": {
               "closed": false,
               "created": 8,
@@ -105,12 +112,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 8311,
+            "rows": 6659,
             "t_s": 25.0
           },
           {
-            "db_bytes": 1044480,
-            "heap_mb": 0.121,
+            "db_bytes": 856788,
+            "heap_mb": 0.055,
             "pool": {
               "closed": false,
               "created": 8,
@@ -118,12 +125,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 10075,
+            "rows": 8069,
             "t_s": 30.0
           },
           {
-            "db_bytes": 1187840,
-            "heap_mb": 0.145,
+            "db_bytes": 1000829,
+            "heap_mb": 0.135,
             "pool": {
               "closed": false,
               "created": 8,
@@ -131,12 +138,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 11820,
+            "rows": 9351,
             "t_s": 35.0
           },
           {
-            "db_bytes": 1380888,
-            "heap_mb": 0.173,
+            "db_bytes": 1115127,
+            "heap_mb": 0.097,
             "pool": {
               "closed": false,
               "created": 8,
@@ -144,12 +151,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 13596,
+            "rows": 10734,
             "t_s": 40.0
           },
           {
-            "db_bytes": 1548824,
-            "heap_mb": 0.066,
+            "db_bytes": 1234058,
+            "heap_mb": 0.176,
             "pool": {
               "closed": false,
               "created": 8,
@@ -157,12 +164,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 15370,
+            "rows": 12005,
             "t_s": 45.0
           },
           {
-            "db_bytes": 1708568,
-            "heap_mb": 0.094,
+            "db_bytes": 1382197,
+            "heap_mb": 0.133,
             "pool": {
               "closed": false,
               "created": 8,
@@ -170,12 +177,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 17141,
+            "rows": 13360,
             "t_s": 50.0
           },
           {
-            "db_bytes": 1872408,
-            "heap_mb": 0.113,
+            "db_bytes": 1497032,
+            "heap_mb": 0.077,
             "pool": {
               "closed": false,
               "created": 8,
@@ -183,12 +190,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 18858,
+            "rows": 14635,
             "t_s": 55.0
           },
           {
-            "db_bytes": 2064920,
-            "heap_mb": 0.143,
+            "db_bytes": 1640539,
+            "heap_mb": 0.178,
             "pool": {
               "closed": false,
               "created": 8,
@@ -196,40 +203,40 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 20649,
+            "rows": 16041,
             "t_s": 60.0
           }
         ],
         "seconds": 60,
         "workers": 8,
-        "writes": 20657
+        "writes": 16049
       },
       "id": "soak",
       "pass": true
     },
     {
-      "detail": "default 122.9 B/写（close 后 110592 B）; pool 122.9 B/写（close 后 110592 B）; pool_wal 8610.0 B/写（close 后 110592 B）",
+      "detail": "default 122.9 B/写（close 后 131072 B）; pool 122.9 B/写（close 后 131072 B）; pool_wal 8610.0 B/写（close 后 131072 B）",
       "evidence": {
         "note": "pool_wal 的 -wal 在 close 时 checkpoint；只开池不留 WAL 文件",
         "rows": [
           {
-            "after": 110592,
-            "before": 86016,
-            "during": 110592,
+            "after": 131072,
+            "before": 106496,
+            "during": 131072,
             "mode": "default",
             "per_write": 122.9
           },
           {
-            "after": 110592,
-            "before": 86016,
-            "during": 110592,
+            "after": 131072,
+            "before": 106496,
+            "during": 131072,
             "mode": "pool",
             "per_write": 122.9
           },
           {
-            "after": 110592,
-            "before": 86016,
-            "during": 1808016,
+            "after": 131072,
+            "before": 106496,
+            "during": 1828496,
             "mode": "pool_wal",
             "per_write": 8610.0
           }
@@ -240,7 +247,7 @@
       "pass": true
     }
   ],
-  "generated_at": "2026-11-14T17:52:01",
+  "generated_at": "2026-11-21T17:08:19",
   "passed": true,
   "summary": {
     "fail": 0,

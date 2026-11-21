@@ -4,19 +4,19 @@
   "rows": [
     {
       "acquired": 200,
-      "elapsed_s": 0.115,
+      "elapsed_s": 0.118,
       "errors": [],
       "hold_ms": 0.2,
       "locked": false,
       "note": "peak_waiters>0 证明确实发生排队，不是全部顺序执行",
       "passed": true,
-      "peak_waiters": 177,
+      "peak_waiters": 173,
       "threads": 200,
       "waiters": 0
     },
     {
       "acquired": 200,
-      "elapsed_s": 0.118,
+      "elapsed_s": 0.115,
       "errors": [],
       "hold_ms": 0.2,
       "locked": false,
@@ -28,7 +28,7 @@
     },
     {
       "acquired": 200,
-      "elapsed_s": 0.114,
+      "elapsed_s": 0.117,
       "errors": [],
       "hold_ms": 0.2,
       "locked": false,

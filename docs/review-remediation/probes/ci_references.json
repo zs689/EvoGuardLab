@@ -2,7 +2,7 @@
   "method": "静态解析 run: 块，不执行 workflow，不替代真实 CI",
   "passed": true,
   "problems": [],
-  "reference_checks": 7,
+  "reference_checks": 10,
   "required_scripts": [
     "review_checks.py",
     "check_wheel_manifest.py",
@@ -11,12 +11,15 @@
     "check_build_context.py",
     "defense_demo.py"
   ],
-  "run_blocks": 22,
+  "run_blocks": 27,
   "scripts_referenced": [
     "check_build_context.py",
     "check_docker_context.py",
     "check_wheel_manifest.py",
     "defense_demo.py",
+    "distributed_stress.py",
+    "pg_rls_live.py",
+    "pg_store_e2e.py",
     "review_checks.py",
     "wheel_smoke.py"
   ],

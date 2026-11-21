@@ -612,6 +612,72 @@ def c_gate_in_ci():
                    ".github/workflows/test.yml")
 
 
+# ---- 证据新鲜度门禁：防止「读一个写着 passed:true 的旧 JSON」永久放行 ----
+# 映射：证据文件 -> 它声称验证的源码。源码比证据新 = 证据已过期，
+# 必须重跑探针，不能继续算通过。
+EVIDENCE_SOURCES = {
+    "docs/review-remediation/probes/http_ab_repeat.json": [
+        "ai-service/api/app.py", "ai-service/api/app_core.py",
+        "ai-service/evoguard/core.py"],
+    "docs/review-remediation/probes/docker_image_verification.json": [
+        "Dockerfile", "pyproject.toml"],
+    "docs/review-remediation/probes/ci_references.json": [
+        ".github/workflows/test.yml"],
+    "docs/review-remediation/probes/soak_heap_stable.json": [
+        "ai-service/evoguard/core.py"],
+    "docs/review-remediation/probes/frontend_a11y.json": [
+        "frontend/index.html", "frontend/command.html"],
+    "docs/review-remediation/probes/agent_watch_verification.json": [
+        "ai-service/evoguard/agent_watch.py"],
+    "docs/review-remediation/probes/write_gate_stress.json": [
+        "ai-service/evoguard/core.py"],
+    "docs/review-remediation/probes/store_remaining_checks.json": [
+        "ai-service/evoguard/core.py"],
+}
+
+
+def evidence_freshness(pairs):
+    """pairs: [(证据绝对路径, [源码绝对路径或相对 ROOT]), ...]。"""
+    stale, froze = [], []
+    for ev, sources in pairs:
+        if not os.path.isfile(ev):
+            stale.append("%s：证据文件不存在" % os.path.basename(ev))
+            continue
+        rep = _json(ev) or {}
+        if rep.get("frozen") is True:
+            reason = str(rep.get("frozen_reason") or "").strip()
+            if reason:
+                froze.append("%s（冻结：%s）"
+                             % (os.path.basename(ev), reason[:60]))
+                continue
+            # 标了 frozen 却没理由：不当作豁免，继续走 mtime 检查
+
+        em = os.path.getmtime(ev)
+        for src in sources:
+            sp = src if os.path.isabs(src) else os.path.join(ROOT, src)
+            if not os.path.isfile(sp):
+                continue
+            if os.path.getmtime(sp) > em + 1:   # 1s 容差，避免同秒写入误判
+                stale.append("%s 早于 %s（证据过期，需重跑探针）"
+                             % (os.path.basename(ev), os.path.basename(sp)))
+    return {"fresh": not stale, "stale": stale, "frozen": froze,
+            "checked": len(pairs)}
+
+
+def c_evidence_freshness():
+    pairs = [(os.path.join(ROOT, ev), srcs)
+             for ev, srcs in EVIDENCE_SOURCES.items()]
+    r = evidence_freshness(pairs)
+    return _result(
+        "EVIDENCE/freshness", r["fresh"],
+        ("%d 项新鲜，%d 项冻结（已标注，非自动重跑）：%s"
+         % (r["checked"] - len(r["frozen"]), len(r["frozen"]),
+            "；".join(r["frozen"])[:160])) if r["fresh"]
+        else ("%d/%d 项证据过期：%s"
+              % (len(r["stale"]), r["checked"], "；".join(r["stale"][:4]))),
+        "docs/review-remediation/probes/*.json mtime vs source mtime")
+
+
 CHECKS = [
     ("EG-003", c_dockerignore),
     ("EG-003", c_dockerfile_copy),
@@ -642,6 +708,7 @@ CHECKS = [
     ("EG-023", c_ci_references),
     ("EG-010", c_heap_stability),
     ("AGENT-WATCH", c_agent_watch),
+    ("EVIDENCE", c_evidence_freshness),
 ]
 
 

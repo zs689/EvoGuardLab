@@ -7,6 +7,8 @@
     "n": 5
   },
   "boundary": "同机顺序运行；两组 P95 绝对值受当时机器负载影响，看相对差距",
+  "frozen": true,
+  "frozen_reason": "一次性 A/B 探针，无独立重跑脚本；源码变更后需人工重跑 live_client",
   "method": "loadtest.py --requests 24 --workers 8 --rounds 3, each config x5",
   "new_default": {
     "max_ms": 1359.59,

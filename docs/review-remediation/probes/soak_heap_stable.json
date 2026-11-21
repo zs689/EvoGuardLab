@@ -4771,6 +4771,8 @@
       "pass": true
     }
   ],
+  "frozen": true,
+  "frozen_reason": "43 万次写/长时 soak，无独立重跑脚本，需人工触发",
   "generated_at": "2026-11-15T19:56:39",
   "passed": true,
   "summary": {

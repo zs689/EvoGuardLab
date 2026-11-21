@@ -60,6 +60,8 @@
       "wheel": "evoguardlab-0.6.0-py3-none-any.whl"
     }
   ],
+  "frozen": true,
+  "frozen_reason": "verify_docker_image.py 需构建镜像（>120s），非 CI 常规项",
   "image": "evoguardlab:verify",
   "method": "本机 Docker Desktop（Linux 容器），参数列表调用，不 push 不上传",
   "passed": true,
