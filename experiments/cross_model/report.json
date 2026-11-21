@@ -1,0 +1,306 @@
+{
+  "cross_model": [
+    {
+      "coding_agent": null,
+      "env_invariant_40": null,
+      "evidence": "experiments\\coding_agent_real\\ab_result.json",
+      "key_env": "DEEPSEEK_API_KEY",
+      "key_present": true,
+      "model": "deepseek-chat",
+      "provider": "deepseek",
+      "reason": "已有实物证据（见 evidence）；本轮未重跑",
+      "status": "DONE"
+    },
+    {
+      "coding_agent": null,
+      "env_invariant_40": null,
+      "evidence": null,
+      "key_env": "DASHSCOPE_API_KEY",
+      "key_present": false,
+      "model": "qwen-plus",
+      "provider": "qwen",
+      "reason": "未设置 DASHSCOPE_API_KEY；不伪造跨模型数字",
+      "status": "NOT_RUN"
+    },
+    {
+      "coding_agent": null,
+      "env_invariant_40": null,
+      "evidence": null,
+      "key_env": "OPENAI_API_KEY",
+      "key_present": false,
+      "model": "gpt-4o-mini",
+      "provider": "openai",
+      "reason": "未设置 OPENAI_API_KEY；不伪造跨模型数字",
+      "status": "NOT_RUN"
+    },
+    {
+      "coding_agent": null,
+      "env_invariant_40": null,
+      "evidence": null,
+      "key_env": "ZHIPU_API_KEY",
+      "key_present": false,
+      "model": "glm-4-flash",
+      "provider": "glm",
+      "reason": "未设置 ZHIPU_API_KEY；不伪造跨模型数字",
+      "status": "NOT_RUN"
+    },
+    {
+      "coding_agent": null,
+      "env_invariant_40": null,
+      "evidence": null,
+      "key_env": "MOONSHOT_API_KEY",
+      "key_present": false,
+      "model": "moonshot-v1-8k",
+      "provider": "kimi",
+      "reason": "未设置 MOONSHOT_API_KEY；不伪造跨模型数字",
+      "status": "NOT_RUN"
+    },
+    {
+      "coding_agent": null,
+      "env_invariant_40": null,
+      "evidence": null,
+      "key_env": null,
+      "key_present": false,
+      "model": null,
+      "provider": "ollama",
+      "reason": "本地后端：未做真机探针，不把'无需 key'当跑过",
+      "status": "NOT_RUN"
+    }
+  ],
+  "honest_note": "本仓库当前只验证过 DeepSeek 单厂商。其它模型即使 key 存在，也必须真跑 eval_coding_agent.py / eval_env_invariant_bench.py 并写入结果后才算 ELIGIBLE->DONE；本报告不代跑、不推算。",
+  "latest_public_eval": {
+    "judge": "rule-only",
+    "note": "ASR 为「检测+门禁两层都未拦」的可利用性上界，非真实业务损失率；InjecAgent/AgentDojo 的攻击工具在本系统未注册，无法真执行。",
+    "sets": {
+      "agentdojo_slice": {
+        "asr": 0.0,
+        "asr_detector_only": 0.0,
+        "asr_with_registered_tools": 0.0,
+        "blocked_by": {
+          "L1_high_stakes": 20,
+          "L1_light": 100,
+          "L2_semantic": 0,
+          "L2_unavailable": 0,
+          "missed": 0,
+          "tool_gate": 0
+        },
+        "n": 120,
+        "p95_ms": 0.086,
+        "provenance": "public (AgentDojo templates, goal-only)"
+      },
+      "injecagent_public": {
+        "asr": 0.0,
+        "asr_detector_only": 0.0645,
+        "asr_with_registered_tools": 0.0484,
+        "blocked_by": {
+          "L1_high_stakes": 68,
+          "L1_light": 1904,
+          "L2_semantic": 0,
+          "L2_unavailable": 0,
+          "missed": 0,
+          "tool_gate": 136
+        },
+        "n": 2108,
+        "p95_ms": 0.102,
+        "provenance": "public (InjecAgent, full)"
+      }
+    },
+    "utility_under_attack": {
+      "benign_n": 2108,
+      "false_positive_rate": 0.0,
+      "pass_rate": 1.0,
+      "provenance": "public (InjecAgent user_instruction, same-source benign)",
+      "warning": null
+    },
+    "version": 1
+  },
+  "public_corpus_provenance": {
+    "agentdojo": {
+      "declared_files": [
+        {
+          "declared_sha256": "d962c68a8a6cd41c33eac0a2fd27fe38d77dfb3e2f85425b2c2fda63c920b62b",
+          "path": "src/agentdojo/attacks/base_attacks.py"
+        },
+        {
+          "declared_sha256": "0e3f3cec2173524989d67bd3d934d032774ad3fc5995969c9565613efaa21c6d",
+          "path": "src/agentdojo/attacks/baseline_attacks.py"
+        },
+        {
+          "declared_sha256": "160aa9604ce31cd3e54ecb06d9ed4acc770066a0dedd11d0742f6205d6077859",
+          "path": "src/agentdojo/attacks/dos_attacks.py"
+        },
+        {
+          "declared_sha256": "519f24e0b9d72f43343d665679adacc33758b50cd1b586a81fa53fb098dcfe71",
+          "path": "src/agentdojo/attacks/important_instructions_attacks.py"
+        }
+      ],
+      "license": "MIT",
+      "license_url": "https://github.com/ethz-spylab/agentdojo/blob/main/LICENSE",
+      "local_files": [
+        {
+          "bytes": 77316,
+          "path": "data\\external\\agentdojo\\cases.jsonl",
+          "sha256": "cc22347c2c57018f77141115ea52344b7c1c367e314e022f4d0d0bd68b0a14d0"
+        }
+      ],
+      "manifest": "data\\external\\agentdojo\\manifest.json",
+      "manifest_sha256": "3dce41b4da0fe9e45bb79d6b2eb36591e48caf2bffbc479b1c72465b08983d06",
+      "note": "组合样本，不是 AgentDojo 端到端任务；只做 AST 静态解析，不执行源码。",
+      "self_built": false,
+      "source": "ethz-spylab/agentdojo",
+      "version": "agentdojo-templates-v1"
+    },
+    "chinese": {
+      "declared_files": [],
+      "license": null,
+      "license_url": null,
+      "local_files": [
+        {
+          "bytes": 212412,
+          "path": "data\\external\\chinese\\cases.jsonl",
+          "sha256": "5fdeee47f7edd6ffd5b09f4069198fe3dc5182de44117e10411911d93471c41c"
+        }
+      ],
+      "manifest": "data\\external\\chinese\\manifest.json",
+      "manifest_sha256": "897cabdd8eb558b0e653fe7d3b7625dd1363c716809b0abef486f4c62d41ccc6",
+      "note": "语料不入库，仓库只保留下载器、清单与统计。`indirect_injection` 为自建构造集，不代表真实世界分布；`harmful_request` 属内容审核任务，与注入检测分开统计。",
+      "self_built": true,
+      "source": {
+        "jbb_seed": {
+          "bytes": 15577,
+          "class": "harmful_request",
+          "git_blob_sha": "eae6476959e2165fbed79cb7528b0620449519c1",
+          "license": "Apache-2.0",
+          "name": "jailbench_zh_seed_queries",
+          "note": "中文有害意图请求。属内容审核任务，与注入检测不同任务，单独统计。",
+          "parsed": 108,
+          "path": "中文_大模型基础安全评测数据集_JailBench_seed.csv",
+          "raw_sha256": "eeb97695ef364b72967b5ef812253a1284279b8329f0b0a5aa721c2851ae0ff0",
+          "repo": "ZZZ-zero/JailbreakBench"
+        },
+        "jbb_tpl": {
+          "bytes": 361,
+          "class": "direct_jailbreak",
+          "git_blob_sha": "e49953706d12a9f918f3ae29f33daf9133c487f3",
+          "license": "Apache-2.0",
+          "name": "jailbench_zh_wrappers",
+          "note": "中文越狱包装模板（含 {decoded_query} 槽位）。本项目用无害问题实例化后再入集 —— 模板本身不可直接评测。",
+          "parsed": 3,
+          "path": "越狱提示词.txt",
+          "raw_sha256": "9b0c4f59bb99c57524fe4a0e1e418b9e4afd13337754782deb8f8775663e1a08",
+          "repo": "ZZZ-zero/JailbreakBench"
+        },
+        "pojia": {
+          "bytes": 24155,
+          "class": "direct_jailbreak",
+          "git_blob_sha": "e9a1deeae7b6c266962f5b3e32177e1e243d46c4",
+          "license": "MIT",
+          "name": "pojia_breaker_ammo",
+          "note": "中文红队手法模板；只取手法，不含具体有害载荷。",
+          "parsed": 31,
+          "path": "ammo/ammo_matrix.json",
+          "raw_sha256": "c436620005caad4d3f003913f33f9772c7ee2b7c362861cf9b0ea437bf51e594",
+          "repo": "Justinuse1/pojia-breaker"
+        }
+      },
+      "version": "chinese-corpus-v2"
+    },
+    "chinese_jailbreak": {
+      "declared_files": [],
+      "license": null,
+      "license_url": null,
+      "local_files": [
+        {
+          "bytes": 31586,
+          "path": "data\\external\\chinese_jailbreak\\cases.jsonl",
+          "sha256": "f32b4cd2ccfc5c9f6fcc63d2ee96d547dfae6e99a9da6641dc07fab1fe7862ef"
+        }
+      ],
+      "manifest": "data\\external\\chinese_jailbreak\\manifest.json",
+      "manifest_sha256": "035f59a15b397d4896ac4d5009eeeaddd2abd0b982240c2a7c8e14169becb23e",
+      "note": "攻击话术为中文原始语料（MIT）；正常对照由本项目自行撰写。语料不入库，仓库只保留下载器与清单。",
+      "self_built": false,
+      "source": {
+        "license": "MIT",
+        "name": "pojia_breaker_ammo",
+        "note": "中文红队手法模板；只取手法，不含具体有害载荷（上游 31 条均未命中毒品/炸弹/枪支/自杀/儿童等词）。",
+        "path": "ammo/ammo_matrix.json",
+        "repo": "Justinuse1/pojia-breaker"
+      },
+      "version": "chinese-jailbreak-v1"
+    },
+    "injecagent": {
+      "declared_files": [
+        {
+          "declared_sha256": "0a8186468d21389af432e8c7b399ae42264d1b93a07b65c7a489468508604305",
+          "path": "data/test_cases_dh_base.json"
+        },
+        {
+          "declared_sha256": "885602716b72c18af80695ce6c2e1f242fa03163bc90b0788b0c5e4ab6216d50",
+          "path": "data/test_cases_dh_enhanced.json"
+        },
+        {
+          "declared_sha256": "4daab35c62a3845e8b9400f4dca58b9c9f37e57cd33b2337552557fbb26282e9",
+          "path": "data/test_cases_ds_base.json"
+        },
+        {
+          "declared_sha256": "7bc510868df032511053fc40e8470e68a041fb7148d055112093594bf73ab0ce",
+          "path": "data/test_cases_ds_enhanced.json"
+        }
+      ],
+      "license": null,
+      "license_url": null,
+      "local_files": [
+        {
+          "bytes": 2729604,
+          "path": "data\\external\\injecagent\\cases.jsonl",
+          "sha256": "c17e347cf27853c1915709628fde24cba42fd6cb3a0181c7cc86af4a659f9e06"
+        }
+      ],
+      "manifest": "data\\external\\injecagent\\manifest.json",
+      "manifest_sha256": "07a5c824a76bfb5e34449c163c40c7ae41994a7209db687dff08a89e68cf53eb",
+      "note": "语料不入库：本文件只记录来源、许可、逐文件 sha256 与条数，跑 import_external_attacks.py 可复现同一份字节。",
+      "self_built": false,
+      "source": [
+        {
+          "homepage": "https://github.com/uiuc-kang-lab/InjecAgent",
+          "license": "MIT",
+          "license_url": "https://github.com/uiuc-kang-lab/InjecAgent/blob/main/LICENSE",
+          "name": "injecagent",
+          "paper": "InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents (ACL 2024 Findings)",
+          "ref": "git blob sha（不用分支名，分支会动）",
+          "repo": "uiuc-kang-lab/InjecAgent"
+        }
+      ],
+      "version": "external-attacks-v1"
+    },
+    "jailbreak_classification": {
+      "declared_files": [],
+      "license": null,
+      "license_url": null,
+      "local_files": [
+        {
+          "bytes": 2453613,
+          "path": "data\\external\\jailbreak_classification\\prompts.jsonl",
+          "sha256": "ca9dcd3bfb99995d748baff2b65f742f929c58e28816f72046f479e56f78caf1"
+        }
+      ],
+      "manifest": "data\\external\\jailbreak_classification\\manifest.json",
+      "manifest_sha256": "d780be7962fd5491d23797a897f5e67bc252fe7b6f1c217bba8a8568b5e297d7",
+      "note": "语料不入库：本文件只记录来源、许可、sha256 与条数。",
+      "self_built": false,
+      "source": {
+        "file": "default/jailbreak_dataset_full.csv",
+        "license": "Apache-2.0",
+        "license_url": "https://hf-mirror.com/datasets/jackhhao/jailbreak-classification/raw/main/README.md",
+        "mirror_of": "https://huggingface.co/datasets/jackhhao/jailbreak-classification",
+        "name": "jailbreak_classification",
+        "note": "这套是**直接越狱/正常**二分类话术，不是工具返回里的间接注入；入口应为 guard_input，二级模型不适用于该落点。",
+        "repo": "jackhhao/jailbreak-classification"
+      },
+      "version": "jailbreak-prompts-v1"
+    }
+  },
+  "purpose": "ZERO-04 跨模型与公开语料 provenance；未跑的模型标 NOT_RUN",
+  "version": 1
+}
