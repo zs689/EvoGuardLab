@@ -56,7 +56,8 @@ include-package-data = false
                            "ai-service/api/app_core.py",
                            "ai-service/api/routes_agent.py",
                            "ai-service/api/routes_enterprise.py"]
-"share/evoguardlab/frontend" = ["frontend/index.html"]
+"share/evoguardlab/frontend" = ["frontend/index.html",
+                                "frontend/command.html"]
 "share/evoguardlab/config" = ["config/thresholds_v1.json",
                               "config/thresholds_v2_calibrated.json"]
 "share/evoguardlab/docs" = ["docs/taxonomy.md"]

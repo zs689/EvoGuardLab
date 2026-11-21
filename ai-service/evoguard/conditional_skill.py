@@ -38,6 +38,20 @@ ALLOWED_PARAM_KEYS = frozenset({
 })
 EVIDENCE_SELECTORS = frozenset({"max_version", "declared_order", "first"})
 
+# MOD-EVO-01：写后断言只认这 4 种安全原语（纯 AST/正则，零任意代码执行）
+ASSERTION_KINDS = frozenset({
+    "ast_symbol_sync", "regex_must_match", "regex_must_not_match",
+    "pair_presence",
+})
+# 每种原语允许的字段（严格白名单；多余字段一律拒绝，防绕过）
+ASSERTION_FIELDS = {
+    "ast_symbol_sync": frozenset({"kind", "file", "source_symbol",
+                                  "mirror_symbol", "message"}),
+    "regex_must_match": frozenset({"kind", "file", "pattern", "message"}),
+    "regex_must_not_match": frozenset({"kind", "file", "pattern", "message"}),
+    "pair_presence": frozenset({"kind", "file", "first", "second", "message"}),
+}
+
 # 代码特征：宁可误杀，不放过任意代码执行。
 CODE_MARKERS = ("import ", "def ", "exec(", "eval(", "__", "os.", "sys.",
                 "subprocess", "lambda ", "compile(")
@@ -133,6 +147,59 @@ def validate_schema(skill):
         errors.append("stop_when 必须是对象")
     if not isinstance(skill.get("fallback"), dict):
         errors.append("fallback 必须是对象")
+    errors.extend(_validate_assertions(skill.get("post_write_assertions")))
+    return errors
+
+
+def _validate_assertions(assertions):
+    """MOD-EVO-01-T1：声明式写后断言的**结构白名单**校验。
+
+    公理 A：确定性检查器补模型执行粗心。但检查器本身不能成为新的
+    代码执行面 —— 只认 4 种原语 + 固定字段，且沿用通用 CODE_MARKERS
+    拒绝任意代码特征（eval/exec/import/__ 等）。
+    """
+    errors = []
+    if assertions is None:
+        return errors
+    if not isinstance(assertions, list):
+        return ["post_write_assertions 必须是列表"]
+    for i, a in enumerate(assertions):
+        tag = "post_write_assertions[%d]" % i
+        if not isinstance(a, dict):
+            errors.append("%s 必须是对象" % tag)
+            continue
+        kind = str(a.get("kind") or "")
+        if kind not in ASSERTION_KINDS:
+            errors.append("%s.kind 只能是可信原语 %s（收到 %r）"
+                          % (tag, sorted(ASSERTION_KINDS), kind[:40]))
+            continue
+        extra = set(a) - ASSERTION_FIELDS[kind]
+        if extra:
+            errors.append("%s 含越权字段 %s（原语 %s 只允许 %s）"
+                          % (tag, sorted(extra), kind,
+                             sorted(ASSERTION_FIELDS[kind])))
+        file_ = a.get("file")
+        if not isinstance(file_, str) or not file_.strip():
+            errors.append("%s.file 必须是非空相对路径" % tag)
+        elif file_.startswith("/") or ".." in file_.replace("\\", "/").split("/"):
+            errors.append("%s.file 不允许绝对路径或上跳" % tag)
+        # 原语所需的关键字段必须存在且为字符串
+        need = {
+            "ast_symbol_sync": ("source_symbol", "mirror_symbol"),
+            "regex_must_match": ("pattern",),
+            "regex_must_not_match": ("pattern",),
+            "pair_presence": ("first", "second"),
+        }[kind]
+        for key in need:
+            if not isinstance(a.get(key), str) or not a.get(key):
+                errors.append("%s.%s 必须是非空字符串" % (tag, key))
+        # 复用通用代码特征门禁（CODE_MARKERS 已含 eval( / __ / import 等）
+        for v in _strings(a):
+            low = v.lower()
+            for m in CODE_MARKERS:
+                if m in low:
+                    errors.append("%s 疑似代码特征 %r，断言不允许" % (tag, m))
+                    break
     return errors
 
 

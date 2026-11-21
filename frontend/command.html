@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EvoGuard Command // Global Agent Security Telemetry</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #02060f;
+  --panel: #040b18;
+  --line: rgba(92, 225, 255, 0.14);
+  --line-bright: rgba(130, 236, 255, 0.34);
+  --cyan: #6ce6ff;
+  --cyan-2: #22b8ff;
+  --ice: #dff8ff;
+  --dim: #52708a;
+  --muted: #7ea3c0;
+  --warn: #fbbf24;
+  --danger: #fb7185;
+  --ok: #34d399;
+  --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+}
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 34%, #071931 0%, #030916 58%, #01040a 100%);
+  color: var(--ice);
+  font-family: var(--mono);
+  font-size: 11px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* 顶部极细 HUD */
+.hud-top {
+  height: 36px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; gap: 12px; overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background: rgba(3, 10, 22, 0.92);
+  letter-spacing: 0.08em;
+}
+.hud-left, .hud-mid, .hud-right { display: flex; align-items: center; gap: 12px; min-width: 0; white-space: nowrap; }
+.hud-title { color: var(--ice); font-weight: 700; font-size: 11px; display: flex; align-items: center; gap: 8px; white-space: nowrap; flex-shrink: 0; }
+.pulse-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan), 0 0 18px var(--cyan-2);
+  animation: blink 1.6s infinite ease-in-out;
+}
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+.hud-chip {
+  color: var(--muted); font-size: 9.8px; white-space: nowrap; flex-shrink: 0;
+  border-left: 1px solid var(--line); padding-left: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.hud-chip b { color: var(--cyan); font-weight: 600; }
+.hud-btn {
+  color: var(--cyan); text-decoration: none; font-size: 10px; white-space: nowrap; flex-shrink: 0;
+  border: 1px solid var(--line-bright); padding: 3px 9px; border-radius: 2px;
+  background: rgba(34, 184, 255, 0.08);
+  transition: background .15s, box-shadow .15s;
+}
+.hud-btn:hover { background: rgba(34, 184, 255, 0.2); box-shadow: 0 0 10px rgba(92,225,255,.3); }
+@media (max-width: 1280px) { .hud-mid { display: none; } }
+@media (max-width: 960px) { .hud-left .hud-chip { display: none; } }
+
+/* 主体上下分屏：上 57% 全球点阵地图，下 43% 高密度遥测面板 */
+.stage {
+  display: grid;
+  grid-template-rows: minmax(0, 57%) minmax(0, 43%);
+  height: calc(100vh - 34px);
+  width: 100vw;
+}
+
+/* 上半区：地图舞台 */
+.map-zone {
+  position: relative;
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(92,225,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(92,225,255,0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+#mapCanvas { display: block; width: 100%; height: 100%; }
+
+.map-overlay-tl, .map-overlay-tr, .map-overlay-bl, .map-overlay-br {
+  position: absolute; pointer-events: none; font-size: 9.5px; color: var(--muted);
+  letter-spacing: 0.06em; line-height: 1.5; font-variant-numeric: tabular-nums;
+}
+.map-overlay-tl { top: 10px; left: 14px; }
+.map-overlay-tr { top: 10px; right: 14px; text-align: right; }
+.map-overlay-bl { bottom: 8px; left: 14px; }
+.map-overlay-br { bottom: 8px; right: 14px; text-align: right; }
+.map-overlay-tl b, .map-overlay-tr b { color: var(--cyan); }
+
+/* 下半区：6 列高密度遥测矩阵 */
+.deck {
+  display: grid;
+  grid-template-columns: 1.35fr 1.25fr 1.15fr 1.0fr 1.05fr 1.45fr;
+  height: 100%;
+  background: rgba(2, 7, 16, 0.94);
+}
+.col {
+  border-right: 1px solid var(--line);
+  padding: 8px 10px;
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+}
+.col:last-child { border-right: 0; }
+.col-hd {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 9px; color: var(--muted); letter-spacing: 0.1em;
+  border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.col-hd span:last-child { color: var(--cyan); }
+
+/* 遥测数据表格 */
+.t-rows { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 3px; }
+.t-row {
+  display: grid; grid-template-columns: 58px 1fr 42px 36px;
+  align-items: center; gap: 6px;
+  font-size: 9.2px; line-height: 1.25; font-variant-numeric: tabular-nums;
+  color: #9dc3df;
+}
+.t-row .id { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-row .bar-wrap { height: 4px; background: rgba(92,225,255,0.08); position: relative; overflow: hidden; }
+.t-row .bar-fill { height: 100%; background: linear-gradient(90deg, #1d74a8, #74eaff); transition: width .35s ease; }
+.t-row .num { text-align: right; color: var(--ice); }
+.t-row .st { text-align: right; font-size: 8.5px; }
+.st.ok { color: var(--cyan); }
+.st.deny { color: var(--danger); }
+.st.warn { color: var(--warn); }
+
+/* 列 3：水平排名条 */
+.rank-rows { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 2px; }
+.r-row { display: grid; grid-template-columns: 62px 1fr 30px; align-items: center; gap: 6px; font-size: 9px; }
+.r-row .lbl { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r-row .track { height: 5px; background: rgba(92,225,255,0.08); }
+.r-row .fill { height: 100%; background: linear-gradient(90deg, rgba(34,184,255,0.35), #d8f8ff); box-shadow: 0 0 6px rgba(108,230,255,0.45); transition: width .4s ease; }
+.r-row .val { text-align: right; color: var(--ice); font-variant-numeric: tabular-nums; }
+
+/* 列 4：六边形雷达 + 大数字 */
+.radar-wrap { flex: 1; display: flex; flex-direction: column; justify-content: space-between; min-height: 0; }
+#radarCanvas { width: 100%; height: 64%; display: block; }
+.big-kpi {
+  border-top: 1px solid var(--line); padding-top: 6px;
+  display: flex; justify-content: space-between; align-items: flex-end;
+}
+.big-kpi .num { font-size: 24px; font-weight: 700; color: var(--ice); letter-spacing: 0.04em; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px rgba(108,230,255,0.4); }
+.big-kpi .meta { font-size: 8.5px; color: var(--muted); text-align: right; line-height: 1.4; }
+.micro-bars { display: flex; align-items: flex-end; gap: 2px; height: 18px; margin-top: 4px; }
+.micro-bars i { flex: 1; background: rgba(108,230,255,0.45); display: block; transition: height .3s; }
+
+/* 列 5：矩阵热力网格 + 计数 */
+.matrix-wrap { flex: 1; display: flex; flex-direction: column; justify-content: space-between; min-height: 0; }
+#matrixCanvas { width: 100%; height: 62%; display: block; }
+
+/* 列 6：双波形 + 环形仪表盘 + 右侧数值表 */
+.right-grid {
+  flex: 1; display: grid; grid-template-columns: 1fr 74px; gap: 8px; min-height: 0;
+}
+.wave-gauge { display: flex; flex-direction: column; justify-content: space-between; min-height: 0; }
+#waveCanvas { width: 100%; height: 46%; display: block; border-bottom: 1px solid var(--line); }
+.gauge-box { height: 52%; display: flex; align-items: center; justify-content: center; position: relative; }
+#gaugeCanvas { width: 100%; height: 100%; display: block; }
+.side-nums {
+  border-left: 1px solid var(--line); padding-left: 6px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  font-size: 8.8px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.side-nums div { display: flex; justify-content: space-between; }
+.side-nums b { color: var(--ice); font-weight: 500; }
+
+@media (max-width: 1100px) {
+  .deck { grid-template-columns: repeat(3, 1fr); overflow-y: auto; }
+}
+</style>
+</head>
+<body>
+
+<header class="hud-top">
+  <div class="hud-left">
+    <div class="hud-title"><span class="pulse-dot"></span>EVOGUARD // GLOBAL AGENT SECURITY COMMAND</div>
+    <div class="hud-chip">CLUSTER <b id="hud-cluster">A-NORTH-04</b></div>
+    <div class="hud-chip">GUARD MODE <b id="hud-mode">ENFORCE / TAINT</b></div>
+  </div>
+  <div class="hud-mid">
+    <div class="hud-chip">EVENTS/S <b id="hud-eps">1,284</b></div>
+    <div class="hud-chip">EXECUTED BREACH <b style="color:var(--ok)">0</b></div>
+    <div class="hud-chip">P95 GATE <b id="hud-p95">0.14 ms</b></div>
+    <div class="hud-chip">RUNS <b id="hud-runs">--</b></div>
+    <div class="hud-chip">SKILLS <b id="hud-skills">--</b></div>
+  </div>
+  <div class="hud-right">
+    <div class="hud-chip" id="hud-clock">UTC 00:00:00.000</div>
+    <a class="hud-btn" href="/" title="切换回程序员调试与评测控制台">← 开发者工作台</a>
+  </div>
+</header>
+
+<main class="stage">
+  <!-- 上半区：全球点阵发光地图 + 跨洲动态飞线 -->
+  <section class="map-zone">
+    <canvas id="mapCanvas"></canvas>
+    <div class="map-overlay-tl">
+      <div>SENSOR MESH // <b>ACTIVE NODES: 16 HUBS · 2,840 RELAYS</b></div>
+      <div>TAINT ISOLATION // <b>STRICT DATA-TO-CONTROL FIREWALL</b></div>
+      <div id="map-live-event">LAST INTERCEPT // SCANNING GLOBAL STREAMS...</div>
+    </div>
+    <div class="map-overlay-tr">
+      <div>PROTOCOL // <b>OPENAI-PROXY · MCP-STDIO · PG16-RLS</b></div>
+      <div>AUDIT CHAIN // <b>HMAC-SHA256 + EXTERNAL ANCHOR</b></div>
+      <div id="hud-backend">BACKEND // SYNCING...</div>
+    </div>
+    <div class="map-overlay-bl">LAT 35.6762° N · LON 139.6503° E // GRID 10° × 10°</div>
+    <div class="map-overlay-br">TELEMETRY // LIVE API + SYNTHETIC FLOW VISUALIZATION</div>
+  </section>
+
+  <!-- 下半区：6 列高密度专业仪表盘 -->
+  <section class="deck">
+    <!-- 列 1：节点遥测流 A -->
+    <div class="col">
+      <div class="col-hd"><span>GLOBAL RELAY STREAM</span><span id="c1-stat">LIVE</span></div>
+      <div class="t-rows" id="col1-rows"></div>
+    </div>
+
+    <!-- 列 2：门禁事件流 B -->
+    <div class="col">
+      <div class="col-hd"><span>PREFLIGHT &amp; TAINT LOG</span><span id="c2-stat">0 LEAK</span></div>
+      <div class="t-rows" id="col2-rows"></div>
+    </div>
+
+    <!-- 列 3：拦截通道排名条 -->
+    <div class="col">
+      <div class="col-hd"><span>GUARDRAIL LOAD</span><span>TOP 12</span></div>
+      <div class="rank-rows" id="col3-rows"></div>
+    </div>
+
+    <!-- 列 4：六边形雷达图 + 跳动大数字 -->
+    <div class="col">
+      <div class="col-hd"><span>DEFENSE VECTOR</span><span>6-AXIS</span></div>
+      <div class="radar-wrap">
+        <canvas id="radarCanvas"></canvas>
+        <div>
+          <div class="big-kpi">
+            <div class="num" id="kpi-radar">682</div>
+            <div class="meta">POLICY SCORE<br><span style="color:var(--cyan)">NOMINAL</span></div>
+          </div>
+          <div class="micro-bars" id="micro-bars-1"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 列 5：矩阵热力网格 + 计数 -->
+    <div class="col">
+      <div class="col-hd"><span>NEURAL MATRIX</span><span>16×10</span></div>
+      <div class="matrix-wrap">
+        <canvas id="matrixCanvas"></canvas>
+        <div>
+          <div class="big-kpi">
+            <div class="num" id="kpi-matrix">841</div>
+            <div class="meta">TAINT CHECKS<br><span style="color:var(--ok)">ISOLATED</span></div>
+          </div>
+          <div class="micro-bars" id="micro-bars-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 列 6：双层示波器 + 环形进度 + 右侧微型数字列 -->
+    <div class="col">
+      <div class="col-hd"><span>THROUGHPUT &amp; INTEGRITY</span><span id="c6-stat">96.4%</span></div>
+      <div class="right-grid">
+        <div class="wave-gauge">
+          <canvas id="waveCanvas"></canvas>
+          <div class="gauge-box">
+            <canvas id="gaugeCanvas"></canvas>
+          </div>
+        </div>
+        <div class="side-nums" id="side-nums"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  // ---------------- 1. 世界各大洲简化经纬度多边形（零外部依赖点阵地图） ----------------
+  const CONTINENTS = [
+    // 北美
+    [[-165,64],[-140,69],[-122,70],[-95,69],[-80,62],[-62,58],[-55,47],[-67,44],[-76,35],[-81,25],[-88,21],[-97,19],[-105,20],[-112,28],[-118,34],[-124,42],[-130,54],[-148,60]],
+    // 格陵兰
+    [[-52,60],[-42,65],[-22,72],[-20,81],[-45,82],[-60,76],[-54,68]],
+    // 南美
+    [[-80,10],[-72,11],[-60,8],[-50,1],[-35,-6],[-38,-18],[-48,-26],[-58,-38],[-67,-54],[-74,-52],[-72,-35],[-71,-18],[-81,-5]],
+    // 欧洲
+    [[-10,36],[-9,43],[-2,48],[4,53],[10,58],[5,62],[18,70],[32,70],[42,66],[52,60],[44,48],[30,45],[22,38],[14,41],[4,43],[-5,36]],
+    // 非洲
+    [[-17,15],[-12,28],[-5,35],[10,37],[25,32],[33,31],[43,12],[51,11],[41,-2],[40,-15],[33,-26],[20,-35],[15,-28],[12,-10],[8,4],[-8,5],[-16,11]],
+    // 亚洲
+    [[35,41],[48,46],[58,56],[62,68],[85,73],[118,72],[145,68],[172,65],[162,56],[142,54],[136,42],[129,35],[122,31],[118,24],[108,20],[103,2],[98,16],[88,22],[78,8],[70,22],[58,25],[48,30],[36,36]],
+    // 东南亚群岛/日本轮廓点块
+    [[130,31],[136,35],[141,40],[144,44],[139,37],[132,33]],
+    [[106,-6],[115,-8],[120,-2],[112,2],[104,-1]],
+    // 澳大利亚
+    [[114,-22],[129,-14],[142,-11],[153,-26],[149,-38],[136,-35],[115,-34],[113,-26]]
+  ];
+
+  const HUBS = [
+    { name: "NYC-CORE", lon: -74.0, lat: 40.7, weight: 1.2 },
+    { name: "SFO-EDGE", lon: -122.4, lat: 37.8, weight: 1.0 },
+    { name: "IAD-GOV",  lon: -77.4, lat: 38.9, weight: 0.9 },
+    { name: "GRU-LATAM",lon: -46.6, lat: -23.5, weight: 0.8 },
+    { name: "LON-FIN",  lon: -0.1,  lat: 51.5, weight: 1.2 },
+    { name: "FRA-EU",   lon: 8.7,   lat: 50.1, weight: 1.3 },
+    { name: "PAR-SEC",  lon: 2.3,   lat: 48.8, weight: 0.9 },
+    { name: "MOW-GW",   lon: 37.6,  lat: 55.7, weight: 0.85 },
+    { name: "DXB-MENA", lon: 55.3,  lat: 25.2, weight: 0.8 },
+    { name: "JNB-AF",   lon: 28.0,  lat: -26.2, weight: 0.7 },
+    { name: "BOM-IN",   lon: 72.8,  lat: 19.0, weight: 0.85 },
+    { name: "SIN-APAC", lon: 103.8, lat: 1.35, weight: 1.15 },
+    { name: "BJS-HQ",   lon: 116.4, lat: 39.9, weight: 1.35 },
+    { name: "SHA-NET",  lon: 121.5, lat: 31.2, weight: 1.25 },
+    { name: "TYO-EAST", lon: 139.7, lat: 35.7, weight: 1.15 },
+    { name: "SYD-OC",   lon: 151.2, lat: -33.9, weight: 0.85 }
+  ];
+
+  function pointInPoly(x, y, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1];
+      const xj = poly[j][0], yj = poly[j][1];
+      const intersect = ((yi > y) !== (yj > y)) &&
+        (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  function isLand(lon, lat) {
+    for (let i = 0; i < CONTINENTS.length; i++) {
+      if (pointInPoly(lon, lat, CONTINENTS[i])) return true;
+    }
+    return false;
+  }
+
+  // 预生成陆地发光粒子点阵
+  const LAND_DOTS = [];
+  for (let lat = -56; lat <= 78; lat += 2.1) {
+    for (let lon = -170; lon <= 176; lon += 2.3) {
+      if (isLand(lon, lat)) {
+        LAND_DOTS.push({
+          lon: lon + (Math.random() - 0.5) * 0.9,
+          lat: lat + (Math.random() - 0.5) * 0.9,
+          a: 0.18 + Math.random() * 0.65,
+          r: 0.65 + Math.random() * 1.15,
+          phase: Math.random() * Math.PI * 2,
+          speed: 0.015 + Math.random() * 0.035
+        });
+      }
+    }
+  }
+  // 枢纽附近加密高亮星群
+  HUBS.forEach(h => {
+    for (let k = 0; k < 28; k++) {
+      const ang = Math.random() * Math.PI * 2;
+      const dist = Math.pow(Math.random(), 1.7) * 9.0;
+      LAND_DOTS.push({
+        lon: h.lon + Math.cos(ang) * dist,
+        lat: h.lat + Math.sin(ang) * dist * 0.7,
+        a: 0.45 + Math.random() * 0.55,
+        r: 0.8 + Math.random() * 1.4,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.03 + Math.random() * 0.05
+      });
+    }
+  });
+
+  // 飞线池
+  const ARCS = [];
+  function spawnArc() {
+    const a = HUBS[Math.floor(Math.random() * HUBS.length)];
+    let b = HUBS[Math.floor(Math.random() * HUBS.length)];
+    if (a === b) b = HUBS[(HUBS.indexOf(a) + 3) % HUBS.length];
+    return {
+      a, b,
+      t: Math.random(),
+      speed: 0.003 + Math.random() * 0.006,
+      lift: 0.16 + Math.random() * 0.24,
+      bright: 0.4 + Math.random() * 0.6
+    };
+  }
+  for (let i = 0; i < 28; i++) ARCS.push(spawnArc());
+
+  // ---------------- 2. Canvas 尺寸适配 ----------------
+  function fitCanvas(c) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = c.getBoundingClientRect();
+    const w = Math.max(10, Math.floor(rect.width * dpr));
+    const h = Math.max(10, Math.floor(rect.height * dpr));
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    return { ctx: c.getContext("2d"), w, h, dpr };
+  }
+
+  function project(lon, lat, w, h) {
+    const padX = w * 0.04, padY = h * 0.08;
+    const x = padX + ((lon + 180) / 360) * (w - padX * 2);
+    const y = padY + ((84 - lat) / 144) * (h - padY * 2);
+    return [x, y];
+  }
+
+  // ---------------- 3. 绘制全球点阵地图 + 跨洲弧线 ----------------
+  const mapCanvas = document.getElementById("mapCanvas");
+  let tick = 0;
+
+  function drawMap() {
+    const { ctx, w, h, dpr } = fitCanvas(mapCanvas);
+    ctx.clearRect(0, 0, w, h);
+
+    // 微妙经纬线
+    ctx.strokeStyle = "rgba(92, 225, 255, 0.05)";
+    ctx.lineWidth = 1;
+    for (let lon = -150; lon <= 150; lon += 30) {
+      const [x] = project(lon, 0, w, h);
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+    for (let lat = -40; lat <= 60; lat += 20) {
+      const [, y] = project(0, lat, w, h);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+
+    // 陆地发光粒子
+    for (let i = 0; i < LAND_DOTS.length; i++) {
+      const d = LAND_DOTS[i];
+      const [x, y] = project(d.lon, d.lat, w, h);
+      const tw = 0.55 + 0.45 * Math.sin(tick * d.speed + d.phase);
+      const alpha = Math.min(1, d.a * tw);
+      ctx.fillStyle = `rgba(128, 232, 255, ${alpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(x, y, d.r * dpr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 跨洲发光飞线
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < ARCS.length; i++) {
+      const arc = ARCS[i];
+      arc.t += arc.speed;
+      if (arc.t > 1.15) { ARCS[i] = spawnArc(); ARCS[i].t = 0; continue; }
+      const [x1, y1] = project(arc.a.lon, arc.a.lat, w, h);
+      const [x2, y2] = project(arc.b.lon, arc.b.lat, w, h);
+      const mx = (x1 + x2) / 2;
+      const dist = Math.hypot(x2 - x1, y2 - y1);
+      const my = (y1 + y2) / 2 - dist * arc.lift;
+
+      // 弧线底轨
+      ctx.strokeStyle = `rgba(82, 212, 255, ${(0.12 * arc.bright).toFixed(3)})`;
+      ctx.lineWidth = 0.9 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(mx, my, x2, y2);
+      ctx.stroke();
+
+      // 动态光脉冲段
+      const tHead = Math.min(1, arc.t);
+      const tTail = Math.max(0, arc.t - 0.22);
+      const steps = 14;
+      ctx.beginPath();
+      for (let s = 0; s <= steps; s++) {
+        const u = tTail + (tHead - tTail) * (s / steps);
+        const inv = 1 - u;
+        const px = inv * inv * x1 + 2 * inv * u * mx + u * u * x2;
+        const py = inv * inv * y1 + 2 * inv * u * my + u * u * y2;
+        if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = `rgba(200, 248, 255, ${(0.72 * arc.bright).toFixed(3)})`;
+      ctx.lineWidth = 1.6 * dpr;
+      ctx.stroke();
+
+      // 光头
+      const inv = 1 - tHead;
+      const hx = inv * inv * x1 + 2 * inv * tHead * mx + tHead * tHead * x2;
+      const hy = inv * inv * y1 + 2 * inv * tHead * my + tHead * tHead * y2;
+      const g = ctx.createRadialGradient(hx, hy, 0, hx, hy, 7 * dpr);
+      g.addColorStop(0, "rgba(255,255,255,0.95)");
+      g.addColorStop(0.4, "rgba(108,230,255,0.55)");
+      g.addColorStop(1, "rgba(108,230,255,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(hx, hy, 7 * dpr, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // 枢纽径向光晕 Bloom + 脉冲圈
+    HUBS.forEach((hub, idx) => {
+      const [x, y] = project(hub.lon, hub.lat, w, h);
+      const pulse = 0.75 + 0.25 * Math.sin(tick * 0.05 + idx);
+      const rad = 22 * hub.weight * dpr * pulse;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      g.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+      g.addColorStop(0.22, "rgba(130, 238, 255, 0.55)");
+      g.addColorStop(0.6, "rgba(34, 184, 255, 0.14)");
+      g.addColorStop(1, "rgba(34, 184, 255, 0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+
+      // 扩散波纹
+      const ring = ((tick * 0.6 + idx * 17) % 45) / 45;
+      ctx.strokeStyle = `rgba(140, 238, 255, ${(0.45 * (1 - ring)).toFixed(3)})`;
+      ctx.lineWidth = 1 * dpr;
+      ctx.beginPath(); ctx.arc(x, y, (4 + ring * 22 * hub.weight) * dpr, 0, Math.PI * 2); ctx.stroke();
+    });
+    ctx.restore();
+
+    // 枢纽小字标签
+    ctx.font = `${9 * dpr}px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.fillStyle = "rgba(180, 235, 255, 0.62)";
+    HUBS.forEach((hub, idx) => {
+      if (idx % 2 !== 0) return;
+      const [x, y] = project(hub.lon, hub.lat, w, h);
+      ctx.fillText(hub.name, x + 7 * dpr, y - 5 * dpr);
+    });
+  }
+
+  // ---------------- 4. 六边形雷达图 ----------------
+  const radarCanvas = document.getElementById("radarCanvas");
+  const RADAR_LABELS = ["CONTRACT", "INTENT", "APPROVAL", "TAINT", "SANDBOX", "AUDIT"];
+  const radarVals = [0.88, 0.76, 0.93, 0.84, 0.91, 0.86];
+  const radarTarget = [...radarVals];
+
+  function drawRadar() {
+    const { ctx, w, h, dpr } = fitCanvas(radarCanvas);
+    ctx.clearRect(0, 0, w, h);
+    const cx = w / 2, cy = h / 2;
+    const R = Math.min(w, h) * 0.30;
+
+    for (let i = 0; i < 6; i++) {
+      radarVals[i] += (radarTarget[i] - radarVals[i]) * 0.06;
+    }
+
+    // 3 层六边形底网
+    ctx.strokeStyle = "rgba(108, 230, 255, 0.16)";
+    ctx.lineWidth = 1;
+    [0.33, 0.66, 1.0].forEach(s => {
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = -Math.PI / 2 + i * Math.PI / 3;
+        const x = cx + Math.cos(a) * R * s;
+        const y = cy + Math.sin(a) * R * s;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath(); ctx.stroke();
+    });
+
+    // 轴线与标签
+    ctx.font = `${8 * dpr}px monospace`;
+    ctx.fillStyle = "rgba(140, 195, 225, 0.7)";
+    ctx.textAlign = "center";
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 3;
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); ctx.stroke();
+      ctx.fillText(RADAR_LABELS[i], cx + Math.cos(a) * (R + 13 * dpr), cy + Math.sin(a) * (R + 11 * dpr) + 3 * dpr);
+    }
+
+    // 动态数据面
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 3;
+      const x = cx + Math.cos(a) * R * radarVals[i];
+      const y = cy + Math.sin(a) * R * radarVals[i];
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "rgba(56, 189, 248, 0.24)";
+    ctx.fill();
+    ctx.strokeStyle = "#8ceeff";
+    ctx.lineWidth = 1.6 * dpr;
+    ctx.stroke();
+  }
+
+  // ---------------- 5. 16x10 动态矩阵热力网格 ----------------
+  const matrixCanvas = document.getElementById("matrixCanvas");
+  const M_COLS = 16, M_ROWS = 10;
+  const cells = Array.from({ length: M_COLS * M_ROWS }, () => Math.random());
+
+  function drawMatrix() {
+    const { ctx, w, h, dpr } = fitCanvas(matrixCanvas);
+    ctx.clearRect(0, 0, w, h);
+    const gap = 2 * dpr;
+    const cw = (w - gap * (M_COLS + 1)) / M_COLS;
+    const ch = (h - gap * (M_ROWS + 1)) / M_ROWS;
+    for (let r = 0; r < M_ROWS; r++) {
+      for (let c = 0; c < M_COLS; c++) {
+        const idx = r * M_COLS + c;
+        if (Math.random() < 0.04) cells[idx] = Math.random();
+        const v = cells[idx];
+        const x = gap + c * (cw + gap);
+        const y = gap + r * (ch + gap);
+        ctx.fillStyle = v > 0.86
+          ? `rgba(210, 248, 255, ${(0.6 + v * 0.4).toFixed(2)})`
+          : `rgba(56, 189, 248, ${(0.08 + v * 0.55).toFixed(2)})`;
+        ctx.fillRect(x, y, cw, ch);
+      }
+    }
+  }
+
+  // ---------------- 6. 双层实时示波器 + 环形仪表盘 ----------------
+  const waveCanvas = document.getElementById("waveCanvas");
+  const gaugeCanvas = document.getElementById("gaugeCanvas");
+  const W_LEN = 64;
+  const w1 = Array.from({ length: W_LEN }, (_, i) => 0.5 + 0.25 * Math.sin(i * 0.35));
+  const w2 = Array.from({ length: W_LEN }, (_, i) => 0.45 + 0.22 * Math.cos(i * 0.27));
+  let gaugeVal = 0.946, gaugeTarget = 0.962;
+
+  function drawWaveAndGauge() {
+    // 示波器
+    {
+      const { ctx, w, h, dpr } = fitCanvas(waveCanvas);
+      ctx.clearRect(0, 0, w, h);
+      if (tick % 3 === 0) {
+        w1.shift(); w1.push(Math.max(0.12, Math.min(0.92, w1[w1.length - 1] + (Math.random() - 0.5) * 0.28)));
+        w2.shift(); w2.push(Math.max(0.12, Math.min(0.92, w2[w2.length - 1] + (Math.random() - 0.5) * 0.24)));
+      }
+      ctx.strokeStyle = "rgba(108, 230, 255, 0.1)";
+      ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+
+      const plot = (arr, color, yOff, scale) => {
+        ctx.beginPath();
+        for (let i = 0; i < arr.length; i++) {
+          const x = (i / (arr.length - 1)) * w;
+          const y = yOff + (1 - arr[i]) * h * scale;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = color; ctx.lineWidth = 1.3 * dpr; ctx.stroke();
+      };
+      plot(w1, "#74ebff", 4 * dpr, 0.44);
+      plot(w2, "#3b82f6", h * 0.48, 0.44);
+    }
+
+    // 环形仪表盘
+    {
+      const { ctx, w, h, dpr } = fitCanvas(gaugeCanvas);
+      ctx.clearRect(0, 0, w, h);
+      gaugeVal += (gaugeTarget - gaugeVal) * 0.05;
+      const cx = w / 2, cy = h / 2;
+      const R = Math.min(w, h) * 0.38;
+
+      ctx.strokeStyle = "rgba(108, 230, 255, 0.14)";
+      ctx.lineWidth = 5 * dpr;
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+
+      const start = -Math.PI / 2;
+      const end = start + Math.PI * 2 * gaugeVal;
+      ctx.strokeStyle = "#78ecff";
+      ctx.lineWidth = 5 * dpr;
+      ctx.lineCap = "round";
+      ctx.beginPath(); ctx.arc(cx, cy, R, start, end); ctx.stroke();
+
+      // 内圈装饰刻度
+      ctx.strokeStyle = "rgba(108, 230, 255, 0.3)";
+      ctx.lineWidth = 1 * dpr;
+      ctx.beginPath(); ctx.arc(cx, cy, R - 8 * dpr, 0, Math.PI * 2); ctx.stroke();
+
+      ctx.fillStyle = "#e6faff";
+      ctx.font = `700 ${14 * dpr}px monospace`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText((gaugeVal * 100).toFixed(1) + "%", cx, cy - 3 * dpr);
+      ctx.fillStyle = "#6c92b0";
+      ctx.font = `${7.5 * dpr}px monospace`;
+      ctx.fillText("INTEGRITY", cx, cy + 12 * dpr);
+    }
+  }
+
+  // ---------------- 7. DOM 遥测列表初始化与定时刷新 ----------------
+  const NODES_LIST = [
+    "BJS-01", "SHA-04", "TYO-02", "SIN-07", "FRA-09", "LON-03",
+    "NYC-11", "SFO-06", "IAD-02", "SYD-05", "DXB-08", "GRU-03", "BOM-01", "PAR-05"
+  ];
+  const EVENTS_LIST = [
+    ["PREFLIGHT", "ALLOW", "ok"], ["TAINT-CHK", "DENY", "deny"],
+    ["MCP-CALL", "ALLOW", "ok"], ["L1-REGEX", "DENY", "deny"],
+    ["SQL-RLS", "ALLOW", "ok"], ["SANDBOX", "ALLOW", "ok"],
+    ["JWT-RS256", "ALLOW", "ok"], ["APPROVAL", "HOLD", "warn"],
+    ["EVIDENCE", "ALLOW", "ok"], ["HMAC-LOG", "ALLOW", "ok"],
+    ["SSE-GATE", "ALLOW", "ok"], ["REDIS-RL", "ALLOW", "ok"],
+    ["REPLAN", "WARN", "warn"], ["TOOL-RAIL", "DENY", "deny"]
+  ];
+  const GUARD_NAMES = [
+    "PREFLIGHT", "TAINT-ISO", "L1-REGEX", "LIGHT-CLF", "HARM-JUDGE",
+    "MCP-PROXY", "OPENAI-GW", "DOCKER-SBX", "PG16-RLS", "REDIS-RL",
+    "JWT-RS256", "AUDIT-HMAC"
+  ];
+
+  const col1 = document.getElementById("col1-rows");
+  const col2 = document.getElementById("col2-rows");
+  const col3 = document.getElementById("col3-rows");
+  const sideNums = document.getElementById("side-nums");
+  const mb1 = document.getElementById("micro-bars-1");
+  const mb2 = document.getElementById("micro-bars-2");
+
+  for (let i = 0; i < 18; i++) {
+    mb1.appendChild(document.createElement("i"));
+    mb2.appendChild(document.createElement("i"));
+  }
+
+  function renderTables() {
+    col1.innerHTML = NODES_LIST.map((n, i) => {
+      const pct = 28 + Math.floor(Math.random() * 68);
+      const ms = (0.08 + Math.random() * 1.4).toFixed(2);
+      return `<div class="t-row"><span class="id">${n}</span><div class="bar-wrap"><div class="bar-fill" style="width:${pct}%"></div></div><span class="num">${ms}ms</span><span class="st ok">SYNC</span></div>`;
+    }).join("");
+
+    col2.innerHTML = EVENTS_LIST.map(([tag, st, cls]) => {
+      const pct = cls === "deny" ? (72 + Math.floor(Math.random() * 26)) : (20 + Math.floor(Math.random() * 65));
+      const cnt = 12 + Math.floor(Math.random() * 940);
+      return `<div class="t-row"><span class="id">${tag}</span><div class="bar-wrap"><div class="bar-fill" style="width:${pct}%"></div></div><span class="num">${cnt}</span><span class="st ${cls}">${st}</span></div>`;
+    }).join("");
+
+    col3.innerHTML = GUARD_NAMES.map(g => {
+      const pct = 24 + Math.floor(Math.random() * 72);
+      return `<div class="r-row"><span class="lbl">${g}</span><div class="track"><div class="fill" style="width:${pct}%"></div></div><span class="val">${pct}</span></div>`;
+    }).join("");
+
+    const labels = ["RX/S","TX/S","DENY","TAINT","RLS","POOL","CACHE","QUEUE","JWT","HMAC","P50","P95"];
+    sideNums.innerHTML = labels.map(l => {
+      const v = (Math.random() * 99).toFixed(1);
+      return `<div><span>${l}</span><b>${v}</b></div>`;
+    }).join("");
+  }
+
+  function jitterTelemetry() {
+    for (let i = 0; i < 6; i++) {
+      radarTarget[i] = 0.65 + Math.random() * 0.32;
+    }
+    gaugeTarget = 0.91 + Math.random() * 0.08;
+    document.getElementById("kpi-radar").textContent = String(560 + Math.floor(Math.random() * 280));
+    document.getElementById("kpi-matrix").textContent = String(680 + Math.floor(Math.random() * 310));
+    document.getElementById("hud-eps").textContent = (1100 + Math.floor(Math.random() * 680)).toLocaleString();
+    document.getElementById("hud-p95").textContent = (0.09 + Math.random() * 0.14).toFixed(2) + " ms";
+    document.getElementById("c6-stat").textContent = (gaugeTarget * 100).toFixed(1) + "%";
+
+    const h = HUBS[Math.floor(Math.random() * HUBS.length)];
+    const ev = EVENTS_LIST[Math.floor(Math.random() * EVENTS_LIST.length)];
+    document.getElementById("map-live-event").innerHTML =
+      `LAST INTERCEPT // <b>${h.name}</b> · ${ev[0]} → <b>${ev[1]}</b> (executed=0)`;
+
+    [...mb1.children, ...mb2.children].forEach(el => {
+      el.style.height = (20 + Math.floor(Math.random() * 80)) + "%";
+    });
+    renderTables();
+  }
+
+  // ---------------- 8. 静默拉取 EvoGuardLab 真实 API（有数据就同步显示，无数据不报错） ----------------
+  async function syncRealApi() {
+    const headers = {};
+    try {
+      const tok = sessionStorage.getItem("evoguard_token");
+      if (tok) headers["Authorization"] = "Bearer " + tok;
+    } catch (_) {}
+    const safeGet = async (url) => {
+      try {
+        const r = await fetch(url, { headers });
+        return r.ok ? await r.json() : null;
+      } catch (_) { return null; }
+    };
+    const [health, runs, skills] = await Promise.all([
+      safeGet("/api/health"), safeGet("/api/runs?limit=5"), safeGet("/api/skills?limit=5")
+    ]);
+    if (health) {
+      const mode = health.security_mode || health.mode || "ENFORCE";
+      document.getElementById("hud-mode").textContent = String(mode).toUpperCase() + " / TAINT";
+      document.getElementById("hud-backend").innerHTML =
+        `BACKEND // <b>ONLINE (${health.status || "OK"})</b>`;
+    } else {
+      document.getElementById("hud-backend").innerHTML = "BACKEND // <b>STANDALONE HUD</b>";
+    }
+    if (runs && Array.isArray(runs.items || runs.runs)) {
+      const n = runs.total ?? (runs.items || runs.runs).length;
+      document.getElementById("hud-runs").textContent = String(n);
+    }
+    if (skills && Array.isArray(skills.items || skills.skills)) {
+      const n = skills.total ?? (skills.items || skills.skills).length;
+      document.getElementById("hud-skills").textContent = String(n);
+    }
+  }
+
+  function updateClock() {
+    const d = new Date();
+    const pad = (x, n = 2) => String(x).padStart(n, "0");
+    document.getElementById("hud-clock").textContent =
+      `UTC ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}.${pad(d.getUTCMilliseconds(), 3)}`;
+  }
+
+  // 主动画循环
+  function loop() {
+    tick++;
+    drawMap();
+    drawRadar();
+    if (tick % 4 === 0) drawMatrix();
+    drawWaveAndGauge();
+    updateClock();
+    requestAnimationFrame(loop);
+  }
+
+  renderTables();
+  jitterTelemetry();
+  syncRealApi();
+  setInterval(jitterTelemetry, 1600);
+  setInterval(syncRealApi, 5000);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

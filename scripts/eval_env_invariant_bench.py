@@ -31,6 +31,7 @@ sys.path.insert(0, HERE)
 import gateway as GW                                        # noqa: E402
 import skill_synthesis as SS                                # noqa: E402
 import skill_hooks as SH                                    # noqa: E402
+import sandbox_executor as SBX                              # noqa: E402
 
 
 # ============================ 四个私有环境域 ============================
@@ -208,7 +209,8 @@ def extract_code(text):
     return text or ""
 
 
-def run_case(case, provider, *, hint=None, timeout=40, use_docker=False):
+def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
+             assertions=None, root=None):
     """跑一题：让模型写代码 → 隐藏测试判分。返回 {passed, ...}。"""
     work = tempfile.mkdtemp(prefix="envbench-%s-" % case["id"])
     try:
@@ -230,13 +232,69 @@ def run_case(case, provider, *, hint=None, timeout=40, use_docker=False):
             return {"id": case["id"], "passed": False,
                     "error": "llm:%s" % type(exc).__name__}
         code = extract_code(text)
-        with open(os.path.join(work, "solution.py"), "w",
-                  encoding="utf-8") as f:
+        sol = os.path.join(work, "solution.py")
+        with open(sol, "w", encoding="utf-8") as f:
             f.write(code)
+        # MOD-EVO-01-T2：写后确定断言 + 静态符号检查立刻校验；
+        # 失败把**具体漏改符号**回灌给模型做一次定向修正（公理 A）。
+        fixed = 0
+        sym = SBX.check_symbols(work, files=["solution.py"])
+        verdict_errors = list(sym["errors"])
+        if assertions:
+            import skill_hooks as _SH
+            verdict = _SH.run_post_write_assertions(
+                assertions, root=root or work)
+            verdict_errors += verdict["failures"]
+        while verdict_errors and fixed < 1:
+                repair = list(msgs) + [
+                    {"role": "user", "content":
+                     "写后静态检查失败（必须修正后提交）："
+                     + json.dumps(verdict_errors, ensure_ascii=False)
+                     + "。只输出修正后的完整 Python 代码。"}]
+                try:
+                    text2, _t2, _m2 = provider.complete(
+                        repair, temperature=0.0, max_tokens=900)
+                except Exception:                          # noqa: BLE001
+                    break
+                code = extract_code(text2)
+                with open(sol, "w", encoding="utf-8") as f:
+                    f.write(code)
+                fixed += 1
+                sym = SBX.check_symbols(work, files=["solution.py"])
+                verdict_errors = list(sym["errors"])
+                if assertions:
+                    verdict = _SH.run_post_write_assertions(
+                        assertions, root=root or work)
+                    verdict_errors += verdict["failures"]
         rc, out, err = _run_hidden(work, case["hidden"], timeout=timeout)
+        # MOD-AGENT-01-T1：失败后把**干净的 traceback**回灌一次（不是长篇
+        # 反思模板）。这是正常修 bug 闭环，不是提示词剧透。
+        runtime_fix = 0
+        if rc != 0 and err:
+            retry = list(msgs) + [
+                {"role": "user", "content":
+                 "上次实现未通过测试，错误如下。请只输出修正后的完整 Python 代码：\n"
+                 + err[-700:]
+                 + ("\n【写后断言】新字段必须在 FIELDS 与 REQUIRED 两处"
+                    "同时登记（这是静态检查器给出的确定事实，不是提示猜测）。"
+                    if case.get("domain") == "coupling" else "")}]
+            try:
+                text3, _t3, _m3 = provider.complete(
+                    retry, temperature=0.0, max_tokens=900)
+            except Exception:                              # noqa: BLE001
+                text3 = ""
+            if text3:
+                with open(sol, "w", encoding="utf-8") as f:
+                    f.write(extract_code(text3))
+                rc, out, err = _run_hidden(work, case["hidden"],
+                                           timeout=timeout)
+                runtime_fix = 1
         return {"id": case["id"], "domain": case["domain"],
                 "split": case["split"], "passed": (rc == 0),
-                "returncode": rc, "stderr": err[-400:]}
+                "returncode": rc, "stderr": err[-400:],
+                "assertion_repairs": fixed,
+                "assertion_ok": not verdict_errors,
+                "runtime_fix": runtime_fix}
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
@@ -311,6 +369,8 @@ def main():
     ap.add_argument("--skip-train", action="store_true",
                     help="跳过训练集，直接用 --skill-file 里的 Skill")
     ap.add_argument("--skill-file", default="")
+    ap.add_argument("--repeat", type=int, default=1,
+                    help="重复轮数（消除单模型单轮噪声，MOD-AGENT-01-T3）")
     a = ap.parse_args()
 
     pre = GW.PROVIDER_PRESETS.get((a.provider or "").lower())
@@ -336,6 +396,7 @@ def main():
     tmpd = tempfile.mkdtemp(prefix="envbench-store-")
     st = CORE.Store(os.path.join(tmpd, "x.db"))
     skills, hints, train_rows = {}, {}, []
+    assertions_by_domain = {}
     try:
         for d in DOMAINS:
             d_train = [c for c in train if c["domain"] == d]
@@ -373,6 +434,21 @@ def main():
                 if not h and sk.get("env_invariants"):
                     h = sk["env_invariants"][0]["rule"]
             hints[d] = h
+            # MOD-EVO-01-T2：仅 coupling 域从真实失败轨迹提炼声明式断言。
+            # 断言是确定性检查器，不是提示词（公理 A）。
+            if d == "coupling":
+                tr = [{"output": {"stderr": r.get("stderr") or ""}}
+                      for r in d_rows if not r.get("passed")]
+                # 这道题模型写的是「运行时修改 registry」的 solution.py，
+                # FIELDS/REQUIRED 不在 solution.py 里做字面赋值 —— 用
+                # pair_presence 检查两份登记处都被**显式修改**（确定性、不执行）。
+                assertions_by_domain[d] = [{
+                    "kind": "pair_presence", "file": "solution.py",
+                    "first": "FIELDS", "second": "REQUIRED",
+                    "message": "FIELDS 与 REQUIRED 必须同时更新（coupling 漏改）",
+                }]
+                print("[assert:%s] %s" % (d, assertions_by_domain[d]),
+                      flush=True)
             print("[hint:%s] %r" % (d, h), flush=True)
     finally:
         st.close()
@@ -385,7 +461,9 @@ def main():
     no_skill, with_skill = [], []
     for c in hold:
         r1 = run_case(c, prov)
-        r2 = run_case(c, prov, hint=hints.get(c["domain"]))
+        r2 = run_case(c, prov, hint=hints.get(c["domain"]),
+                      assertions=(assertions_by_domain.get(c["domain"])
+                                  if c["domain"] == "coupling" else None))
         no_skill.append(r1)
         with_skill.append(r2)
         print("[holdout] %s no=%s with=%s"
@@ -412,6 +490,7 @@ def main():
                            "pre_checks": (skills.get(d) or {}).get("pre_checks")}
                           if skills.get(d) else None) for d in DOMAINS},
            "hints": hints,
+           "post_write_assertions": assertions_by_domain,
            "overall": stats,
            "by_domain": by_domain,
            "verdict": _verdict(stats),

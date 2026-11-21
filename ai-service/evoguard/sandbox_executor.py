@@ -675,3 +675,125 @@ def fs_patch(path, old_text, new_text, *, root=None, snapshot=None,
     return {"ok": True, "path": target, "matches": 1,
             "bytes_before": len(src.encode("utf-8")),
             "bytes_after": len(src.replace(old_text, new_text, 1).encode("utf-8"))}
+
+
+# ---- MOD-AGENT-01-T2：纯标准库 ast 只读符号检查（进 Docker 前 1ms 拦截）----
+#: 内置名 + 常见 dunder（不算未定义）
+_PY_BUILTINS = frozenset(dir(__builtins__)) if isinstance(__builtins__, object) else frozenset()
+
+
+def check_symbols(root, *, files=None):
+    """检查 Python 文件语法错与未定义名（零依赖、不执行任何代码）。
+
+    `files` 限定要检查的相对路径；None 表示 root 下全部 .py。
+    **跨文件符号**通过「同工作区其它 .py 的模块级符号」补全白名单：
+    这样 solution.py 引用 registry.FIELDS 而没 import 时，FIELDS 若恰好
+    在 registry.py 里定义，会给出精确的「缺少 import」提示（真实 coupling
+    失败根因），而普通未定义名也照样报。
+
+    返回 {ok, errors, checked}，失败不静默。
+    """
+    import ast as _ast
+    import builtins as _bi
+    errors = []
+    checked = 0
+    base = os.path.realpath(os.path.abspath(root))
+    if not os.path.isdir(base):
+        return {"ok": False, "errors": ["root_not_directory"],
+                "checked": 0}
+
+    def _collect_module_symbols():
+        """扫描工作区所有 .py 模块级定义名（不执行）。"""
+        names = set()
+        for dirpath, dirs, names_ in os.walk(base):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for n in names_:
+                if not n.endswith(".py"):
+                    continue
+                fp = os.path.join(dirpath, n)
+                try:
+                    with open(fp, "r", encoding="utf-8") as f:
+                        tree = _ast.parse(f.read())
+                except Exception:                          # noqa: BLE001
+                    continue
+                for node in tree.body:
+                    if isinstance(node, (_ast.FunctionDef,
+                                         _ast.AsyncFunctionDef,
+                                         _ast.ClassDef)):
+                        names.add(node.name)
+                    elif isinstance(node, _ast.Assign):
+                        for t in node.targets:
+                            if isinstance(t, _ast.Name):
+                                names.add(t.id)
+                    elif isinstance(node, _ast.AnnAssign) and \
+                            isinstance(node.target, _ast.Name):
+                        names.add(node.target.id)
+        return names
+
+    workspace_symbols = _collect_module_symbols()
+    builtin_names = set(dir(_bi))
+    targets = []
+    if files is None:
+        for dirpath, dirs, names_ in os.walk(base):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            targets += [os.path.join(dirpath, n) for n in names_
+                        if n.endswith(".py")]
+    else:
+        for rel in files:
+            full = os.path.realpath(os.path.join(base, rel))
+            if not full.startswith(base):
+                errors.append("path_outside_root:" + str(rel)[:60])
+                continue
+            targets.append(full)
+
+    for fp in targets:
+        checked += 1
+        rel = os.path.relpath(fp, base).replace("\\", "/")
+        try:
+            with open(fp, "r", encoding="utf-8") as f:
+                src = f.read()
+        except Exception as exc:                            # noqa: BLE001
+            errors.append("%s: read_failed:%s" % (rel, type(exc).__name__))
+            continue
+        try:
+            tree = _ast.parse(src, filename=rel)
+        except SyntaxError as exc:
+            errors.append("%s: SyntaxError line %s: %s"
+                          % (rel, exc.lineno, str(exc.msg)[:100]))
+            continue
+        # 本文件绑定名：import、赋值、函数/类、参数、局部赋值
+        bound = set(builtin_names)
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Import):
+                for a in node.names:
+                    bound.add((a.asname or a.name.split(".")[0]))
+            elif isinstance(node, _ast.ImportFrom):
+                for a in node.names:
+                    bound.add(a.asname or a.name)
+            elif isinstance(node, _ast.Name) and \
+                    isinstance(node.ctx, (_ast.Store, _ast.Del)):
+                bound.add(node.id)
+            elif isinstance(node, (_ast.FunctionDef,
+                                   _ast.AsyncFunctionDef, _ast.ClassDef)):
+                bound.add(node.name)
+                for arg in list(node.args.args) + list(node.args.kwonlyargs):
+                    bound.add(arg.arg)
+            elif isinstance(node, _ast.ExceptHandler) and node.name:
+                bound.add(node.name)
+            elif isinstance(node, _ast.comprehension):
+                if isinstance(node.target, _ast.Name):
+                    bound.add(node.target.id)
+        reported = []
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Name) and isinstance(node.ctx, _ast.Load):
+                n = node.id
+                if n in bound or n in builtin_names:
+                    continue
+                if n in workspace_symbols:
+                    reported.append((node.lineno, n,
+                                     "跨文件符号 %s 未 import（可能是漏写 import）" % n))
+                else:
+                    reported.append((node.lineno, n, "未定义名 %s" % n))
+        for line, name, msg in reported[:12]:
+            errors.append("%s:%d: %s" % (rel, line, msg))
+    return {"ok": not errors, "errors": errors, "checked": checked}

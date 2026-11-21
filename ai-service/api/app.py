@@ -81,7 +81,12 @@ class Handler(BaseHTTPRequestHandler):
         self._send(http, payload)
 
     def _static(self, path):
-        rel = "index.html" if path in ("/", "/index.html") else path.lstrip("/")
+        if path in ("/", "/index.html"):
+            rel = "index.html"
+        elif path in ("/command", "/command.html", "/executive"):
+            rel = "command.html"
+        else:
+            rel = path.lstrip("/")
         full = os.path.normpath(os.path.join(FRONTEND, rel))
         if not full.startswith(FRONTEND) or not os.path.isfile(full):
             return self._err("E_NOT_FOUND", "静态文件不存在", 404)
@@ -97,8 +102,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _dispatch(self, method):
         path = self.path.split("?")[0]
-        if method == "GET" and (path == "/" or path.startswith("/static/")
-                                or path == "/index.html" or path.endswith((".css", ".js"))):
+        if method == "GET" and (path in ("/", "/index.html", "/command",
+                                         "/command.html", "/executive")
+                                or path.startswith("/static/")
+                                or path.endswith((".css", ".js"))):
             return self._static(path)
         for m, pat, fn in ROUTES:
             if m != method:

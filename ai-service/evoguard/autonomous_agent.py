@@ -502,6 +502,32 @@ def parallel_readonly(calls, *, executor, registry=None, rails=None,
     return results
 
 
+# ---- MOD-AGENT-01-T1：按需反思（公理 B：不打断正常流）-----------------
+def should_reflect(fail_count, *, same_error_twice=False,
+                   near_loop_guard=False):
+    """仅当卡壳才触发反思：连续 2 次同错，或即将触发 loop_guard。
+
+    第 1 次失败直接把干净 traceback 交回模型即可 —— 实测无条件插长篇
+    反思模板在 DeepSeek 上 -4.35pp（linear 65.22% vs reflect 60.87%）。
+    """
+    if near_loop_guard:
+        return True
+    return int(fail_count) >= 2 and bool(same_error_twice)
+
+
+def focused_reflection_message(error_text, *, failed_tool=None,
+                               diff_hint=None):
+    """极简定向诊断：差异 + 上次报错，不塞长篇模板。"""
+    err = str(error_text or "").strip().replace("\n", " ")[:140]
+    parts = ["上一步失败：", err]
+    if failed_tool:
+        parts.append("工具=%s" % str(failed_tool)[:40])
+    if diff_hint:
+        parts.append("差异=%s" % str(diff_hint)[:60])
+    parts.append("换一种策略（改参数/换工具/回滚后重做），不要重复同一动作。")
+    return " ".join(parts)[:200]
+
+
 class ReActAgent:
     def __init__(self, *, agent_type="react", goal="", provider=None,
                  registry=None, executor=None, cfg=None, rails=None,
@@ -556,6 +582,9 @@ class ReActAgent:
         # 或执行出错时，自动向模型注入一条结构化反思提示，驱动其下轮换策略。
         # 这是**架构级增益**：同模型 A/B 时唯一变量就是它，与模型强弱解耦。
         self.self_reflect = bool(self_reflect)
+        # MOD-AGENT-01-T1：按需反思状态（连续失败计数 + 上次错误类型）
+        self._fail_streak = 0
+        self._last_fail_kind = ""
         self.reflections = []
         # FINAL-01-T2：跨步骤污点状态（外部工具输出 -> 写/外发工具的数据流）
         self.taint_state = {"user_goal": goal,
@@ -837,17 +866,30 @@ class ReActAgent:
                 failed = (isinstance(rc, int) and rc != 0) or \
                     (isinstance(out, dict) and out.get("error"))
                 if failed:
-                    refl = {"root_cause": _classify_failure(out),
-                            "failed_tool": tool}
-                    self.reflections.append(refl)
-                    messages.append({"role": "user", "content": json.dumps({
-                        "reflection": refl,
-                        "instruction": "上一步失败。不要重复同一动作；"
-                                       "请先说明根因，再换一种策略（改参数/换工具/回滚后重做）。"
-                    }, ensure_ascii=False)})
-                    step["reflection"] = refl
-                    steps.append(step)
-                    continue
+                    kind = _classify_failure(out)
+                    same = (kind == self._last_fail_kind)
+                    self._fail_streak = (self._fail_streak + 1) if same else 1
+                    self._last_fail_kind = kind
+                    near_guard = (seq >= limit - 1)
+                    if should_reflect(self._fail_streak,
+                                      same_error_twice=same,
+                                      near_loop_guard=near_guard):
+                        refl = {"root_cause": kind, "failed_tool": tool,
+                                "streak": self._fail_streak}
+                        self.reflections.append(refl)
+                        messages.append({"role": "user", "content": json.dumps({
+                            "reflection": refl,
+                            "instruction": focused_reflection_message(
+                                str((out or {}).get("stderr")
+                                    or (out or {}).get("error") or ""),
+                                failed_tool=tool),
+                        }, ensure_ascii=False)})
+                        step["reflection"] = refl
+                    # 第 1 次失败：不加任何反思，干净 traceback 已在
+                    # 上面的 observation 里交回模型。
+                else:
+                    self._fail_streak = 0
+                    self._last_fail_kind = ""
             steps.append(step)
 
         if stopped_by is None and final_answer is None:
