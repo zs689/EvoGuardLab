@@ -327,6 +327,11 @@ def validate_enterprise_config():
 
 
 def main():
+    # ZERO-01：真正启动服务进程时才应用开箱默认硬拦截。
+    # 模块 import（测试直接构造 Server）不触发，避免污染库层默认。
+    import env as _evo_env_entry
+    _evo_env_entry.apply_entry_defaults()
+    _app_core.refresh_security_mode()
     # EG-014：服务进程默认给模型调用套上熔断与并发上限。
     # 离线评测脚本（real_model_bench / evoguard eval）不设这个变量 ——
     # 评测要真实失败率，不能让自己的熔断器把「模型不行」记成「被挡住」。
@@ -344,10 +349,10 @@ def main():
     if warning:
         print("[warn] " + warning, file=sys.stderr, flush=True)
     # 红队 P1-2：默认 audit 只检测不拦截，必须在启动时明说，绝不静默。
-    if not _OUTPUT_GATE_ENFORCES:
+    if not _app_core._OUTPUT_GATE_ENFORCES:
         print("[warn] 安全模式=%s：输出侧注入命中仅记账、不拦截、不净化正文。"
               "需要真实拦截请设 AGENTLAB_SECURITY_MODE=enforce。"
-              % _SEC_MODE, file=sys.stderr, flush=True)
+              % _app_core._SEC_MODE, file=sys.stderr, flush=True)
     port = _parse_port(sys.argv[1:])
     if not os.path.isdir(FRONTEND):
         raise SystemExit("找不到前端目录：%s" % FRONTEND)

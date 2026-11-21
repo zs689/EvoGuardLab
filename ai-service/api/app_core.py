@@ -199,6 +199,14 @@ _SEC_MODE = security.mode()
 _OUTPUT_GATE_ENFORCES = (_SEC_MODE == security.MODE_ENFORCE)
 
 
+def refresh_security_mode():
+    """ZERO-01：服务 main() 应用入口默认后重算缓存的安全模式。"""
+    global _SEC_MODE, _OUTPUT_GATE_ENFORCES
+    _SEC_MODE = security.mode()
+    _OUTPUT_GATE_ENFORCES = (_SEC_MODE == security.MODE_ENFORCE)
+    return _SEC_MODE
+
+
 def agent_watch_text(body):
     """把请求体文本交给入口网关。返回 None（放行）或 deny 决策。"""
     if AW_GATE is None:

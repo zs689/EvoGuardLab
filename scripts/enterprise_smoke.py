@@ -63,6 +63,8 @@ def main():
         TOKEN_RO: {"tenant": "acme", "actor": "carol", "roles": ["reader"]},
     }
     ent_env = {
+        # ZERO-01：本脚本验企业功能，不是安全档位；显式 opt-out
+        "EVOGUARD_PROFILE": "dev",
         "AGENTLAB_MODE": "enterprise",
         "AGENTLAB_API_TOKEN": TOKEN_A,
         "AGENTLAB_IDENTITY_MAP": json.dumps(identities),

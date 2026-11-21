@@ -63,7 +63,9 @@ def main():
     a = ap.parse_args()
     tmp = tempfile.mkdtemp(prefix="evo-jobssmoke-")
     data = os.path.join(tmp, "data")
-    env = {"AGENTLAB_DATA_ROOT": data,
+    # ZERO-01：本脚本验作业生命周期，不是安全档位；显式 opt-out
+    env = {"EVOGUARD_PROFILE": "dev",
+           "AGENTLAB_DATA_ROOT": data,
            "AGENTLAB_DB": os.path.join(data, "evoguard.db"),
            "AGENTLAB_RATE_LIMIT": "100000"}
     checks = []

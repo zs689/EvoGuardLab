@@ -39,7 +39,11 @@ class TestDataGovernance(unittest.TestCase):
         token = "gov-token"
         env = {"AGENTLAB_API_TOKEN": token,
                "AGENTLAB_RATE_LIMIT": "100000",
-               "AGENTLAB_LOG_QUIET": ""}
+               "AGENTLAB_LOG_QUIET": "",
+               # 本测试只验证「出口不泄露 canary」，不是安全拦截测试。
+               # 服务入口默认已改 enforce（ZERO-01），这里显式 audit
+               # 隔离关注点，避免把拦截逻辑混进治理断言。
+               "AGENTLAB_SECURITY_MODE": "audit"}
         svc_obj = L.Service(env)
         with svc_obj as svc:
             h = {"Authorization": "Bearer " + token,
