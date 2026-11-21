@@ -41,6 +41,8 @@ REQUIRED_DATA = [
     "share/evoguardlab/api/routes_enterprise.py",
     "share/evoguardlab/scripts/defense_demo.py",
     "share/evoguardlab/frontend/index.html",
+    # MOD-HYG-01-T2：双态 UI 的指挥页必须随 wheel 分发，否则内网白屏
+    "share/evoguardlab/frontend/command.html",
     "share/evoguardlab/config/thresholds_v1.json",
     "share/evoguardlab/docs/taxonomy.md",
     "share/evoguardlab/experiments/metrics.json",
