@@ -209,6 +209,46 @@ def extract_code(text):
     return text or ""
 
 
+def coupling_probe(work):
+    """运行时契约探针：实际执行一次 add_field，检查两处登记是否同步。
+
+    MOD-EVO-01 补救：静态 AST 断言看不到「运行时修改模块对象」，必须
+    在运行时验证。只返回**检查结果**（哪个表没登记），不含修复代码，
+    不是答案剧透；失败信息精确，便于模型一次修对。
+    """
+    import subprocess as _sp
+    probe_src = (
+        "import registry\n"
+        "from solution import add_field\n"
+        "p='__evoguard_probe__'\n"
+        "add_field(p)\n"
+        "bad=[]\n"
+        "if p not in getattr(registry,'FIELDS',[]):\n"
+        "    bad.append('FIELDS 未登记新字段')\n"
+        "if not getattr(registry,'REQUIRED',{}).get(p):\n"
+        "    bad.append('REQUIRED 未登记新字段（空值会被放行）')\n"
+        "print('PROBE:'+('|'.join(bad) if bad else 'OK'))\n")
+    path = os.path.join(work, "_coupling_probe.py")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(probe_src)
+    try:
+        r = _sp.run([sys.executable, "_coupling_probe.py"], cwd=work,
+                    capture_output=True, timeout=20, check=False,
+                    env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    except _sp.TimeoutExpired:
+        return {"ok": False, "problems": ["探针超时"]}
+    out = (r.stdout or b"").decode("utf-8", "replace")
+    err = (r.stderr or b"").decode("utf-8", "replace")
+    line = next((x for x in out.splitlines() if x.startswith("PROBE:")), "")
+    if line:
+        detail = line[len("PROBE:"):]
+        problems = [] if detail == "OK" else detail.split("|")
+        return {"ok": not problems, "problems": problems}
+    return {"ok": False,
+            "problems": [err.strip().splitlines()[-1][:140]
+                         if err.strip() else "探针无输出"]}
+
+
 def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
              assertions=None, root=None):
     """跑一题：让模型写代码 → 隐藏测试判分。返回 {passed, ...}。"""
@@ -270,25 +310,32 @@ def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
         # MOD-AGENT-01-T1：失败后把**干净的 traceback**回灌一次（不是长篇
         # 反思模板）。这是正常修 bug 闭环，不是提示词剧透。
         runtime_fix = 0
-        if rc != 0 and err:
+        while rc != 0 and runtime_fix < 2:
+            feedback = err[-700:]
+            if case.get("domain") == "coupling":
+                # 运行时探针：把「哪个表没登记」这种精确检查结果回灌。
+                # 只给检查结论，不给修复代码 —— 不是答案剧透。
+                pr = coupling_probe(work)
+                if pr["problems"]:
+                    feedback = ("运行时契约检查未通过：" +
+                                json.dumps(pr["problems"], ensure_ascii=False)
+                                + "\n测试错误：" + err[-300:])
             retry = list(msgs) + [
                 {"role": "user", "content":
-                 "上次实现未通过测试，错误如下。请只输出修正后的完整 Python 代码：\n"
-                 + err[-700:]
-                 + ("\n【写后断言】新字段必须在 FIELDS 与 REQUIRED 两处"
-                    "同时登记（这是静态检查器给出的确定事实，不是提示猜测）。"
-                    if case.get("domain") == "coupling" else "")}]
+                 "上次实现未通过测试。请只输出修正后的完整 Python 代码：\n"
+                 + feedback}]
             try:
                 text3, _t3, _m3 = provider.complete(
                     retry, temperature=0.0, max_tokens=900)
             except Exception:                              # noqa: BLE001
-                text3 = ""
-            if text3:
-                with open(sol, "w", encoding="utf-8") as f:
-                    f.write(extract_code(text3))
-                rc, out, err = _run_hidden(work, case["hidden"],
-                                           timeout=timeout)
-                runtime_fix = 1
+                break
+            if not text3:
+                break
+            with open(sol, "w", encoding="utf-8") as f:
+                f.write(extract_code(text3))
+            rc, out, err = _run_hidden(work, case["hidden"],
+                                       timeout=timeout)
+            runtime_fix += 1
         return {"id": case["id"], "domain": case["domain"],
                 "split": case["split"], "passed": (rc == 0),
                 "returncode": rc, "stderr": err[-400:],

@@ -1,0 +1,1267 @@
+{
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "protocol": "按域各用 5 道训练题 0-shot 失败轨迹提炼 env_invariant，40 道未见留出题配对评测；判分为真实执行的隐藏测试；统计用 McNemar 精确检验",
+  "n_train": 20,
+  "n_holdout": 40,
+  "train_pass_rate": 0.3,
+  "skills": {
+    "unit": {
+      "id": "sk_a76ade8b57",
+      "env_invariants": [
+        {
+          "domain": "unit",
+          "rule": "金额对外单位与本项目内部一致（分），不要做除以 100 的元换算",
+          "evidence": "unit mismatch"
+        }
+      ],
+      "pre_checks": []
+    },
+    "pagination": null,
+    "timezone": {
+      "id": "sk_8947d0e896",
+      "env_invariants": [
+        {
+          "domain": "timezone",
+          "rule": "日期时间必须带时区并按 ISO 8601 传输（UTC），且字符串必须以 Z 结尾，不接受 naive datetime",
+          "evidence": "timezone"
+        }
+      ],
+      "pre_checks": []
+    },
+    "coupling": {
+      "id": "sk_9b3e65fcf7",
+      "env_invariants": [
+        {
+          "domain": "coupling",
+          "rule": "同一字段在 REQUIRED 多处登记，必须全部同步，只改一处会静默失效",
+          "evidence": "missing from"
+        }
+      ],
+      "pre_checks": []
+    }
+  },
+  "hints": {
+    "unit": "金额对外单位与本项目内部一致（分），不要做除以 100 的元换算",
+    "pagination": null,
+    "timezone": "日期时间必须带时区并按 ISO 8601 传输（UTC），且字符串必须以 Z 结尾，不接受 naive datetime",
+    "coupling": "同一字段在 REQUIRED 多处登记，必须全部同步，只改一处会静默失效"
+  },
+  "post_write_assertions": {
+    "coupling": [
+      {
+        "kind": "pair_presence",
+        "file": "solution.py",
+        "first": "FIELDS",
+        "second": "REQUIRED",
+        "message": "FIELDS 与 REQUIRED 必须同时更新（coupling 漏改）"
+      }
+    ]
+  },
+  "overall": {
+    "n": 40,
+    "both_pass": 13,
+    "both_fail": 8,
+    "only_with": 19,
+    "only_no": 0,
+    "no_skill_rate": 0.325,
+    "with_skill_rate": 0.8,
+    "delta_pp": 47.5,
+    "mcnemar_p": 4e-06,
+    "with_ci95": [
+      0.6524,
+      0.895
+    ],
+    "no_ci95": [
+      0.2008,
+      0.4798
+    ]
+  },
+  "by_domain": {
+    "unit": {
+      "n": 10,
+      "both_pass": 3,
+      "both_fail": 0,
+      "only_with": 7,
+      "only_no": 0,
+      "no_skill_rate": 0.3,
+      "with_skill_rate": 1.0,
+      "delta_pp": 70.0,
+      "mcnemar_p": 0.015625,
+      "with_ci95": [
+        0.7225,
+        1.0
+      ],
+      "no_ci95": [
+        0.1078,
+        0.6032
+      ]
+    },
+    "pagination": {
+      "n": 10,
+      "both_pass": 10,
+      "both_fail": 0,
+      "only_with": 0,
+      "only_no": 0,
+      "no_skill_rate": 1.0,
+      "with_skill_rate": 1.0,
+      "delta_pp": 0.0,
+      "mcnemar_p": 1.0,
+      "with_ci95": [
+        0.7225,
+        1.0
+      ],
+      "no_ci95": [
+        0.7225,
+        1.0
+      ]
+    },
+    "timezone": {
+      "n": 10,
+      "both_pass": 0,
+      "both_fail": 0,
+      "only_with": 10,
+      "only_no": 0,
+      "no_skill_rate": 0.0,
+      "with_skill_rate": 1.0,
+      "delta_pp": 100.0,
+      "mcnemar_p": 0.001953,
+      "with_ci95": [
+        0.7225,
+        1.0
+      ],
+      "no_ci95": [
+        0.0,
+        0.2775
+      ]
+    },
+    "coupling": {
+      "n": 10,
+      "both_pass": 0,
+      "both_fail": 8,
+      "only_with": 2,
+      "only_no": 0,
+      "no_skill_rate": 0.0,
+      "with_skill_rate": 0.2,
+      "delta_pp": 20.0,
+      "mcnemar_p": 0.5,
+      "with_ci95": [
+        0.0567,
+        0.5098
+      ],
+      "no_ci95": [
+        0.0,
+        0.2775
+      ]
+    }
+  },
+  "verdict": "SIGNIFICANT_GAIN",
+  "detail": {
+    "no_skill": [
+      {
+        "id": "unit-h-05",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-h-05-uvkag7aa\\_hidden_test.py\", line 4, in <module>\r\n    assert '45600' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('45600', s))\r\n           ^^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 45600, got '$456.00' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-h-06",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-h-07",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "unit-h-08",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-h-08-oe9oks5o\\_hidden_test.py\", line 4, in <module>\r\n    assert '99900' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('99900', s))\r\n           ^^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 99900, got '$999.00' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-h-09",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-h-10",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-h-10-1iny2sda\\_hidden_test.py\", line 5, in <module>\r\n    assert '0.07' not in s, ('looks like yuan conversion (divide by 100): %r' % s)\r\n           ^^^^^^^^^^^^^^^\r\nAssertionError: looks like yuan conversion (divide by 100): '$0.07'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-h-11",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-h-11-muuvdw8d\\_hidden_test.py\", line 4, in <module>\r\n    assert '100000' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('100000', s))\r\n           ^^^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 100000, got '$1000.00' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-h-12",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-h-12-v4cpx0ai\\_hidden_test.py\", line 4, in <module>\r\n    assert '45600' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('45600', s))\r\n           ^^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 45600, got '$456.00' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-h-13",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-h-13-dvifadn6\\_hidden_test.py\", line 4, in <module>\r\n    assert '3000' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('3000', s))\r\n           ^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 3000, got '$30.00' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-h-14",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-h-14-kuk7ue9g\\_hidden_test.py\", line 4, in <module>\r\n    assert '12345' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('12345', s))\r\n           ^^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 12345, got '123.45' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "pagination-h-05",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-06",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-07",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-08",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-09",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-10",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-11",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-12",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-13",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-14",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "timezone-h-05",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-h-05-53aqdtlr\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-h-06",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-h-06-21jip_e1\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-h-07",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-h-07-ffgnfeim\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-h-08",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-h-08-1bva9gna\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-h-09",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-h-09-75pqejel\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-h-10",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-h-10-uwiq74s7\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-h-11",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-h-11-xpe6fe2u\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-h-12",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-h-12-hgy29qu0\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-h-13",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-h-13-my_2o0d_\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-h-14",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-h-14-88db6l3z\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-05",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-05-ltrxfv7r\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'status': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-06",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-06-x23lyfyh\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'channel': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-07",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-07-syw2k0sh\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'region': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-08",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-08-20hvk1cv\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'priority': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-09",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-09-zfzw4s48\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'currency': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 1,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-10",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-10-9a60gbzp\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'status': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 1,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-11",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-11-74qvmi05\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'channel': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-12",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-12-jua95y_e\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'region': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 1,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-13",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-13-ob1qdsno\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'priority': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-14",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-14-oc4e2syf\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'currency': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      }
+    ],
+    "with_skill": [
+      {
+        "id": "unit-h-05",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "unit-h-06",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "unit-h-07",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "unit-h-08",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "unit-h-09",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "unit-h-10",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "unit-h-11",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "unit-h-12",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "unit-h-13",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "unit-h-14",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "pagination-h-05",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-06",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-07",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-08",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-09",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-10",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-11",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-12",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-13",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-h-14",
+        "domain": "pagination",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "timezone-h-05",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "timezone-h-06",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "timezone-h-07",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "timezone-h-08",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "timezone-h-09",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "timezone-h-10",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "timezone-h-11",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "timezone-h-12",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "timezone-h-13",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "timezone-h-14",
+        "domain": "timezone",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "coupling-h-05",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-05-lrj1o76j\\_hidden_test.py\", line 4, in <module>\r\n    assert 'status' in registry.FIELDS, ('FIELDS missing field')\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: FIELDS missing field\r\n",
+        "assertion_repairs": 1,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-06",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-06-ostzyu6m\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'channel': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 1,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-07",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-07-yvvomcuk\\_hidden_test.py\", line 4, in <module>\r\n    assert 'region' in registry.FIELDS, ('FIELDS missing field')\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: FIELDS missing field\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-08",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 1,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      },
+      {
+        "id": "coupling-h-09",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-09-j9sx45lp\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'currency': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-10",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-10-ev5vjvqc\\_hidden_test.py\", line 4, in <module>\r\n    assert 'status' in registry.FIELDS, ('FIELDS missing field')\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: FIELDS missing field\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-11",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-11-x7jxv9mb\\_hidden_test.py\", line 4, in <module>\r\n    assert 'channel' in registry.FIELDS, ('FIELDS missing field')\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: FIELDS missing field\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-12",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-12-up0h7kv1\\_hidden_test.py\", line 4, in <module>\r\n    assert 'region' in registry.FIELDS, ('FIELDS missing field')\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: FIELDS missing field\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-13",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-h-13-fh6i73w6\\_hidden_test.py\", line 4, in <module>\r\n    assert 'priority' in registry.FIELDS, ('FIELDS missing field')\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: FIELDS missing field\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-h-14",
+        "domain": "coupling",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 1,
+        "assertion_ok": true,
+        "runtime_fix": 0
+      }
+    ],
+    "train": [
+      {
+        "id": "unit-t-00",
+        "domain": "unit",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-t-00-1xzs09pm\\_hidden_test.py\", line 4, in <module>\r\n    assert '12345' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('12345', s))\r\n           ^^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 12345, got '123.45' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-t-01",
+        "domain": "unit",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-t-01-u6ckfrzv\\_hidden_test.py\", line 4, in <module>\r\n    assert '99900' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('99900', s))\r\n           ^^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 99900, got '$999.00' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-t-02",
+        "domain": "unit",
+        "split": "train",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-t-03",
+        "domain": "unit",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-t-03-k3n06h5i\\_hidden_test.py\", line 5, in <module>\r\n    assert '0.07' not in s, ('looks like yuan conversion (divide by 100): %r' % s)\r\n           ^^^^^^^^^^^^^^^\r\nAssertionError: looks like yuan conversion (divide by 100): '$0.07'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "unit-t-04",
+        "domain": "unit",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-t-04-1dl4w_ah\\_hidden_test.py\", line 4, in <module>\r\n    assert '100000' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('100000', s))\r\n           ^^^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 100000, got '$1000.00' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "pagination-t-00",
+        "domain": "pagination",
+        "split": "train",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-t-01",
+        "domain": "pagination",
+        "split": "train",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-t-02",
+        "domain": "pagination",
+        "split": "train",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-t-03",
+        "domain": "pagination",
+        "split": "train",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "pagination-t-04",
+        "domain": "pagination",
+        "split": "train",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 1
+      },
+      {
+        "id": "timezone-t-00",
+        "domain": "timezone",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-t-00-mlwcenot\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-t-01",
+        "domain": "timezone",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-t-01-261j5ve_\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-t-02",
+        "domain": "timezone",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-t-02-strvxr4m\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-t-03",
+        "domain": "timezone",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-t-03-o59qzp1k\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "timezone-t-04",
+        "domain": "timezone",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-timezone-t-04-_yq1819o\\_hidden_test.py\", line 5, in <module>\r\n    assert s.endswith('Z'), ('timestamp must be ISO8601 UTC ending with Z: %r' % s)\r\n           ~~~~~~~~~~^^^^^\r\nAssertionError: timestamp must be ISO8601 UTC ending with Z: '2023-11-14T22:13:20+00:00'\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-t-00",
+        "domain": "coupling",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-t-00-bwn8ivce\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'status': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 1,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-t-01",
+        "domain": "coupling",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-t-01-vqy7al5g\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'channel': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-t-02",
+        "domain": "coupling",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-t-02-x11rl0k8\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'region': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-t-03",
+        "domain": "coupling",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-t-03-5o5atpb4\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'priority': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 1,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      },
+      {
+        "id": "coupling-t-04",
+        "domain": "coupling",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-coupling-t-04-f29yet2u\\_hidden_test.py\", line 6, in <module>\r\n    assert registry.is_valid({'currency': ''}) is False, (\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError: field missing from REQUIRED table -> empty value accepted, not treated like existing fields\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 2
+      }
+    ]
+  }
+}

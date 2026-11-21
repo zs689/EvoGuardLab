@@ -550,28 +550,28 @@ def docker_session(box, work_dir, *, timeout_s=None):
 
     class _Session:
         def __init__(self, docker_bin, cname, timeout, max_bytes):
-            box.docker, box.name = docker_bin, cname
-            box.timeout, box.max_bytes = timeout, max_bytes
-            box.closed = False
+            self.docker, self.name = docker_bin, cname
+            self.timeout, self.max_bytes = timeout, max_bytes
+            self.closed = False
 
         def run(self, cmd, *, timeout_s=None):
-            if box.closed:
+            if self.closed:
                 raise DockerSandboxError("session_closed")
             if not isinstance(cmd, (list, tuple)) or not cmd \
                     or not all(isinstance(x, str) for x in cmd):
                 raise DockerSandboxError("cmd_must_be_argv_list")
-            argv2 = [box.docker, "exec", box.name] + [str(x) for x in cmd]
+            argv2 = [self.docker, "exec", self.name] + [str(x) for x in cmd]
             try:
                 r = _sp.run(argv2, capture_output=True,
-                            timeout=float(timeout_s or box.timeout),
+                            timeout=float(timeout_s or self.timeout),
                             check=False)
                 out, err = r.stdout or b"", r.stderr or b""
                 if isinstance(out, str): out = out.encode("utf-8")
                 if isinstance(err, str): err = err.encode("utf-8")
                 return {"ok": r.returncode == 0,
-                        "stdout": out[:box.max_bytes].decode(
+                        "stdout": out[:self.max_bytes].decode(
                             "utf-8", "replace"),
-                        "stderr": err[:box.max_bytes].decode(
+                        "stderr": err[:self.max_bytes].decode(
                             "utf-8", "replace"),
                         "returncode": r.returncode,
                         "reused_container": True}
@@ -579,7 +579,7 @@ def docker_session(box, work_dir, *, timeout_s=None):
                 return {"ok": False, "stdout": "", "stderr": "timeout",
                         "returncode": -1, "timeout": True}
         def close(self):
-            box.closed = True
+            self.closed = True
 
     sess = _Session(box.docker, name, limit, box.max_output_bytes)
     try:
@@ -588,6 +588,15 @@ def docker_session(box, work_dir, *, timeout_s=None):
         sess.close()
         _sp.run([box.docker, "rm", "-f", name],
                 capture_output=True, timeout=10, check=False)
+        # docker rm -f 可能异步返回：轮询确认真的消失，
+        # 否则「退出必清理」的承诺会变成静默失效。
+        import time as _t
+        for _ in range(20):
+            chk = _sp.run([box.docker, "inspect", name],
+                          capture_output=True, timeout=5, check=False)
+            if chk.returncode != 0:
+                break
+            _t.sleep(0.1)
 
 class WorkspaceSnapshot:
     """AGENT-KERN-01-T1：工作区快照/回滚。

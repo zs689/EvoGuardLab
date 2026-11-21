@@ -34,15 +34,15 @@ class TestDockerSession(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_session_reuses_container_and_cleans_up(self):
-        before = set(_containers())
         with self.box.session(self.tmp) as s:
+            my_name = s.name                # 只看自己这次会话，避免与
+            during = my_name in set(_containers())   # 重复加载的其它实例交错
             results = [s.run(["python", "-m", "unittest", "test_m", "-q"])
                        for _ in range(3)]
-            during = set(_containers())
-        after = set(_containers())
+        after = my_name in set(_containers())
         self.assertTrue(all(r["ok"] for r in results), results)
-        self.assertTrue(during - before, "会话期间应有常驻容器")
-        self.assertFalse(during - after, "退出会话必须清理容器")
+        self.assertTrue(during, "会话期间应有常驻容器")
+        self.assertFalse(after, "退出会话必须清理容器 %s" % my_name)
 
 
 def _containers():
