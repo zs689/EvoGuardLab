@@ -712,6 +712,52 @@ CHECKS = [
 ]
 
 
+# ---- ZERO-02：hygiene（静态/卫生） vs live_capability（现场真执行）------
+# 分类按**是否真执行被测行为**，不按检查名字。前者可以绿，但不能冒充能力。
+_LIVE_CHECKS = frozenset({
+    "c_retention_chain", "c_sli_definition", "c_stable_4xx",
+    "c_enterprise_e2e", "c_jobs_e2e", "c_audit_multiprocess",
+    "c_data_governance", "c_evidence_freshness",
+})
+
+
+def check_kinds():
+    return {fn.__name__: ("live_capability" if fn.__name__ in _LIVE_CHECKS
+                          else "hygiene") for _cid, fn in CHECKS}
+
+
+def _current_git_sha():
+    try:
+        r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                           capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:                                      # noqa: BLE001
+        return ""
+
+
+def evidence_git_sha(pairs, *, current_sha=None):
+    """证据文件必须记录它生成时的 git_sha，且与当前 HEAD 一致。
+
+    没有 git_sha 或不一致 = 证据不属于当前代码，直接算过期。
+    冻结证据（frozen + 理由）同样遵守这条 —— 冻结不是伪造的免死金牌。
+    """
+    sha = current_sha if current_sha is not None else _current_git_sha()
+    stale = []
+    for ev, _sources in pairs:
+        name = os.path.basename(ev)
+        if not os.path.isfile(ev):
+            stale.append("%s：证据文件不存在" % name)
+            continue
+        rep = _json(ev) or {}
+        got = str(rep.get("git_sha") or "").strip()
+        if not got:
+            stale.append("%s：证据缺 git_sha（无法证明属于当前代码）" % name)
+        elif sha and got != sha:
+            stale.append("%s：git_sha 不匹配（%s... != HEAD %s...）"
+                         % (name, got[:8], sha[:8]))
+    return {"fresh": not stale, "stale": stale}
+
+
 def main():
     ap = argparse.ArgumentParser(description="独立审查整改的同一检查入口")
     ap.add_argument("--out", default="", help="输出目录（写 review_checks.json）")
@@ -729,6 +775,8 @@ def main():
         except Exception as exc:               # noqa: BLE001
             r = _result(cid + "/exception", False,
                         "检查自身异常：%r" % exc, fn.__name__)
+        r["gate_kind"] = ("live_capability"
+                          if fn.__name__ in _LIVE_CHECKS else "hygiene")
         results.append(r)
         print("%-5s %-30s %s" % (r["status"].upper(), r["id"], r["detail"]))
 
@@ -754,6 +802,11 @@ def main():
             f.write("\n")
         print("[√] %s（%d pass / %d fail）" % (p, n_pass, n_fail))
     print("== %d/%d pass, %d fail ==" % (n_pass, len(results), n_fail))
+    kinds = check_kinds()
+    for kind in ("hygiene", "live_capability"):
+        group = [r for r in results if r.get("gate_kind") == kind]
+        gp = sum(1 for r in group if r["status"] == "pass")
+        print("   %-16s %d/%d pass" % (kind, gp, len(group)))
     return 1 if (a.gate and n_fail) else 0
 
 
