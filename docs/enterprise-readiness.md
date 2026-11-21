@@ -13,6 +13,14 @@
 
 ---
 
+**2026-11-21 更新**：服务/CLI 入口已切换为开箱默认硬拦截（`enforce` +
+污点 + 零依赖 light guard），裸启动的高危注入返回 403 `E_INPUT_BLOCKED`；
+审计/观察档需显式 `EVOGUARD_PROFILE=audit`。真 PG16 `FORCE RLS`、Redis
+双进程限流/作业队列、五容器 Compose 的活体产物见
+[`review-remediation/README.md`](review-remediation/README.md) 与
+`docs/review-remediation/probes/*.json`。门禁输出已拆分
+`hygiene` / `live_capability` 两组，静态检查不再冒充能力通过数。
+
 ## 一、真实现（有测试/有产物可核对）
 
 | 模块 | 能力 | 怎么验证 |

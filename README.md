@@ -123,6 +123,13 @@ still executed the tool.
 
 ### Detection stack (return path)
 
+**Default posture (since ZERO-01)**: service/CLI entry points start with
+`enforce` + taint tracking + zero-dependency light classifier. A bare
+`evoguard serve` returns HTTP 403 for a high-severity injection; the old
+audit-only behaviour is still available via `EVOGUARD_PROFILE=audit` or
+explicit `AGENTLAB_SECURITY_MODE=audit`, and library defaults keep `audit`
+so historical experiments reproduce unchanged.
+
 | Layer | Method | Default | Cost |
 |---|---|---|---|
 | Normalise | invisible Unicode (tag chars, zero-width, bidi) → strip + decode views | on | ~0 |
@@ -140,13 +147,26 @@ The scope layer exists because of a specific finding: natural-language indirect 
 
 ![results](docs/results.svg)
 
-| Experiment | Metric | Value | Caveat |
+### Detection results — two different stacks, do not conflate
+
+Two numbers get confused. They are **not** the same system:
+
+| Stack | Setup | Result | Caveat |
 |---|---|---|---|
-| InjecAgent indirect injection | per-case recall / FP | **0.839 / 0.002** | 3 tuning rounds; see `experiments/action_scope_v2/report.md` |
-| Chinese jailbreak techniques (34) | L1 recall | **0.029** | regex is a dead end on Chinese; documented, not fixed by adding rules |
-| Chinese harmful-request set (108) | L1 recall | **0.000** | wrong task — that is content moderation, not injection detection |
-| Chinese indirect injection (120, self-built) | recall / FP | **0.917 / 0.000** | in-sample: rules were finalised on this set, so it is coverage, not generalisation |
-| Regression suite | tests | **814 tests, green** (corpus-dependent cases skip on a clean clone) | `python -m unittest discover -s tests` |
+| **L1 regex only** (old baseline) | Chinese jailbreak, 34 cases | recall **0.029** | regex is a dead end on Chinese; not fixed by adding rules |
+| **L1 regex only** (old baseline) | Chinese harmful-request, 108 cases | recall **0.000** | wrong task: content moderation, which this repo explicitly does not solve |
+| **L1 only** (old baseline) | Chinese indirect injection, 120 self-built | recall/FP **0.917 / 0.000** | **in-sample** — rules were finalised on this set; coverage, not generalisation |
+| **Full layered default stack** (current) | InjecAgent public, 2108 cases | ASR (detector only) **0.0645**; blocked by L1_light 1904 + L1_high_stakes 68 + tool_gate 136, missed 0 | from `experiments/pub_bench.json`; judge not enabled by default |
+| **Full layered default stack** (current) | AgentDojo slice, 120 cases | ASR **0.0** (100 L1_light + 20 L1_high_stakes) | see caveat: templates, not official leaderboard |
+
+Scope-layer evidence (read-only tool asked to act): recall **0.839** with
+**0.2%** FP on held-out split, zero model calls (`experiments/action_scope_v2/report.md`).
+
+**Do not read the 0.917 as generalisation, and do not read 0.0 ASR as
+"no injection exists"** — the AgentDojo slice is 120 template goals, and the
+public-set ASR is detector-only (no local LLM judge in the default stack).
+
+| Regression suite | tests | **1471 tests, green** (corpus-dependent cases skip on a clean clone) | `python -m unittest discover -s tests`; gate: `python scripts/review_checks.py --gate` prints `hygiene` and `live_capability` separately |
 
 The Chinese indirect-injection set is **built by this repo**, not a public corpus — no public
 Chinese indirect-injection corpus exists. It is 10 carriers × 12 techniques, all distinct.
@@ -156,8 +176,10 @@ three different tasks apart instead of reporting one flattering average.
 
 ## What this is NOT
 
-- **Not a WAF or a sandbox.** Detection is pattern-based; rephrasing gets past it. There is no
-  process/network isolation.
+- **Not a WAF.** Detection is pattern-based; rephrasing can get past it. There *is* an optional
+  Docker sandbox (`--network=none`, read-only root, non-root, cap-drop ALL, pids-limit) used by
+  the coding agent — but it is not a kernel-grade security boundary and is not on by default
+  for the REST API.
 - **Not a content moderator.** The `harmful_request` class is reported at ~0 recall on purpose:
   it is a different task and this repo does not pretend to solve it.
 - **Not a leaderboard entry.** No official AgentDojo leaderboard run (needs official models/API).

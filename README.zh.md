@@ -60,7 +60,7 @@ cd EvoGuardLab
 # 1) 完整闭环：故障 → 诊断 → 策略链恢复 → 提炼经验 → 独立验证 → 晋升 → 对照实验
 python ai-service/evolution_bench.py
 
-# 2) 回归测试（814 个：56 核心 + 9 评测口径 + 19 难度组 + 44 检查器 + 27 静态 + 36 技能验证 + 34 安全层 + 8 保障视图 + 15 标注集 + 8 安全契约 + 12 防御演示 + 12 文档一致性 + 15 四模式对照 + 15 审批与结算 + 21 评测质量与 CI + 21 条件技能 + 12 工具契约 + 17 E02/E03 + 12 公平消融 + 34 边界异常 + 8 守卫模糊 + 14 不可信输入 + 8 可复现性 + 11 安全解压 + 14 看板接口 + 13 外部语料 + 10 CI 后果证据 + 36 第二级模型 + 11 真实模型链路 + 10 越狱语料 + 12 AgentDojo 适配器 + 17 最后一轮扩样 + 24 收尾轮 + 38 LlamaFirewall 融合 + 15 执行入口 + 10 审批加固 + 9 基线指纹 + 16 中文语料 + 22 按工具护栏 + 6 分档守门 + 13 双标注守门 + 17 预注册实验守门 + 7 双标注结果守门 + 11 检测器 v2 守门 + 12 服务层守门）
+# 2) 回归测试（1471 个；各分组明细见 tests/ 目录，clean clone 上语料相关用例如实 skip）
 python -m unittest discover -s tests -v
 
 # 3) 启动 Web 看板（BoardUI 风格，零依赖）
@@ -75,7 +75,10 @@ python scripts/check_model.py --base http://127.0.0.1:11434/v1
 > `evoguard eval` 只跑不依赖语料的两项，不再抛 traceback。导入语料后重跑，
 > 产物与仓库内已提交的报告逐字节一致。`.gitattributes` 把 fixtures 与产物锁成 LF，
 > 避免 Windows 的 `core.autocrlf=true` 改掉字节、触发 sha256 守门失败。
-> 文档里的「814 项」指**语料齐全时**的全量套件；clean clone 上会如实显示 skipped。
+> 文档里的「1471 项」指**语料齐全时**的全量套件；clean clone 上会如实显示 skipped。
+> 门禁分两组输出：`python scripts/review_checks.py --gate` 会分别打印
+> `hygiene`（静态/配置卫生）与 `live_capability`（现场真执行）通过数——
+> 静态检查再绿也不能冒充能力测试。
 
 **检测能力 v2（重新预注册，结果是负结果）**：`docs/semantic-injection-v2-plan.md`
 用联网核实的一手方法（StackOne SFE 逐字段过滤、Prompt Guard 2 重叠分窗取 max、
@@ -518,7 +521,7 @@ python -m unittest tests.test_conditional_skill -q
 **未做**：四组任务家族、真实 guard 数据集、完整公平消融与回滚证据、
 E03 经验适用范围与检索改进；没有重跑 1080 run。
 
-### 安全层：三层防护，默认只检测不改写
+### 安全层：三层防护，服务入口默认真拦截
 
 攻击面有三条口子：**用户输入**、**工具返回的外部内容**、**Agent 吐给浏览器的输出**。
 
@@ -532,8 +535,14 @@ E03 经验适用范围与检索改进；没有重跑 1080 run。
 # 只看安全相关的发现
 cd ai-service && python -m evoguard_inspect.cli --trace t.json --group security
 
-# 运行时拦截（默认 audit：只记账不改内容，保证历史实验可比）
-AGENTLAB_SECURITY_MODE=enforce python ai-service/api/app.py
+# 服务/CLI 入口自 ZERO-01 起**开箱默认 enforce**：裸启动即真拦截
+# （高危注入直接返回 HTTP 403 E_INPUT_BLOCKED，不是只记账）
+python ai-service/api/app.py
+
+# 需要观察/排障时显式退回 audit（历史对照实验也走这个显式档）
+EVOGUARD_PROFILE=audit python ai-service/api/app.py
+
+# 库层默认值仍为 audit，保证历史实验脚本行为不漂移
 ```
 
 **检测建议 ≠ 拦截成功（S01 契约）**：`enforce` 且未开 `AGENTLAB_SECURITY_WRAP` 时，

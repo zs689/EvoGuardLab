@@ -24,6 +24,42 @@
 「先复现差距 → 再改 → 留修前修后证据」，第二轮的性能对比在
 `perf-before-after.md`，其中包含一次**按验收证据撤回**的 WAL 尝试。
 
+## 最新状态（2026-11-21，归零重塑后）
+
+**以可复验产物为准，不沿用 11-12 的旧结论**：
+
+- **企业级活体实测已完成**（`probes/*.json`，3–4 天前，全部 `passed: true`）：
+  - `pg_rls_live.json`：真 PostgreSQL 16 `FORCE RLS`。tenant_A 只见 1 行、
+    tenant_B 只见 1 行、无租户上下文见 0 行、owner 同样受限。
+  - `pg_store_e2e.json`：真 PG `PostgresStore` 多副本共享后端通过。
+  - `distributed_stress.json`：Redis 5.x 双进程——限流总和 20（A 11 + B 9，
+    不是翻倍）、作业队列 40 个恰好各被一个 worker 消费一次（unique 40）、
+    熔断器 A 开 B 可读到。
+  - `compose_e2e.json`：2×evoguard + redis:7 + postgres:16 + nginx 五容器
+    Compose 实测；伪造/无 token 401、有效 200、JWT-HS256 + RedisLimiter。
+  - `pg_audit_e2e.json`：共享 PG 审计链 + 库外只追加锚点实测通过。
+- **默认安全姿态已翻转**（ZERO-01）：服务/CLI 入口裸启动即 `enforce` +
+  污点 + 零依赖 light guard。零环境变量起服务，高危注入 POST 返回
+  **403 `E_INPUT_BLOCKED`**；旧 audit 行为需显式 `EVOGUARD_PROFILE=audit`。
+  库层默认仍是 audit，历史对照脚本行为不变。
+- **门禁不再拿静态检查冒充能力**（ZERO-02）：`review_checks.py --gate`
+  分开打印 `hygiene`（22/22）与 `live_capability`（8/8）。证据新鲜度
+  按源码 mtime 强制校验；3 个无重跑脚本的一次性探针显式 `frozen` +
+  理由并在输出里披露，不再静默放行。`git_sha` 校验工具已就绪，但
+  **未强制接入**旧证据（8 个历史 probe 均无该字段，强接会全假红）。
+- **锚点防伪与测试诚实性修复**：`external_anchor` 无密钥时不再无脑
+  `return True`；事件锚点 4 段签名/3 段验的不一致已修。新增真端到端
+  攻击链测试（污染→preflight→`executed=False`），不 mock 判定逻辑。
+
+**仍未解决 / 真实边界（不反向吹牛）**：
+- 真模型只验证过 DeepSeek 单厂商；第二厂商交叉实测尚未完成。
+- `coupling` 域 3 轮留出均值 56.7%（运行时探针后），未到 85%。
+- 中文越狱无公开权威语料；自建集指标均为 in-sample，只能当覆盖率。
+- 单机 Docker 会话长时压测未做；会话复用有过清理时序 bug（已修，
+  但只做了短时真容器验证）。
+- 自评 `scorecard` 已标 `DEPRECATED_FOR_CERTIFICATION`，**不得**作为
+  企业就绪或能力证明。
+
 ---
 
 ## 修前 / 修后证据
