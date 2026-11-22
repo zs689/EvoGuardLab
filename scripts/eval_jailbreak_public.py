@@ -87,12 +87,18 @@ def main():
                     "不冒充未在本机复核的数据集。",
         },
         "n": len(sample),
+        "n_unique": len({hashlib.sha256(
+            str(r.get("text") or "").encode("utf-8")).hexdigest()
+            for r in sample}),
         "n_attack": len(tp_name := [r for r in sample if r in attack]),
         "n_benign": len(sample) - len(tp_name),
         "recall": round(tp / (tp + fn), 4) if (tp + fn) else None,
         "fpr": round(fp / (fp + tn), 4) if (fp + tn) else None,
         "p95_ms": round(sorted(lat)[int(0.95 * (len(lat) - 1))], 3)
         if lat else 0,
+        "duplicate_ratio": round(1 - len({
+            hashlib.sha256(str(r.get("text") or "").encode("utf-8")
+                           ).hexdigest() for r in sample}) / max(1, len(sample)), 4),
         "blocked_by": by_layer,
         "confusion": {"tp": tp, "fn": fn, "fp": fp, "tn": tn},
         "judge": "rule-only L1 (manifest: L2 不适用于直接越狱输入落点)",

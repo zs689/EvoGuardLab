@@ -231,6 +231,16 @@ class TestBenchmarkASRHonesty(unittest.TestCase):
         self.assertEqual(detector_hits + detector_miss, n)
         self.assertAlmostEqual(detector_miss / n, 0.0645, places=4)
 
+    def test_duplicate_ratio_is_exposed(self):
+        """公开集同句重复：必须显式暴露唯一文本数，否则样本量被虚高。"""
+        import eval_public_benchmarks as P
+        rows = ([{"text": "同一条攻击指令", "label": 1}] * 4 +
+                [{"text": "另一条指令", "label": 1}])
+        r = P._eval_set("dup", rows, judge=None)
+        self.assertEqual(r["n"], 5)
+        self.assertEqual(r["n_unique"], 2)
+        self.assertAlmostEqual(r["duplicate_ratio"], 0.6, places=4)
+
     def test_utility_uses_matching_provenance(self):
         import eval_public_benchmarks as P
         # 同来源良性：InjecAgent 的 user_instruction 字段

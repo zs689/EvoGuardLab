@@ -156,7 +156,8 @@ def _load_cache(path):
     return out
 
 
-def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1):
+def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1,
+              judge_total_timeout=900):
     if limit and limit > 0:
         rows = rows[:limit]
     hits = {"L1_light": 0, "L1_high_stakes": 0, "L2_semantic": 0,
@@ -182,18 +183,57 @@ def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1):
                 "ms": round((time.perf_counter() - t0) * 1000, 3)}
 
     if fresh:
-        if workers > 1:
-            with concurrent.futures.ThreadPoolExecutor(
-                    max_workers=workers) as ex:
-                results = list(ex.map(_judge_one, fresh))
-        else:
-            results = [_judge_one(x) for x in fresh]
-        if cache_path:
-            with open(cache_path, "a", encoding="utf-8") as f:
-                for rec in results:
-                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-        for rec in results:
+        # 流式落盘：每完成一条立刻写缓存。旧实现用 ex.map 按提交顺序取结果，
+        # 第一条卡住时后面已完成的也拿不到，整批 19 分钟只落 62 条。
+        sink = open(cache_path, "a", encoding="utf-8") if cache_path else None
+
+        def _persist(rec):
             cache[rec["key"]] = rec
+            if sink:
+                sink.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                sink.flush()
+
+        try:
+            if workers > 1:
+                ex = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=workers)
+                try:
+                    futs = {ex.submit(_judge_one, x): x for x in fresh}
+                    for fut in concurrent.futures.as_completed(
+                            futs, timeout=judge_total_timeout):
+                        try:
+                            _persist(fut.result())
+                        except Exception as exc:           # noqa: BLE001
+                            key = futs[fut][0]
+                            _persist({"key": key, "blocked": False,
+                                      "layer": "L2_unavailable",
+                                      "decision": "worker_error:"
+                                                  + type(exc).__name__,
+                                      "ms": 0})
+                except concurrent.futures.TimeoutError:
+                    # 总预算耗尽：未完成的按不可用记账，**已完成的已落盘**
+                    done = {r["key"] for r in cache.values()}
+                    for key, _txt in fresh:
+                        if key not in done:
+                            _persist({"key": key, "blocked": False,
+                                      "layer": "L2_unavailable",
+                                      "decision": "batch_timeout", "ms": 0})
+                finally:
+                    # 不等卡住的线程，避免 shutdown 无限阻塞
+                    ex.shutdown(wait=False, cancel_futures=True)
+            else:
+                for item in fresh:
+                    try:
+                        _persist(_judge_one(item))
+                    except Exception as exc:               # noqa: BLE001
+                        _persist({"key": item[0], "blocked": False,
+                                  "layer": "L2_unavailable",
+                                  "decision": "worker_error:"
+                                              + type(exc).__name__,
+                                  "ms": 0})
+        finally:
+            if sink:
+                sink.close()
 
     detected, lat = [], []
     for r in rows:
@@ -243,8 +283,11 @@ def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1):
             round(gate_miss / n, 4) if n else None,
         "p95_ms": round(sorted(lat)[int(0.95 * (len(lat) - 1))], 3)
         if lat else 0,
-        "cache_unique_texts": len(uniq),
-        "cache_hits": len(uniq) - len(fresh),
+        # NEXT-02b：公开集里同一句话被重复计数（InjecAgent 2108 条
+        # 只有 62 个唯一 attacker_instruction），必须显式暴露，
+        # 否则 ASR 的置信区间会被虚假样本量高估。
+        "n_unique": len(uniq),
+        "duplicate_ratio": (round(1 - len(uniq) / n, 4) if n else 0),
     }
 
 def _is_benign(r):
@@ -281,14 +324,21 @@ def main():
     ap.add_argument("--out", default="")
     ap.add_argument("--cache", default="",
                     help="L2 判官结果的 JSONL 断点缓存（sha256 去重）")
+    ap.add_argument("--judge-timeout", type=int, default=20,
+                    help="判官单次调用超时（秒）")
+    ap.add_argument("--judge-total-timeout", type=int, default=900,
+                    help="单集判官总时间预算（秒），超时未完成记为不可用")
     ap.add_argument("--workers", type=int, default=1,
                     help="L2 判官并发数（默认 1；全量建议 8）")
     a = ap.parse_args()
 
     judge = None
     if a.provider:
+        # 判官单次调用超时必须短：ThreadPoolExecutor 的线程无法强杀，
+        # 默认 60s x 重试会让卡住的请求把进程拖到十几分钟不退出。
         spec = GW.ProviderSpec(backend=a.provider, base_url=a.base,
-                               model=a.model, api_key_env=a.api_key_env)
+                               model=a.model, api_key_env=a.api_key_env,
+                               timeout=a.judge_timeout)
         prov = GW.get_provider(force=a.provider, spec=spec)
 
         def _complete(messages):                            # 单轮调用
@@ -346,7 +396,8 @@ def main():
             "provenance": "public (InjecAgent, full)",
             **_eval_set("injecagent", rows, judge=judge, limit=a.limit,
                                cache_path=a.cache or None,
-                               workers=a.workers)}
+                               workers=a.workers,
+                               judge_total_timeout=a.judge_total_timeout)}
 
     ad = _read_jsonl(os.path.join(DATA, "agentdojo", "cases.jsonl"))
     if ad:
@@ -358,7 +409,8 @@ def main():
             "provenance": "public (AgentDojo templates, goal-only)",
             **_eval_set("agentdojo", rows, judge=judge, limit=a.limit,
                                cache_path=a.cache or None,
-                               workers=a.workers)}
+                               workers=a.workers,
+                               judge_total_timeout=a.judge_total_timeout)}
 
     # SCORE-01-T3：Utility 必须和攻击集**同语种、同来源**。
     # 之前拿中文自建良性文本配英文 InjecAgent 攻击集 —— 语种错配，

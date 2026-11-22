@@ -10,11 +10,13 @@
     "note": "实际使用本公开二分类集；非 JailbreakBench 100 Behaviors，不冒充未在本机复核的数据集。"
   },
   "n": 200,
+  "n_unique": 198,
   "n_attack": 100,
   "n_benign": 100,
   "recall": 0.04,
   "fpr": 0.0,
-  "p95_ms": 0.514,
+  "p95_ms": 0.513,
+  "duplicate_ratio": 0.01,
   "blocked_by": {
     "L1_light": 4,
     "L1_high_stakes": 0,
