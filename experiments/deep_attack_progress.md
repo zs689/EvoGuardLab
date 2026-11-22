@@ -52,8 +52,16 @@ pagination 0-shot **0%**（恢复了区分度）。
 
 原 `eval_public_benchmarks.py` 传给 `guard_input_semantic` 的是裸函数，
 而后者要求 `.judge()` 对象 → 136 条全部记为 `L2_unavailable`，
-`L2_semantic=0` 是**假的规则层实测**，不是判官真的不行。
-已加 `_JudgeAdapter` 把任意 ProviderSpec 模型适配成契约格式并重跑。
+现有 `pub_bench_layered.json` 里的 `L2_semantic=0` 是**假的规则层实测**
+（虽然 judge 字段写着 deepseek），不是判官真的不行。
+
+已加 `_JudgeAdapter` 把任意 ProviderSpec 模型适配成契约格式。
+**单点验证通过**：`experiments/pub_bench_l2_probe.json` 记录
+`decision=deny / harmful=true / confidence=0.99`，证明真实语义判官已接通。
+
+**未完成**：全量 L2 重跑两次都因 API 调用过慢（>30 分钟）未产出完整文件，
+已停止，不伪造全量结果。要拿到完整 `L2_semantic` 数字需允许更长运行时间
+或换更快的判官模型。
 
 ## DEEP-03：为什么是 NOT_RUN 而不是伪造 DONE
 
