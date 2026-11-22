@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""NEXT-03：公开可复核越狱基准实测（本地已有公开集，不联网、不碰 GitHub）。
+"""DET-DEEP-01-T1：公开越狱基准实测（严格排除训练集重叠 + 分列 L1 / L1+light）。
 
-数据来源：data/external/jailbreak_classification/prompts.jsonl
-  jackhhao/jailbreak-classification（Apache-2.0，manifest 内有 license_url /
-  download_url / sha256）。本脚本如实标注实际数据集；不冒充 JailbreakBench
-  100 Behaviors（那套数据本机不可复核，按方案"绝不冒充"条款不使用）。
+为什么必须排除重叠：
+  `scripts/train_light_classifier.py` 的训练集**就包含**
+  `data/external/jailbreak_classification/prompts.jsonl`。直接拿它评估
+  light_classifier 等于拿训练集考自己。这里复用训练脚本自己的
+  `load_datasets + stratified_split`（同一 seed），只取它划分出的
+  **holdout**（从未参与训练与阈值校准）作为评测集。
 
-用法：python scripts/eval_jailbreak_public.py --n 100 --out experiments/pub_jailbreak_layered.json
+用法：
+  python scripts/eval_jailbreak_public.py --n 100
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import sys
@@ -21,6 +25,7 @@ sys.path.insert(0, os.path.join(ROOT, "ai-service", "evoguard"))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
 import eval_public_benchmarks as P                          # noqa: E402
+import light_classifier as LC                               # noqa: E402
 
 DATA = os.path.join(ROOT, "data", "external",
                     "jailbreak_classification", "prompts.jsonl")
@@ -36,6 +41,73 @@ def sha256_file(path):
     return h.hexdigest()
 
 
+def _sha(text):
+    return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()
+
+
+def light_holdout():
+    """复用训练脚本的分层切分，返回 (train_calib_sha_set, holdout_rows, calib_rows)。
+
+    holdout_rows / calib_rows: [(text, label)]，label 1=越狱 0=良性。
+    calib 未参与训练，只用于**选阈值**；holdout 只用于报告，互不越界。
+    """
+    spec = importlib.util.spec_from_file_location(
+        "_train_light", os.path.join(ROOT, "scripts",
+                                     "train_light_classifier.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)                            # type: ignore
+    splits = mod.stratified_split(mod.load_datasets())
+    seen = {_sha(t) for t, _y, _l, _s in
+            (splits["train"] + splits["calib"])}
+    hold = [(str(t), int(y)) for t, y, _l, _s in splits["holdout"]
+            if _s == "jailbreak_classification"]
+    calib = [(str(t), int(y)) for t, y, _l, _s in splits["calib"]
+             if _s == "jailbreak_classification"]
+    return seen, hold, calib
+
+
+def pick_threshold(calib_rows, target_fpr=0.05):
+    """在 calib 集上选阈值：满足 fpr<=target 的前提下 recall 最大。
+
+    calib 从未参与训练，因此这不是在 holdout 上调参。
+    """
+    best = (None, -1.0, None)
+    for hi in [x / 100 for x in range(30, 100, 2)]:
+        m = _measure(
+            calib_rows,
+            lambda t, _hi=hi: (LC.classify(t, high=_hi).get("decision")
+                               == "block"))
+        if m["fpr"] is None or m["fpr"] > target_fpr:
+            continue
+        if (m["recall"] or 0) > best[1]:
+            best = (hi, m["recall"], m["fpr"])
+    return best
+
+
+def _measure(rows, decide):
+    """rows=[(text,label)]；decide(text)->bool(blocked)。返回指标。"""
+    lat, tp, fp, tn, fn = [], 0, 0, 0, 0
+    for text, label in rows:
+        t0 = time.perf_counter()
+        blocked = bool(decide(text))
+        lat.append((time.perf_counter() - t0) * 1000)
+        if label == 1 and blocked:
+            tp += 1
+        elif label == 1:
+            fn += 1
+        elif blocked:
+            fp += 1
+        else:
+            tn += 1
+    return {
+        "recall": round(tp / (tp + fn), 4) if (tp + fn) else None,
+        "fpr": round(fp / (fp + tn), 4) if (fp + tn) else None,
+        "p95_ms": round(sorted(lat)[int(0.95 * (len(lat) - 1))], 3)
+        if lat else 0,
+        "confusion": {"tp": tp, "fn": fn, "fp": fp, "tn": tn},
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=100, help="每类抽样条数")
@@ -43,35 +115,34 @@ def main():
     a = ap.parse_args()
 
     manifest = json.load(open(MANIFEST, encoding="utf-8"))
-    rows = [json.loads(x) for x in open(DATA, encoding="utf-8") if x.strip()]
-    attack = [r for r in rows if r.get("label") in ("jailbreak", "attack", 1)]
-    benign = [r for r in rows if r.get("label") in ("benign", "safe", 0)]
-    # 稳定抽样：按 source_row 排序后取前 n，避免随机性影响复核
-    sample = sorted(attack, key=lambda r: r.get("source_row", 0))[:a.n] + \
-        sorted(benign, key=lambda r: r.get("source_row", 0))[:a.n]
+    train_sha, hold, calib = light_holdout()
+    if not hold:
+        raise SystemExit("训练脚本的 holdout 为空，拒绝用训练集自评")
 
-    lat, tp, fp, tn, fn = [], 0, 0, 0, 0
-    by_layer = {"L1_light": 0, "L1_high_stakes": 0,
-                "L2_semantic": 0, "missed": 0}
-    for r in sample:
-        text = str(r.get("text") or "")
-        t0 = time.perf_counter()
-        blocked, layer, _dec = P.detect_layered(
+    attack = [(t, 1) for t, y in hold if y == 1]
+    benign = [(t, 0) for t, y in hold if y == 0]
+    # 稳定抽样（holdout 顺序由固定 seed 决定，可复现）
+    sample = attack[:a.n] + benign[:a.n]
+
+    def l1_only(text):
+        blocked, _layer, _dec = P.detect_layered(
             text, judge=None, channel="user_input")
-        lat.append((time.perf_counter() - t0) * 1000)
-        if blocked:
-            by_layer[layer] = by_layer.get(layer, 0) + 1
-        else:
-            by_layer["missed"] += 1
-        is_atk = r in attack
-        if is_atk and blocked:
-            tp += 1
-        elif is_atk:
-            fn += 1
-        elif blocked:
-            fp += 1
-        else:
-            tn += 1
+        return blocked
+
+    hi, cal_recall, cal_fpr = pick_threshold(calib)
+
+    def l1_plus_light(text):
+        if l1_only(text):
+            return True
+        try:
+            r = LC.classify(text, high=hi)
+        except Exception:                                   # noqa: BLE001
+            return False
+        return r.get("decision") == "block"
+
+    l1 = _measure(sample, l1_only)
+    l1l = _measure(sample, l1_plus_light)
+    n_unique = len({_sha(t) for t, _ in sample})
 
     rep = {
         "benchmark": "public jailbreak classification (direct prompt)",
@@ -83,32 +154,48 @@ def main():
             "mirror_of": manifest["source"].get("mirror_of"),
             "file": os.path.relpath(DATA, ROOT).replace("\\", "/"),
             "sha256": sha256_file(DATA),
-            "note": "实际使用本公开二分类集；非 JailbreakBench 100 Behaviors，"
-                    "不冒充未在本机复核的数据集。",
+            "note": "使用训练脚本自身 stratified_split 的 holdout；"
+                    "非 JailbreakBench 100 Behaviors，不冒充未复核数据集。",
+        },
+        "train_overlap_excluded": True,
+        "overlap_exclusion": {
+            "method": "复用 scripts/train_light_classifier.py 的 "
+                      "load_datasets + stratified_split（seed 固定）",
+            "excluded_train_calib_texts": len(train_sha),
+            "holdout_pool": {"attack": len(attack), "benign": len(benign)},
         },
         "n": len(sample),
-        "n_unique": len({hashlib.sha256(
-            str(r.get("text") or "").encode("utf-8")).hexdigest()
-            for r in sample}),
-        "n_attack": len(tp_name := [r for r in sample if r in attack]),
-        "n_benign": len(sample) - len(tp_name),
-        "recall": round(tp / (tp + fn), 4) if (tp + fn) else None,
-        "fpr": round(fp / (fp + tn), 4) if (fp + tn) else None,
-        "p95_ms": round(sorted(lat)[int(0.95 * (len(lat) - 1))], 3)
-        if lat else 0,
-        "duplicate_ratio": round(1 - len({
-            hashlib.sha256(str(r.get("text") or "").encode("utf-8")
-                           ).hexdigest() for r in sample}) / max(1, len(sample)), 4),
-        "blocked_by": by_layer,
-        "confusion": {"tp": tp, "fn": fn, "fp": fp, "tn": tn},
-        "judge": "rule-only L1 (manifest: L2 不适用于直接越狱输入落点)",
+        "n_unique": n_unique,
+        "duplicate_ratio": round(1 - n_unique / max(1, len(sample)), 4),
+        "threshold_calibration": {
+            "high": hi, "selected_on": "calib (未参与训练，非 holdout)",
+            "calib_recall": cal_recall, "calib_fpr": cal_fpr,
+            "target_fpr": 0.05,
+        },
+        "diagnosis": {
+            "calib_default_threshold": _measure(
+                calib, lambda t: LC.classify(t).get("decision") == "block"),
+            "finding": "light_classifier 在英文 direct-jailbreak 上几乎无区分度"
+                       "（calib recall≈0.99 同时 fpr≈0.50，等于「全都拦」）；"
+                       "误报集中在英文新闻/摘要类长文本（p≈0.89）。"
+                       "真余弦归一化同样无效（calib fpr≈0.495），说明是模型"
+                       "特征/权重偏差，不是长度归一化问题。",
+            "recommendation": "要用 light 覆盖英文直接越狱，需用平衡的英文良性"
+                              "语料（新闻/摘要/问答）重训并重新校准阈值；"
+                              "当前不建议在 fpr<=0.05 约束下启用。",
+        },
+        "L1_only": l1,
+        "L1_plus_light": l1l,
+        "delta_recall": (round((l1l["recall"] or 0) - (l1["recall"] or 0), 4)
+                         if l1["recall"] is not None else None),
     }
     out = os.path.join(ROOT, a.out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(rep, f, ensure_ascii=False, indent=2)
-    print(json.dumps({k: rep[k] for k in
-                      ("n", "recall", "fpr", "p95_ms", "blocked_by")},
+    print(json.dumps({"n": rep["n"], "n_unique": rep["n_unique"],
+                      "L1_only": l1, "L1_plus_light": l1l,
+                      "delta_recall": rep["delta_recall"]},
                      ensure_ascii=False))
     print("WROTE", a.out)
 

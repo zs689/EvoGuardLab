@@ -536,10 +536,10 @@ def main():
             # 全部规约重跑训练集，逼出下一层断言；只在训练集内迭代。
             for rnd in range(1, 4):
                 cur_hint = None
-                if sk and sk.get("env_invariants"):
+                if sk and SS.active_invariants(sk):
                     cur_hint = "；".join(
                         str(x.get("rule") or "")
-                        for x in sk["env_invariants"])
+                        for x in SS.active_invariants(sk))
                 # 训练集也关闭运行时自愈：否则模型靠反馈自己修对，
                 # 后续轮次就暴露不出下一层规约（多轮累积会空转）。
                 round_rows = [run_case(c, prov, hint=cur_hint,
@@ -583,9 +583,9 @@ def main():
             skills[d] = sk
             # 完整规约集：**所有**累积规约一次注入（单条会漏分层规约）
             h = None
-            if sk and sk.get("env_invariants"):
+            if sk and SS.active_invariants(sk):
                 h = "；".join(str(x.get("rule") or "")
-                             for x in sk["env_invariants"])
+                             for x in SS.active_invariants(sk))
             hints[d] = h
             # 模型用 add_field() 在运行时改结构，字面声明依旧同步——
             # ast_symbol_sync 看不到。必须检查函数体里**两处登记都写了**。

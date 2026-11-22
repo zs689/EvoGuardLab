@@ -110,7 +110,7 @@ def _record(result, decision, reason, checks):
 
 def preflight(cfg, *, agent_type, tool, args, user_goal=None, cid=None,
               contracts=None, policy=None, intent_fn=None,
-              contract_fn=None, taint_state=None):
+              contract_fn=None, taint_state=None, rails=None):
     """调用前的全部判断。返回 dict；`stop` 为真表示**不许执行工具**。
 
     导入与调用都做成可注入的：测试里可以把任意一层替成恒定 deny，
@@ -155,7 +155,9 @@ def preflight(cfg, *, agent_type, tool, args, user_goal=None, cid=None,
     # 配置缺项在加载时炸（tool_rails.load 会抛），不是运行时才拦一半。
     try:
         import tool_rails
-        rules = tool_rails.load_default()
+        # 调用方可显式注入 rails（动态/合成工具不在全局默认清单里，
+        # 不注入就会被判「未声明」）。不传时行为与以前完全一致。
+        rules = rails if rails is not None else tool_rails.load_default()
     except Exception as e:                        # noqa: BLE001
         checks.append({"checker": "tool_rails", "status": "config_error",
                        "error": "%s: %s" % (type(e).__name__, e)})

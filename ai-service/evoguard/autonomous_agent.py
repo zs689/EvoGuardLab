@@ -48,7 +48,8 @@ class ReActAgent:
                  memory_store=None, memory_task_type=None,
                  session_id=None, store=None, tenant_id="default",
                  session_budget=None, plan_first=False, self_reflect=False,
-                 approval_id=None, skill_hooks=None):
+                 approval_id=None, skill_hooks=None, auto_learn=False,
+                 learn_task_type=None, learn_scope="candidate"):
         self.agent_type = agent_type
         self.goal = goal
         self.provider = provider or _gw.get_provider()
@@ -108,6 +109,14 @@ class ReActAgent:
         self.approval_id = approval_id
         # FINAL-02-T2：可执行 Skill 钩子（非提示词注入）
         self.skill_hooks = skill_hooks or {}
+        # EVO-DEEP-02-T1：在线学习开关（默认关，行为完全不变）。
+        # 开启后：开头按 task_type 检索已学规约注入，收尾把
+        # 「失败 -> 后续成功修复」的成对轨迹自动提炼入库。
+        self.auto_learn = bool(auto_learn)
+        self.learn_task_type = learn_task_type or agent_type
+        self.learn_scope = learn_scope
+        self.learn_stats = {"injected": 0, "skill_id": None,
+                            "learned": False, "reason": "off"}
 
     def _preflight(self, tool, args, seq, observation=None):
         """契约 → 意图 → 审批。工具调用的唯一放行点。"""
@@ -127,7 +136,8 @@ class ReActAgent:
             self.cfg, agent_type=self.agent_type, tool=tool, args=args,
             user_goal=self.goal, contracts=contracts,
             taint_state=getattr(self, "taint_state", None),
-            cid=_exec.call_id("react", seq, tool, args))
+            cid=_exec.call_id("react", seq, tool, args),
+            rails=self.rails or None)
         if not out.get("stop"):
             return out
         return out
@@ -153,6 +163,9 @@ class ReActAgent:
             tools, ensure_ascii=False, sort_keys=True)
         if memory_text:
             system += "\n\n" + memory_text
+        learned_text = ""
+        if self.auto_learn and self.store is not None:
+            learned_text = self._load_learned_hint()
         # RED-SES-01-T1：续接会话历史。历史摘要降权为 user+untrusted 包裹，
         # 当前 goal 由 build_messages 保证置于最末尾。
         hist_turns, hist_summary, hist_boundary = [], "", ""
@@ -161,6 +174,11 @@ class ReActAgent:
                 self.store, self.session_id)
             hist_turns, hist_summary, hist_boundary = compress_turns(
                 hist_turns, hist_summary, budget=self.session_budget)
+        if learned_text:
+            # 已学规约作为**不可信历史经验**注入（不是系统事实），
+            # 与记忆摘要同一层级，避免把旧结论洗成铁律。
+            system += ("\n\n<learned_skill>\n" + learned_text
+                       + "\n</learned_skill>")
         messages = build_messages(
             system=system, goal=self.goal, hist_turns=hist_turns,
             hist_summary=hist_summary, untrusted_boundary=hist_boundary)
@@ -479,7 +497,125 @@ class ReActAgent:
                 out["session_saved"] = False
                 out["session_error"] = str(exc)[:200]
             out["session_summary"] = new_summary[:200]
+        if self.auto_learn and self.store is not None:
+            try:
+                self.learn_stats = self._auto_learn(steps)
+            except Exception as exc:                     # noqa: BLE001
+                # 学习失败绝不能影响本轮结果，但必须如实记录原因
+                self.learn_stats = {"learned": False,
+                                    "reason": "learn_error:%s"
+                                              % type(exc).__name__}
+            out["learn"] = dict(self.learn_stats)
         return out
+
+    # ---------------- EVO-DEEP-02：在线学习 ----------------
+    def _load_learned_hint(self):
+        """按 task_type 检索已学候选技能，返回可注入的规约文本（无则空）。
+
+        只注入 **active（未被 supersede）** 的规约，且作为不可信经验包裹。
+        """
+        try:
+            import skills as _sk
+            import skill_synthesis as _ss
+        except Exception:                                # noqa: BLE001
+            return ""
+        try:
+            rows = _sk.list_skills(self.store, status="candidate") or []
+        except Exception:                                # noqa: BLE001
+            return ""
+        rules = []
+        for row in rows:
+            if str(row.get("task_type") or "") not in ("", self.learn_task_type):
+                continue
+            snap = _ss.latest_snapshot(self.store, row["id"]) or {}
+            for inv in _ss.active_invariants(snap):
+                r = str(inv.get("rule") or "").strip()
+                if r and r not in rules:
+                    rules.append(r)
+            if rules:
+                self.learn_stats["skill_id"] = row["id"]
+                break
+        self.learn_stats["injected"] = len(rules)
+        return "\n".join("- " + r for r in rules)
+
+    def _auto_learn(self, steps):
+        """把「失败 -> 后续成功修复」的成对轨迹自动提炼成候选规约。"""
+        import skill_synthesis as _ss
+        import skills as _sk
+        def _failed_step(st):
+            """「失败」有三种形态，不能只看 executed：
+
+            1) 门禁拒绝（executed=False）；
+            2) executor 返回 ok=False（工具自己报错）；
+            3) 返回 non-zero returncode（测试/命令失败）。
+            """
+            if not st.get("executed") or st.get("decision") == "deny":
+                return True
+            out = st.get("output")
+            if isinstance(out, dict):
+                if out.get("ok") is False or out.get("error"):
+                    return True
+                rc = out.get("returncode")
+                if rc not in (None, 0):
+                    return True
+            return False
+
+        fails, oks = [], []
+        # 并行批次里每条调用的成败在 step["parallel"] 内部，step 层的
+        # executed 只是 any() 汇总 —— 必须展开到子记录才判得准。
+        order = 0
+        for st in steps:
+            kind = st.get("kind")
+            recs = []
+            if kind == "tool":
+                recs = [st]
+            elif kind == "parallel_batch":
+                recs = [{"seq": st.get("seq"), "tool": r.get("tool"),
+                         "executed": r.get("executed"),
+                         "decision": r.get("decision"),
+                         "output": r.get("output")}
+                        for r in (st.get("parallel") or [])]
+            for rec in recs:
+                order += 1
+                item = dict(rec, seq=order)
+                (fails if _failed_step(item) else oks).append(item)
+        # 必须有「先失败、后成功」的先后关系，否则不是成对轨迹
+        if not fails or not oks:
+            return {"learned": False, "reason": "no_fail_then_fix_pair",
+                    "injected": self.learn_stats.get("injected", 0)}
+        first_fail = min((f.get("seq") or 0) for f in fails)
+        last_ok = max((o.get("seq") or 0) for o in oks)
+        if last_ok <= first_fail:
+            return {"learned": False, "reason": "fix_precedes_failure",
+                    "injected": self.learn_stats.get("injected", 0)}
+        fail_steps = [{
+            "seq": f.get("seq") or 0, "logical": f.get("seq") or 0,
+            "name": str(f.get("tool") or "tool"),
+            "status": "error", "error_type": "ToolError",
+            "output": {"stderr": json.dumps(f.get("output") or {},
+                                            ensure_ascii=False)[:800]},
+        } for f in fails]
+        existing = self.learn_stats.get("skill_id")
+        if existing:
+            res = _ss.refine_skill(self.store, existing, fail_steps,
+                                   require_info_gain=True)
+        else:
+            res = _ss.synthesize(self.store, fail_steps,
+                                 task_type=self.learn_task_type,
+                                 require_info_gain=True)
+            if res.get("accepted", {}).get("accepted") and res.get("skill"):
+                _sk.save(self.store, res["skill"])
+        accepted = bool(res.get("accepted", {}).get("accepted"))
+        sk = res.get("skill") or {}
+        if accepted and sk.get("id"):
+            self.learn_stats["skill_id"] = sk["id"]
+        return {"learned": accepted,
+                "reason": ("ok" if accepted
+                           else ";".join(res.get("accepted", {})
+                                         .get("errors") or [])[:160]),
+                "skill_id": self.learn_stats.get("skill_id"),
+                "added": len(res.get("added") or []),
+                "injected": self.learn_stats.get("injected", 0)}
 
     def run_plan(self, plan):
         """AGENT-PRO-01-T1：用显式计划跑任务（带检查点/审批断点）。

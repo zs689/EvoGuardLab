@@ -163,6 +163,22 @@ def _norm_scalar(v):
     return ("str", str(v))
 
 
+def register_schema(tool, schema):
+    """为动态工具登记参数模型（EVO-DEEP-01-T2 合成工具专用）。
+
+    结构契约在 validate_args 里查 TOOL_SCHEMAS；不登记就一律拒绝执行
+    （"没有登记参数模型，无法判断参数是否合法"）。合成的纯函数工具必须
+    显式登记字段与必填项，**不放宽**校验。
+    """
+    schema = schema or {}
+    props = schema.get("properties") or {}
+    TOOL_SCHEMAS[str(tool)] = {
+        "required": [str(x) for x in (schema.get("required") or [])],
+        "fields": [str(k) for k in props.keys()],
+    }
+    return TOOL_SCHEMAS[str(tool)]
+
+
 def validate_args(tool, args, *, strict=True):
     """严格参数校验。返回 [{field, rule, value, ok, detail}]。
 

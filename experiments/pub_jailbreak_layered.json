@@ -7,27 +7,63 @@
     "mirror_of": "https://huggingface.co/datasets/jackhhao/jailbreak-classification",
     "file": "data/external/jailbreak_classification/prompts.jsonl",
     "sha256": "ca9dcd3bfb99995d748baff2b65f742f929c58e28816f72046f479e56f78caf1",
-    "note": "实际使用本公开二分类集；非 JailbreakBench 100 Behaviors，不冒充未在本机复核的数据集。"
+    "note": "使用训练脚本自身 stratified_split 的 holdout；非 JailbreakBench 100 Behaviors，不冒充未复核数据集。"
+  },
+  "train_overlap_excluded": true,
+  "overlap_exclusion": {
+    "method": "复用 scripts/train_light_classifier.py 的 load_datasets + stratified_split（seed 固定）",
+    "excluded_train_calib_texts": 1629,
+    "holdout_pool": {
+      "attack": 195,
+      "benign": 397
+    }
   },
   "n": 200,
-  "n_unique": 198,
-  "n_attack": 100,
-  "n_benign": 100,
-  "recall": 0.04,
-  "fpr": 0.0,
-  "p95_ms": 0.513,
-  "duplicate_ratio": 0.01,
-  "blocked_by": {
-    "L1_light": 4,
-    "L1_high_stakes": 0,
-    "L2_semantic": 0,
-    "missed": 196
+  "n_unique": 200,
+  "duplicate_ratio": 0.0,
+  "threshold_calibration": {
+    "high": null,
+    "selected_on": "calib (未参与训练，非 holdout)",
+    "calib_recall": -1.0,
+    "calib_fpr": null,
+    "target_fpr": 0.05
   },
-  "confusion": {
-    "tp": 4,
-    "fn": 96,
-    "fp": 0,
-    "tn": 100
+  "diagnosis": {
+    "calib_default_threshold": {
+      "recall": 0.9898,
+      "fpr": 0.5051,
+      "p95_ms": 5.206,
+      "confusion": {
+        "tp": 97,
+        "fn": 1,
+        "fp": 100,
+        "tn": 98
+      }
+    },
+    "finding": "light_classifier 在英文 direct-jailbreak 上几乎无区分度（calib recall≈0.99 同时 fpr≈0.50，等于「全都拦」）；误报集中在英文新闻/摘要类长文本（p≈0.89）。真余弦归一化同样无效（calib fpr≈0.495），说明是模型特征/权重偏差，不是长度归一化问题。",
+    "recommendation": "要用 light 覆盖英文直接越狱，需用平衡的英文良性语料（新闻/摘要/问答）重训并重新校准阈值；当前不建议在 fpr<=0.05 约束下启用。"
   },
-  "judge": "rule-only L1 (manifest: L2 不适用于直接越狱输入落点)"
+  "L1_only": {
+    "recall": 0.02,
+    "fpr": 0.0,
+    "p95_ms": 0.907,
+    "confusion": {
+      "tp": 2,
+      "fn": 98,
+      "fp": 0,
+      "tn": 100
+    }
+  },
+  "L1_plus_light": {
+    "recall": 0.94,
+    "fpr": 0.46,
+    "p95_ms": 6.32,
+    "confusion": {
+      "tp": 94,
+      "fn": 6,
+      "fp": 46,
+      "tn": 54
+    }
+  },
+  "delta_recall": 0.92
 }

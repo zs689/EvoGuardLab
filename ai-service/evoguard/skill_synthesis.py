@@ -172,6 +172,40 @@ def _sanitize_evidence(text):
     return t
 
 
+#: EVO-DEEP-01-T1：规约「槽位」。同一槽位的新规约表示环境语义发生了变更
+#: （例如分页从 1-based 改成 0-based），旧规约必须退役而不是并列共存。
+_SLOT_HINTS = {
+    "pagination": (
+        ("cursor", "pagination.cursor_format"),
+        ("limit", "pagination.limit_cap"),
+        ("尾页", "pagination.tail_sentinel"),
+        ("1 开始", "pagination.start_index"),
+        ("从 1", "pagination.start_index"),
+        ("从 0", "pagination.start_index"),
+    ),
+    "unit": (("分", "unit.scale"), ("元", "unit.scale")),
+    "timezone": (("utc", "timezone.suffix"), ("z 结尾", "timezone.suffix"),
+                 ("时区", "timezone.offset")),
+    "coupling": (("required", "coupling.required_sync"),
+                 ("同步", "coupling.required_sync")),
+}
+
+
+def _slot_key(domain, rule):
+    """把一条规约映射到稳定槽位；同槽位视为「同一件事的不同版本」。"""
+    r = str(rule or "").lower()
+    for kw, key in _SLOT_HINTS.get(str(domain), ()):
+        if kw.lower() in r:
+            return key
+    return "%s.general" % domain
+
+
+def active_invariants(skill):
+    """当前生效的规约（排除已被新版本取代的旧规约）。"""
+    return [x for x in ((skill or {}).get("env_invariants") or [])
+            if isinstance(x, dict) and not x.get("superseded_by")]
+
+
 def extract_env_invariants(fail_steps, repair_steps=None, env_spec=None):
     """从**真实失败轨迹**提取私有环境约定（env_invariant）。
 
@@ -201,7 +235,8 @@ def extract_env_invariants(fail_steps, repair_steps=None, env_spec=None):
         for x in invs:
             if x["domain"] == domain and x["rule"] == rule:
                 return
-        invs.append({"domain": domain, "rule": rule[:160], "evidence": ev})
+        invs.append({"domain": domain, "rule": rule[:160], "evidence": ev,
+                     "slot_key": _slot_key(domain, rule)})
 
     # 1) 显式规约：要求轨迹里真有命中（evidence 非空）
     for spec in (env_spec or []):
@@ -247,7 +282,13 @@ def extract_env_invariants(fail_steps, repair_steps=None, env_spec=None):
         if re.search(r"invalid cursor", blob, re.I):
             parts.append("非法 cursor 必须抛 ValueError")
         if not parts:
-            parts.append("分页从 1 开始且每页有上限，越界要显式拒绝")
+            # 兜底也必须反映**证据里的实际起始索引**，不能写死 1：
+            # 否则「1-based -> 0-based」这种环境反转会提取出同一条规则，
+            # 冲突检测永远触发不了。
+            mm2 = re.search(r"start(?:s)? at (\d+)|from (\d+)", blob, re.I)
+            base = (mm2.group(1) or mm2.group(2)) if mm2 else None
+            parts.append("分页从 %s 开始且每页有上限，越界要显式拒绝"
+                         % (base if base is not None else "1"))
         _add("pagination", "；".join(parts), ev)
 
     # 4) 时区/日期格式约定
@@ -704,6 +745,20 @@ def refine_skill(store, skill_id, new_traces, *, require_info_gain=True,
     out["version"] = int(base.get("version") or 1) + 1
     out["id"] = skill_id
     out["created_at"] = core.now()
+    # EVO-DEEP-01-T1：同槽位的新规约使旧规约退役（环境语义已变更）。
+    # 旧条目不删除、只打 superseded_by，因此版本快照仍可完整回滚。
+    superseded = []
+    for inv in added:
+        slot = inv.get("slot_key")
+        if not slot:
+            continue
+        for old in out["env_invariants"]:
+            if old is inv or old.get("superseded_by"):
+                continue
+            if old.get("slot_key") == slot and old.get("rule") != inv["rule"]:
+                old["superseded_by"] = out["version"]
+                superseded.append({"slot": slot, "old_rule": old.get("rule"),
+                                   "new_rule": inv["rule"]})
     # 写成新的不可变快照（不覆盖旧版本）
     with store.conn() as c:
         c.execute(
@@ -712,7 +767,7 @@ def refine_skill(store, skill_id, new_traces, *, require_info_gain=True,
             ("skv_" + uuid.uuid4().hex[:8], skill_id, out["version"],
              core.dumps(dict(out)), out["created_at"]))
     return {"accepted": {"accepted": True, "errors": []},
-            "skill": out, "added": added,
+            "skill": out, "added": added, "superseded": superseded,
             "version": out["version"], "base_version": base.get("version")}
 
 
