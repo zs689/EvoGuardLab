@@ -14,6 +14,7 @@
 零第三方依赖。
 """
 import ast
+import concurrent.futures as _cf
 import importlib
 
 #: 允许 import 的模块（其余一律拒绝）
@@ -50,8 +51,11 @@ BANNED_ATTRS = frozenset({
 })
 
 #: 禁止的语句类型
+#: 禁止的语句类型。`While` 一并禁掉：进程内的纯 Python 死循环**无法可靠
+#: 中断**（线程持 GIL + 占满 CPU，executor 的 finally 也会被拖住，实测卡到
+#: 被外部 SIGTERM）。合成的纯函数微工具不需要 while，for 足够表达。
 BANNED_NODES = (ast.ClassDef, ast.AsyncFunctionDef, ast.AsyncFor,
-                ast.AsyncWith, ast.Global, ast.Nonlocal, ast.With)
+                ast.AsyncWith, ast.While, ast.Global, ast.Nonlocal, ast.With)
 
 
 class ToolSynthesisError(ValueError):
@@ -132,6 +136,25 @@ def run_tests(source, func_name, tests, timeout_s=5):
     fn = ns.get(func_name)
     if not callable(fn):
         raise ToolSynthesisError("函数 %s 未定义或不可调用" % func_name)
+    # 超时保护（第二道）：`while` 已在 AST 层拒绝，但 `for i in range(10**9)`
+    # 这类仍可能极慢。注意线程无法强杀，超时只是「不再等」——真正的强隔离
+    # 需要子进程，这里只保证不把整个流程卡住。
+    # 不能用 `with`：ThreadPoolExecutor.__exit__ 会 join 工作线程，
+    # 而死循环线程永不结束 —— 退出时就把自己挂死了（实测卡到 SIGTERM）。
+    ex = _cf.ThreadPoolExecutor(max_workers=1)
+    try:
+        ex.submit(_run_case_loop, fn, tests, builtins,
+                  func_name).result(timeout=timeout_s)
+    except _cf.TimeoutError:
+        raise ToolSynthesisError(
+            "沙箱测试超时（>%ss），拒绝注册：疑似死循环/阻塞" % timeout_s)
+    finally:
+        # wait=False：放弃等待，让泄漏线程自行消亡；注册表不收录该工具。
+        ex.shutdown(wait=False, cancel_futures=True)
+    return True
+
+
+def _run_case_loop(fn, tests, builtins, func_name):
     for i, t in enumerate(tests, 1):
         expr = str(t.get("call") or "").strip()
         if not expr:

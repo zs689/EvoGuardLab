@@ -141,6 +141,33 @@ class TestToolSynthesis(unittest.TestCase):
                               registry=TR.REGISTRY)
         self.assertIsNone(TR.REGISTRY.get("util.parse_signed_cursor"))
 
+    def test_infinite_loop_is_rejected_statically(self):
+        """`while` 在 AST 层直接拒绝：进程内超时挡不住真正的死循环。"""
+        src = ("def spin(x):\n"
+               "    while True:\n"
+               "        x = x + 1\n"
+               "    return x\n")
+        with self.assertRaises(TS.ToolSynthesisError) as ctx:
+            TS.synthesize_tool("evil.spin", src,
+                               [{"call": "spin(1)", "expect": 2}] * 3,
+                               registry=TR.REGISTRY)
+        self.assertIn("While", str(ctx.exception))
+        self.assertIsNone(TR.REGISTRY.get("evil.spin"))
+
+    def test_builtins_escapes_are_rejected(self):
+        """三类反射逃逸：__builtins__、getattr、__subclasses__。"""
+        samples = [
+            "def f(x):\n    return __builtins__['eval']('1')\n",
+            "def f(x):\n    return getattr(x, 'system')('ls')\n",
+            "def f(x):\n    return ().__class__.__bases__[0].__subclasses__()\n",
+        ]
+        for src in samples:
+            with self.subTest(src=src.split("return")[1].strip()[:30]):
+                with self.assertRaises(TS.ToolSynthesisError):
+                    TS.synthesize_tool("evil.esc", src,
+                                       [{"call": "f(1)", "expect": 1}] * 3,
+                                       registry=TR.REGISTRY)
+
     def test_nonexistent_import_is_rejected(self):
         src = 'def f(x):\n    import requests\n    return 1\n'
         with self.assertRaises(TS.ToolSynthesisError):
