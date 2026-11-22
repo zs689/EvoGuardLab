@@ -292,6 +292,10 @@ def main():
     ap.add_argument("--train-frac", type=float, default=0.55)
     ap.add_argument("--calib-frac", type=float, default=0.15)
     ap.add_argument("--seed", type=int, default=20261118)
+    ap.add_argument("--reuse-lang", default="",
+                    help="复用既有权重里的某些语言，形如 zh=<path>。"
+                         "用于「英文重训、中文保留」这类分语言决策，"
+                         "避免为了修一侧把另一侧指标打回去。")
     ap.add_argument("--aug", type=int, default=2,
                     help="训练集增强倍数（0=关闭，仅作用训练侧）")
     a = ap.parse_args()
@@ -302,8 +306,27 @@ def main():
     t0 = time.time()
     # **分语言训练两个模型**：混训时英文 1199 条会把中文 285 条淹没
     # （实测中文留出 FPR 0.065 下不来），分语言后中文 0.90/0.02。
-    models = {lang: _train_lang(parts, lang, aug_times=a.aug)
-              for lang in ("zh", "en")}
+    models_all = {lang: _train_lang(parts, lang, aug_times=a.aug)
+                  for lang in ("zh", "en")}
+    # 分语言复用：某些语言的既有模型更优时（例如中文 fpr 0 vs 0.20），
+    # 不该为了修英文把它一起重训掉。--reuse-lang zh=<path> 显式指定。
+    models = dict(models_all)
+    reused = {}
+    for item in (a.reuse_lang or "").split(","):
+        if "=" not in item:
+            continue
+        lang, path = item.split("=", 1)
+        lang, path = lang.strip(), path.strip()
+        if not lang or not os.path.isfile(path):
+            continue
+        src = json.load(open(path, encoding="utf-8"))
+        if lang in (src.get("models") or {}):
+            mm = dict(src["models"][lang])
+            # 权重文件里的 idf 是 list（省体积），内存里统一成 dict
+            if isinstance(mm.get("idf"), list):
+                mm["idf"] = dict(zip(mm["vocab"], mm["idf"]))
+            models[lang] = mm
+            reused[lang] = os.path.basename(path)
 
     def ev(lang, split):
         m = models[lang]
@@ -339,6 +362,7 @@ def main():
            # 会拿训练集当留出集（实测把 fpr 从 0.045 虚报成 0.46）。
            "split": {"train_frac": a.train_frac, "calib_frac": a.calib_frac,
                      "seed": a.seed},
+           "reused_langs": reused,
            "models": {lang: {"vocab": m["vocab"],
                              "idf": [round(x, 6) for x in
                                      (m["idf"][g] for g in m["vocab"])],

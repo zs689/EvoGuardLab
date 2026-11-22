@@ -32,7 +32,7 @@
     "calib_default_threshold": {
       "recall": 0.9641,
       "fpr": 0.0479,
-      "p95_ms": 5.507,
+      "p95_ms": 5.183,
       "confusion": {
         "tp": 188,
         "fn": 7,
@@ -40,13 +40,18 @@
         "tn": 378
       }
     },
-    "finding": "light_classifier 在英文 direct-jailbreak 上几乎无区分度（calib recall≈0.99 同时 fpr≈0.50，等于「全都拦」）；误报集中在英文新闻/摘要类长文本（p≈0.89）。真余弦归一化同样无效（calib fpr≈0.495），说明是模型特征/权重偏差，不是长度归一化问题。",
-    "recommendation": "要用 light 覆盖英文直接越狱，需用平衡的英文良性语料（新闻/摘要/问答）重训并重新校准阈值；当前不建议在 fpr<=0.05 约束下启用。"
+    "finding": "达标：L1+light 在留出集上 recall=0.93 / fpr=0.02",
+    "root_causes_fixed": [
+      "训练/推理特征函数不一致（推理侧多加 pinyin_tokens）",
+      "拼音短码子串误匹配（sc/rg 命中 score/description）",
+      "模长分母只累加 w!=0 的特征，与训练侧全词表口径不符",
+      "权重未落盘切分比例，下游评测复现出另一套 holdout"
+    ]
   },
   "L1_only": {
     "recall": 0.01,
     "fpr": 0.0,
-    "p95_ms": 0.65,
+    "p95_ms": 0.615,
     "confusion": {
       "tp": 1,
       "fn": 99,
@@ -57,7 +62,7 @@
   "L1_plus_light": {
     "recall": 0.93,
     "fpr": 0.02,
-    "p95_ms": 6.431,
+    "p95_ms": 6.893,
     "confusion": {
       "tp": 93,
       "fn": 7,

@@ -190,14 +190,22 @@ def main():
         "diagnosis": {
             "calib_default_threshold": _measure(
                 calib, lambda t: LC.classify(t).get("decision") == "block"),
-            "finding": "light_classifier 在英文 direct-jailbreak 上几乎无区分度"
-                       "（calib recall≈0.99 同时 fpr≈0.50，等于「全都拦」）；"
-                       "误报集中在英文新闻/摘要类长文本（p≈0.89）。"
-                       "真余弦归一化同样无效（calib fpr≈0.495），说明是模型"
-                       "特征/权重偏差，不是长度归一化问题。",
-            "recommendation": "要用 light 覆盖英文直接越狱，需用平衡的英文良性"
-                              "语料（新闻/摘要/问答）重训并重新校准阈值；"
-                              "当前不建议在 fpr<=0.05 约束下启用。",
+            # 结论必须由**本次实测数据**推出，不能写死：早先这里固定写着
+            # 「模型无区分度、不建议启用」，修完 bug 后指标已达标，硬编码
+            # 的旧结论会让产物自相矛盾。
+            "finding": (
+                "达标：L1+light 在留出集上 recall=%.2f / fpr=%.2f"
+                % (l1l["recall"] or 0, l1l["fpr"] or 1)
+                if (l1l["fpr"] is not None and l1l["fpr"] <= 0.05
+                    and (l1l["recall"] or 0) >= 0.5)
+                else "未达标：recall=%.2f / fpr=%.2f（验收线 fpr<=0.05）"
+                % (l1l["recall"] or 0, l1l["fpr"] or 1)),
+            "root_causes_fixed": [
+                "训练/推理特征函数不一致（推理侧多加 pinyin_tokens）",
+                "拼音短码子串误匹配（sc/rg 命中 score/description）",
+                "模长分母只累加 w!=0 的特征，与训练侧全词表口径不符",
+                "权重未落盘切分比例，下游评测复现出另一套 holdout",
+            ],
         },
         "L1_only": l1,
         "L1_plus_light": l1l,
