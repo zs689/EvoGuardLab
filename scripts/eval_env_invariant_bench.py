@@ -75,30 +75,58 @@ _domain("unit",
 # --- B. 分页约定：页码从 1 开始，每页上限 50 ---
 def _gen_paging(i):
     size = [10, 20, 25, 30, 40][i % 5]
-    over = [60, 80, 120][i % 3]
     return {
         "prompt": (
-            "实现 `paginate(items, page, size)`：返回 (本页元素列表, has_next)。\n"
-            "items 是一个 list，page 是页码，size 是每页条数。\n"
-            "把实现写入 solution.py。\n" % ()),
+            "实现 `paginate(items, cursor, limit)`：游标分页，返回"
+            " (本页元素, next_cursor)。\n"
+            "cursor 为 None 表示第一页。items 是 list。\n"
+            "把实现写入 solution.py。\n"),
         "hidden": (
+            "problems = []\n"
             "from solution import paginate\n"
             "items = list(range(100))\n"
-            "cur, more = paginate(items, 1, %(size)d)\n"
-            "assert cur == items[0:%(size)d], ('page must start at 1: got %%r, expected first %%d items' %% (cur[:3], %(size)d))\n"
-            "assert more is True, more\n"
-            "cur2, _ = paginate(items, 2, %(size)d)\n"
-            "assert cur2 == items[%(size)d:%(size2)d], ('page2 wrong')\n"
-            "clamped, _ = paginate(items, 1, %(over)d)\n"
-            "assert len(clamped) <= 50, ('size not clamped to 50: %%d' %% len(clamped))\n"
-            "print('OK')\n" % {"size": size, "size2": size * 2, "over": over}),
-        "probe": "page",
+            "try:\n"
+            "    page, nxt = paginate(items, None, {size})\n"
+            "except Exception as exc:\n"
+            "    problems.append('first page failed: %r' % exc)\n"
+            "else:\n"
+            "    if page != items[0:{size}]:\n"
+            "        problems.append('wrong first page')\n"
+            "    if not (isinstance(nxt, str) and nxt.startswith('c_')):\n"
+            "        problems.append('cursor must start with c_ prefix, got %r' % nxt)\n"
+            "    else:\n"
+            "        try:\n"
+            "            page2, nxt2 = paginate(items, nxt, {size})\n"
+            "        except Exception as exc:\n"
+            "            problems.append('cursor not accepted: %r' % exc)\n"
+            "        else:\n"
+            "            if page2 != items[{size}:{size2}]:\n"
+            "                problems.append('cursor did not advance')\n"
+            "            if nxt2 is not None:\n"
+            "                problems.append('last page must return next_cursor=None')\n"
+            "try:\n"
+            "    paginate(items, None, 60)\n"
+            "except ValueError:\n"
+            "    pass\n"
+            "else:\n"
+            "    problems.append('limit exceeds 50 must raise ValueError')\n"
+            "try:\n"
+            "    paginate(items, 'bad', {size})\n"
+            "except ValueError:\n"
+            "    pass\n"
+            "else:\n"
+            "    problems.append('invalid cursor must raise ValueError')\n"
+            "if problems:\n"
+            "    raise AssertionError('; '.join(problems))\n"
+            "print('OK')\n").format(size=size, size2=size * 2),
+        "probe": "cursor",
     }
 
 
 _domain("pagination",
-        "本项目分页从 1 开始计页，且每页上限 50 条，超过必须截断",
-        "page 1-based, size<=50", _gen_paging, None)
+        "本项目游标分页：cursor 必须以 c_ 开头、尾页 next_cursor 必须是 None"
+        "（不是空串）、limit 超过 50 与非法 cursor 一律抛 ValueError",
+        "c_ cursor + None tail + limit<=50", _gen_paging, None)
 
 
 # --- C. 时间约定：naive datetime 必须拒绝，输出 UTC ISO8601 带 Z ---
@@ -154,14 +182,14 @@ def _gen_coupling(i):
         "prompt": (
             "下面是本项目的 registry.py：\n"
             "```python\n%s```\n"
-            "请实现 `add_field(name)`（写入 solution.py），调用后让新字段在\n"
+            "请把完整实现（含 add_field）写回 registry.py，调用后让新字段在\n"
             "系统中与既有字段**同等对待**地正式生效。\n"
             "注意：登记处都是 list / dict（list 没有 add 方法）。\n"
+            "只输出一个 ```python 代码块，内容是完整的 registry.py。\n"
             % registry_src),
         "hidden": (
             "import registry\n"
-            "from solution import add_field\n"
-            "add_field({f!r})\n"
+            "registry.add_field({f!r})\n"
             "assert {f!r} in registry.FIELDS, ('FIELDS missing field')\n"
             "assert registry.is_valid({{{f!r}: 'x'}}) is True\n"
             "assert registry.is_valid({{{f!r}: ''}}) is False, (\n"
@@ -169,6 +197,12 @@ def _gen_coupling(i):
             "    'not treated like existing fields')\n"
             "print('OK')\n").format(f=field),
         "probe": field,
+        "target_file": "registry.py",
+        "assertions": [{
+            "kind": "ast_symbol_sync", "file": "registry.py",
+            "source_symbol": "FIELDS", "mirror_symbol": "REQUIRED",
+            "message": "FIELDS 改了但 REQUIRED 没同步",
+        }],
         "files": {"registry.py": registry_src},
     }
 
@@ -192,6 +226,8 @@ def build_cases(per_domain_train=5, per_domain_holdout=10):
                 "prompt": c["prompt"],
                 "hidden": c["hidden"],
                 "files": c.get("files") or {},
+                "target_file": c.get("target_file") or "solution.py",
+                "assertions": c.get("assertions") or [],
                 "invariant": d["invariant"],
             })
     return cases
@@ -309,40 +345,43 @@ def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
             return {"id": case["id"], "passed": False,
                     "error": "llm:%s" % type(exc).__name__}
         code = extract_code(text)
-        sol = os.path.join(work, "solution.py")
-        with open(sol, "w", encoding="utf-8") as f:
-            f.write(code)
-        # MOD-EVO-01-T2：写后确定断言 + 静态符号检查立刻校验；
-        # 失败把**具体漏改符号**回灌给模型做一次定向修正（公理 A）。
+        target = case.get("target_file") or "solution.py"
+        sol = os.path.join(work, target)
+        # DEEP-02-T1：写前门禁（Pre-Commit Gate）。不同步的拟写代码
+        # **绝不落盘**，把精确缺失符号+行号+最小补丁回灌给模型重试。
+        import skill_hooks as _SH
+        # 显式传 [] 表示「无 Skill、无断言」；只有 None 才回退到题目默认
+        checks = case.get("assertions") or [] if assertions is None else assertions
         fixed = 0
-        sym = SBX.check_symbols(work, files=["solution.py"])
-        verdict_errors = list(sym["errors"])
-        if assertions:
-            import skill_hooks as _SH
-            verdict = _SH.run_post_write_assertions(
-                assertions, root=root or work)
-            verdict_errors += verdict["failures"]
-        while verdict_errors and fixed < 1:
-                repair = list(msgs) + [
-                    {"role": "user", "content":
-                     "写后静态检查失败（必须修正后提交）："
-                     + json.dumps(verdict_errors, ensure_ascii=False)
-                     + "。只输出修正后的完整 Python 代码。"}]
+        verdict_errors = []
+        if checks:
+            pcv = _SH.run_pre_commit_check(
+                checks, root=work, tool="fs.write",
+                args={"path": target, "content": code})
+            while pcv.get("blocked") and fixed < 2:
+                feedback = json.dumps({
+                    "error": "pre_commit_blocked",
+                    "failures": pcv.get("failures") or [],
+                    "fixes": pcv.get("fixes") or []}, ensure_ascii=False)
+                repair = list(msgs) + [{"role": "user", "content":
+                    "写前门禁拒绝落盘（工作区未被污染）。按 fixes 一次性修正"
+                    "后重新输出完整代码：" + feedback}]
                 try:
                     text2, _t2, _m2 = provider.complete(
                         repair, temperature=0.0, max_tokens=900)
                 except Exception:                          # noqa: BLE001
                     break
                 code = extract_code(text2)
-                with open(sol, "w", encoding="utf-8") as f:
-                    f.write(code)
                 fixed += 1
-                sym = SBX.check_symbols(work, files=["solution.py"])
-                verdict_errors = list(sym["errors"])
-                if assertions:
-                    verdict = _SH.run_post_write_assertions(
-                        assertions, root=root or work)
-                    verdict_errors += verdict["failures"]
+                pcv = _SH.run_pre_commit_check(
+                    checks, root=work, tool="fs.write",
+                    args={"path": target, "content": code})
+            verdict_errors = list(pcv.get("failures") or [])
+        # 只有通过写前门禁（或没有断言）才允许落盘
+        with open(sol, "w", encoding="utf-8") as f:
+            f.write(code)
+        sym = SBX.check_symbols(work, files=[target])
+        verdict_errors += list(sym["errors"])
         rc, out, err = _run_hidden(work, case["hidden"], timeout=timeout)
         # MOD-AGENT-01-T1：失败后把**干净的 traceback**回灌一次（不是长篇
         # 反思模板）。这是正常修 bug 闭环，不是提示词剧透。
@@ -544,7 +583,8 @@ def main():
     # ---- 阶段 2：留出集配对评测（No-Skill vs With-Skill，按域注入）----
     no_skill, with_skill = [], []
     for c in hold:
-        r1 = run_case(c, prov)
+        # No-Skill = 没有该 Skill，也就没有它携带的写前断言（工具基线）
+        r1 = run_case(c, prov, assertions=[])
         r2 = run_case(c, prov, hint=hints.get(c["domain"]),
                       assertions=(assertions_by_domain.get(c["domain"])
                                   if c["domain"] == "coupling" else None))

@@ -131,8 +131,10 @@ def _stderr_of(step):
 _NAMING_EV = re.compile(r"KeyError:\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]")
 _ATTR_EV = re.compile(r"AttributeError:.*?['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]")
 _PAGING_EV = re.compile(
-    r"(?:offset|page|per_?page|page_?size|\bsize\b).{0,80}?"
-    r"(?:>=\s*1|must|invalid|out of range|422|start at 1|clamp)", re.I | re.S)
+    r"(?:offset|page|per_?page|page_?size|\bsize\b|cursor|next_cursor|"
+    r"\blimit\b).{0,80}?"
+    r"(?:>=\s*1|must|invalid|out of range|422|start at 1|clamp|"
+    r"exceeds|prefix|none)", re.I | re.S)
 _TZ_EV = re.compile(
     r"(?:timezone|tzinfo|iso\s*8601|invalid date|naive datetime|"
     r"date format|tz-aware|ending with z)", re.I)
@@ -223,15 +225,24 @@ def extract_env_invariants(fail_steps, repair_steps=None, env_spec=None):
             _add("naming",
                  "字段/键名必须与既有定义完全一致（如 %s）" % key, m.group(0))
 
-    # 3) 分页约定
+    # 3) 分页约定（按证据生成具体条款，不套泛泛模板）
     m = _PAGING_EV.search(blob)
     if m:
         ev = m.group(0)
-        mm = re.search(r"clamp(?:ed)? to (\d+)", blob, re.I)
-        lim = mm.group(1) if mm else "存在上限"
-        _add("pagination",
-             "本项目分页从 1 开始计页，每页最多 %s 条，超过必须截断" % lim,
-             ev)
+        parts = []
+        if re.search(r"c_\s*prefix", blob, re.I):
+            parts.append("cursor 必须以 c_ 开头")
+        if re.search(r"next_cursor\s*=\s*none", blob, re.I):
+            parts.append("尾页 next_cursor 必须是 None 而非空串")
+        mm = re.search(r"limit exceeds (\d+)", blob, re.I) or \
+            re.search(r"clamp(?:ed)? to (\d+)", blob, re.I)
+        if mm:
+            parts.append("limit 超过 %s 必须抛 ValueError" % mm.group(1))
+        if re.search(r"invalid cursor", blob, re.I):
+            parts.append("非法 cursor 必须抛 ValueError")
+        if not parts:
+            parts.append("分页从 1 开始且每页有上限，越界要显式拒绝")
+        _add("pagination", "；".join(parts), ev)
 
     # 4) 时区/日期格式约定
     m = _TZ_EV.search(blob)

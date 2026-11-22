@@ -89,6 +89,10 @@ ENTRY_SECURE_DEFAULTS = {
     "AGENTLAB_EXEC_MODE": "controlled",
     "EVOGUARD_LIGHT_GUARD": "1",
     "EVOGUARD_UNKNOWN_TOOL": "deny",
+    # DEEP-01-T1：原先漏了这一项，导致裸启动下输入注入/污点/未登记工具
+    # 都被拦，唯独**非流式输出里的私钥/XSS 仍只记不拦**——四个硬门禁
+    # 缺一角就不是 secure by default。
+    "EVOGUARD_OUTPUT_BLOCK": "1",
     "EVOGUARD_PROFILE": "secure-default",
 }
 

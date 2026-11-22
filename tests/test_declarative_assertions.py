@@ -132,5 +132,71 @@ class TestHookIntegration(unittest.TestCase):
         self.assertEqual(a[0]["source_symbol"], "FIELDS")
         self.assertEqual(a[0]["mirror_symbol"], "REQUIRED")
 
+class TestPreCommitGate(unittest.TestCase):
+    """DEEP-02-T1：脏文件不得落盘（写前拦截），并给精确修复提示。"""
+
+    ASSERT = [{"kind": "ast_symbol_sync", "file": "schema.py",
+               "source_symbol": "FIELDS", "mirror_symbol": "REQUIRED"}]
+    DIRTY = "FIELDS = ['id', 'status']\nREQUIRED = {'id': True}\n"
+    CLEAN = ("FIELDS = ['id', 'status']\n"
+             "REQUIRED = {'id': True, 'status': True}\n")
+
+    def test_dirty_write_is_blocked_before_disk(self):
+        with tempfile.TemporaryDirectory(prefix="precommit-") as d:
+            r = SH.run_pre_commit_check(
+                self.ASSERT, root=d, tool="fs.write",
+                args={"path": "schema.py", "content": self.DIRTY})
+            self.assertTrue(r["blocked"], "不同步的写入竟然放行")
+            self.assertIn("REQUIRED", r["detail"])
+            self.assertFalse(os.path.exists(os.path.join(d, "schema.py")),
+                             "写前拦截失败：脏文件已经落盘")
+
+    def test_precise_fix_has_symbol_and_line(self):
+        with tempfile.TemporaryDirectory(prefix="precommit-") as d:
+            r = SH.run_pre_commit_check(
+                self.ASSERT, root=d, tool="fs.write",
+                args={"path": "schema.py", "content": self.DIRTY})
+            fix = " ".join(r.get("fixes") or [])
+            self.assertIn("status", fix, "最小补丁没指出缺失的具体字段")
+            self.assertIn("REQUIRED", fix)
+            self.assertIn("schema.py:2", fix, "没给出可定位的行号")
+
+    def test_consistent_write_passes(self):
+        with tempfile.TemporaryDirectory(prefix="precommit-") as d:
+            r = SH.run_pre_commit_check(
+                self.ASSERT, root=d, tool="fs.write",
+                args={"path": "schema.py", "content": self.CLEAN})
+            self.assertFalse(r["blocked"], r["detail"])
+
+    def test_patch_preview_uses_old_new(self):
+        with tempfile.TemporaryDirectory(prefix="precommit-") as d:
+            with open(os.path.join(d, "schema.py"), "w",
+                      encoding="utf-8") as f:
+                f.write("FIELDS = ['id']\nREQUIRED = {'id': True}\n")
+            r = SH.run_pre_commit_check(
+                self.ASSERT, root=d, tool="fs.patch",
+                args={"path": "schema.py",
+                      "old_text": "FIELDS = ['id']",
+                      "new_text": "FIELDS = ['id', 'status']"})
+            self.assertTrue(r["blocked"], "fs.patch 的拟写预览没生效")
+            with open(os.path.join(d, "schema.py"), encoding="utf-8") as f:
+                self.assertIn("['id']", f.read(), "原文件被写脏了")
+
+    def test_hook_exposes_pre_commit(self):
+        skill = {"error_signature": "AssertionError",
+                 "fix_pattern": "fs.patch 局部修复",
+                 "verification_check": "python -m unittest",
+                 "post_write_assertions": self.ASSERT}
+        hooks = SH.hooks_from_skill(skill, root=".")
+        self.assertIsNotNone(hooks.get("pre_commit"))
+
+    def test_unavailable_content_is_not_fake_passed(self):
+        """拿不到拟写内容时不能假放行，必须显式标 proposed_unavailable。"""
+        r = SH.run_pre_commit_check(
+            self.ASSERT, root=".", tool="fs.write", args={"path": "x.py"})
+        self.assertTrue(r.get("proposed_unavailable"))
+        self.assertFalse(r["blocked"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -129,6 +129,14 @@ def _symbol_values(source, symbol):
             for e in val.elts:
                 if isinstance(e, ast.Constant):
                     out.append(str(e.value))
+        elif isinstance(val, ast.Dict):
+            # DEEP-02：REQUIRED 这类符号是 dict（{'id': True}），
+            # 早期实现只支持 list -> 永远返回空 -> 永远判不同步。
+            # 只把值为 True 的键算作「已同步」，与 is_valid 的语义一致。
+            for k, v in zip(val.keys, val.values):
+                if isinstance(k, ast.Constant) and isinstance(v, ast.Constant):
+                    if v.value is True:
+                        out.append(str(k.value))
         elif isinstance(val, ast.Constant):
             out.append(str(val.value))
     return out
@@ -200,6 +208,108 @@ def run_post_write_assertions(assertions, *, root=".", files=None):
     return {"ok": not failures, "failures": failures, "checked": checked}
 
 
+def proposed_text(tool, args, *, root="."):
+    """取写工具**拟写入**的文件内容（只读，不落盘）。
+
+    支持 fs.write(content=) 与 fs.patch(old_text/new_text)。取不到就返回
+    None —— 调用方必须当作「无法预检」如实处理，不能静默放行。
+    """
+    if not isinstance(args, dict):
+        return None
+    rel = str(args.get("path") or args.get("file") or "")
+    if not rel or rel.startswith("/") or \
+            ".." in rel.replace("\\", "/").split("/"):
+        return None
+    full = os.path.join(root, rel)
+    if not os.path.realpath(full).startswith(os.path.realpath(root)):
+        return None
+    tool = str(tool or "")
+    try:
+        if "patch" in tool:
+            old = str(args.get("old_text") or "")
+            new = str(args.get("new_text") or "")
+            if not old or not os.path.isfile(full):
+                return None
+            with open(full, "r", encoding="utf-8") as f:
+                cur = f.read()
+            if old not in cur:
+                return None
+            return cur.replace(old, new, 1)
+        if "write" in tool:
+            if "content" in args:
+                return str(args.get("content"))
+            # 有些实现用 text / body
+            for k in ("text", "body"):
+                if k in args:
+                    return str(args[k])
+    except Exception:                                    # noqa: BLE001
+        return None
+    return None
+
+
+def precise_fix(assertion, proposed, *, root="."):
+    """给 ast_symbol_sync 失败生成可核对的最小补丁提示（行号+符号名）。"""
+    import ast
+    kind = str(assertion.get("kind") or "")
+    if kind != "ast_symbol_sync":
+        return ""
+    src_sym = str(assertion.get("source_symbol") or "")
+    mir_sym = str(assertion.get("mirror_symbol") or "")
+    src = _symbol_values(proposed, src_sym)
+    mir = _symbol_values(proposed, mir_sym)
+    missing = [x for x in src if x not in mir]
+    if not missing:
+        return ""
+    line = "?"
+    try:
+        tree = ast.parse(proposed)
+        for node in tree.body:
+            targets = node.targets if isinstance(node, ast.Assign) else (
+                [node.target] if isinstance(node, ast.AnnAssign) else [])
+            if any(isinstance(t, ast.Name) and t.id == mir_sym
+                   for t in targets):
+                line = node.lineno
+                break
+    except SyntaxError:
+        pass
+    vals = ", ".join(repr(x) for x in missing[:4])
+    return ("镜像符号 %s 缺少 %s；位置 %s:%s（当前 %s=%s，源 %s=%s）"
+            "最小补丁：把缺项补进 %s（list 用 %s.append(%s)；"
+            "dict 用 %s.update(%s)，按实际类型择一）"
+            % (mir_sym, vals, assertion.get("file") or "?", line,
+               mir_sym, mir, src_sym, src, mir_sym, mir_sym, vals,
+               mir_sym, "{%s: True}" % vals))
+
+
+def run_pre_commit_check(assertions, *, root=".", tool=None, args=None):
+    """写前门禁：用**拟写入内容**跑断言，失败返回 blocked，绝不落盘。"""
+    proposed = proposed_text(tool, args, root=root)
+    if proposed is None:
+        return {"blocked": False, "checked": 0,
+                "detail": "无法预检拟写内容（不做假放行判断）",
+                "proposed_unavailable": True}
+    # 复用同一套只读检查器，但喂拟写内容而不是磁盘内容
+    virtual = {}
+    for a in (assertions or []):
+        if isinstance(a, dict) and a.get("file"):
+            virtual[str(a["file"])] = proposed
+    verdict = run_post_write_assertions(assertions, root=root,
+                                        files=virtual)
+    if verdict["ok"]:
+        return {"blocked": False, "checked": verdict["checked"],
+                "detail": "写前断言通过"}
+    fixes = []
+    for a in (assertions or []):
+        if isinstance(a, dict) and a.get("kind") == "ast_symbol_sync":
+            f = precise_fix(a, proposed, root=root)
+            if f:
+                fixes.append(f)
+    return {"blocked": True, "checked": verdict["checked"],
+            "failures": verdict["failures"],
+            "fixes": fixes,
+            "detail": " | ".join(verdict["failures"][:3] + fixes[:2])}
+
+
 def assertions_from_trace(trace, *, source_symbol=None, mirror_symbol=None,
                           file=None):
     """MOD-EVO-01-T2：从失败→成功成对轨迹提炼**声明式写后断言**。
@@ -250,4 +360,14 @@ def hooks_from_skill(skill, *, root=None):
 
     hooks["post_write"] = post_write
     hooks["assertions"] = assertions
+
+    # DEEP-02-T1：写前拦截（Pre-Commit Gate）。先于落盘用拟写内容跑同一套
+    # 断言；不一致就拒绝写入，工作区不脏，返回精确缺失符号+行号+最小补丁。
+    def pre_commit(tool, args):
+        if tool not in ("fs.write", "fs.patch", "code.write"):
+            return None
+        return run_pre_commit_check(assertions, root=root or ".",
+                                    tool=tool, args=args)
+
+    hooks["pre_commit"] = pre_commit
     return hooks

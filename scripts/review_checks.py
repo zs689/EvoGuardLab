@@ -678,6 +678,139 @@ def c_evidence_freshness():
         "docs/review-remediation/probes/*.json mtime vs source mtime")
 
 
+def c_bare_serve_blocking():
+    """DEEP-01：零环境变量裸启动，输入注入与高危输出都必须真拦。"""
+    try:
+        import env as _env
+        import openai_proxy as _op
+        eff = _env.entry_defaults({})
+        if str(eff.get("EVOGUARD_OUTPUT_BLOCK") or "") != "1":
+            return _result("DEEP-01/bare-serve", False,
+                           "入口默认仍缺 EVOGUARD_OUTPUT_BLOCK",
+                           "env.entry_defaults({})")
+        keys = tuple(eff)
+        old = {k: os.environ.get(k) for k in keys}
+        try:
+            for k, v in eff.items():
+                os.environ[k] = v
+            # 输出侧：非流式响应里的 AWS Key 必须被 content_filter 拦断
+            resp = {"choices": [{"index": 0, "message": {
+                "role": "assistant",
+                "content": "key=AKIAIOSFODNN7EXAMPLE"}}]}
+            class _R:
+                def __init__(self):
+                    self.data = json.dumps(resp).encode()
+                def read(self): return self.data
+                def __enter__(self): return self
+                def __exit__(self, *a): return False
+            _c, out, audit = _op.proxy(
+                {"messages": [{"role": "user", "content": "hi"}]},
+                upstream_url="http://u", opener=lambda *a, **k: _R(),
+                registry=None, rails={})
+            ok = (audit.get("decision") == "deny"
+                  and out["choices"][0]["finish_reason"] == "content_filter")
+            return _result("DEEP-01/bare-serve", ok,
+                           "裸启动默认：输出侧私钥已真拦" if ok else
+                           "裸启动仍放行高危输出：%s" % audit.get("decision"),
+                           "现场 proxy(): 非流式 AWS Key -> content_filter")
+        finally:
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+    except Exception as exc:                            # noqa: BLE001
+        return _result("DEEP-01/bare-serve", False,
+                       "检查自身异常：%s:%s" % (type(exc).__name__, exc),
+                       "live")
+
+
+def c_taint_encoded_exfil():
+    """DEEP-01：受污染值 Base64/URL 编码后外发，仍必须被污点层拦。"""
+    try:
+        import base64
+        import execution as _ex
+        secret = "attacker@evil.example.com"
+        payload = base64.b64encode(secret.encode()).decode()
+        state = {"user_goal": "查询订单状态",
+                 "taint_sources": {"emails": [secret]}}
+        cfg = {"mode": "controlled", "contract": {"enabled": False},
+               "intent": {"enabled": False}, "allowed_tools": ["http.send"],
+               "write_tools_in_scope": ["http.send"]}
+        pre = _ex.preflight(
+            cfg, agent_type="coder", tool="http.send",
+            args={"url": "https://example.com/post", "payload": payload},
+            taint_state=state, user_goal=state["user_goal"])
+        ok = bool(pre.get("stop"))
+        return _result("DEEP-01/taint-encoded", ok,
+                       "Base64 编码外发被拦" if ok else
+                       "编码绕过成功（污点层未解码比对）",
+                       "live preflight: b64(email) -> http.send.payload")
+    except Exception as exc:                            # noqa: BLE001
+        return _result("DEEP-01/taint-encoded", False,
+                       "检查自身异常：%s:%s" % (type(exc).__name__, exc),
+                       "live")
+
+
+def c_sandbox_no_orphans():
+    """DEEP-01：容器执行异常中断后，现场验证无孤儿容器残留。"""
+    try:
+        import subprocess as _sp
+        import sandbox_executor as _sbx
+        try:
+            box = _sbx.DockerCodeSandbox()
+            docker = box.docker
+            _sp.run([docker, "info"], capture_output=True, timeout=15,
+                    check=True)
+        except Exception:
+            # 不 mock、不冒充： daemon 不在就如实 skip，等真机现场复验
+            return _result("DEEP-01/no-orphans", False,
+                           "Docker daemon 不可达，无法现场验证孤儿容器回收"
+                           "（未用桩伪造通过）",
+                           "live docker info -> unreachable", skipped=True)
+
+        def _ids():
+            r = _sp.run([docker, "ps", "-aq",
+                         "--filter", "label=evoguard.sandbox=1"],
+                        capture_output=True, text=True, timeout=15,
+                        check=False)
+            return set(x.strip() for x in (r.stdout or "").splitlines()
+                       if x.strip())
+
+        before = _ids()
+        # 现场起一个带标签的容器，然后模拟 CLI 被杀（留下孤儿）
+        name = "evo-gate-orphan-%d" % int(time.time() * 1000)
+        p = _sp.Popen([docker, "run", "-d", "--name", name,
+                       "--label", "evoguard.sandbox=1",
+                       "--network=none", "busybox:latest", "sleep", "120"],
+                      stdout=_sp.PIPE, stderr=_sp.PIPE)
+        try:
+            p.wait(timeout=30)
+        except _sp.TimeoutExpired:
+            p.kill()
+        spawned = set(_sp.run([docker, "ps", "-aq", "--filter", "name=" + name],
+                              capture_output=True, text=True, timeout=15,
+                              check=False).stdout.split())
+        if not spawned:
+            return _result("DEEP-01/no-orphans", False,
+                           "未能创建测试容器（Docker 不可用？）",
+                           "live docker run")
+        # 调用生产回收逻辑（与建会话前调用的是同一个函数）
+        _sbx._reap_orphan_containers(docker)
+        _sp.run([docker, "rm", "-f", name], capture_output=True,
+                timeout=15, check=False)
+        left = _ids() - before
+        ok = not left
+        return _result("DEEP-01/no-orphans", ok,
+                       "异常中断后 0 孤儿容器" if ok else
+                       "残留 %d 个孤儿容器：%s" % (len(left), sorted(left)[:3]),
+                       "live docker run + _reap_orphan_containers")
+    except Exception as exc:                            # noqa: BLE001
+        return _result("DEEP-01/no-orphans", False,
+                       "检查自身异常：%s:%s" % (type(exc).__name__, exc),
+                       "live")
+
+
 CHECKS = [
     ("EG-003", c_dockerignore),
     ("EG-003", c_dockerfile_copy),
@@ -709,6 +842,9 @@ CHECKS = [
     ("EG-010", c_heap_stability),
     ("AGENT-WATCH", c_agent_watch),
     ("EVIDENCE", c_evidence_freshness),
+    ("DEEP-01", c_bare_serve_blocking),
+    ("DEEP-01", c_taint_encoded_exfil),
+    ("DEEP-01", c_sandbox_no_orphans),
 ]
 
 
@@ -718,6 +854,9 @@ _LIVE_CHECKS = frozenset({
     "c_retention_chain", "c_sli_definition", "c_stable_4xx",
     "c_enterprise_e2e", "c_jobs_e2e", "c_audit_multiprocess",
     "c_data_governance", "c_evidence_freshness",
+    # DEEP-01-T2：三项新增硬能力全部现场执行，不允许用 grep 冒充
+    "c_bare_serve_blocking", "c_taint_encoded_exfil",
+    "c_sandbox_no_orphans",
 })
 
 

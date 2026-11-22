@@ -12,9 +12,24 @@ sys.path.insert(0, os.path.join(ROOT, "ai-service", "evoguard"))
 import sandbox_executor as SB                               # noqa: E402
 
 
+def _docker_daemon_up():
+    """client 存在不等于 daemon 可达；离线环境里真跑容器的用例应 skip。"""
+    import subprocess
+    exe = shutil.which("docker")
+    if not exe:
+        return False
+    try:
+        r = subprocess.run([exe, "info"], capture_output=True,
+                           timeout=10, check=False)
+        return r.returncode == 0
+    except Exception:                                        # noqa: BLE001
+        return False
+
+
 class TestUnifiedArgs(unittest.TestCase):
     def test_base_args_include_env_and_labels(self):
-        box = SB.DockerCodeSandbox()
+        # 只验证隔离参数构造，不需要 daemon（离线也能跑）
+        box = SB.DockerCodeSandbox(probe_daemon=False)
         args = box._base_docker_args("evo-test")
         joined = " ".join(args)
         for marker in ("--network=none", "--read-only",
@@ -23,7 +38,7 @@ class TestUnifiedArgs(unittest.TestCase):
                        "evoguard.sandbox=1"):
             self.assertIn(marker, joined, "缺隔离参数 %s" % marker)
 
-    @unittest.skipUnless(shutil.which("docker"), "无 docker")
+    @unittest.skipUnless(_docker_daemon_up(), "docker daemon 不可达")
     def test_run_workspace_no_pycache_error(self):
         box = SB.DockerCodeSandbox()
         d = tempfile.mkdtemp(prefix="ws-")

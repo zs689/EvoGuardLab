@@ -164,6 +164,24 @@ def _preflight_call(tool_call, *, agent_type, goal, cfg, registry, rails):
     return (not bool(out.get("stop"))), out
 
 
+def output_blocking_enabled():
+    """输出侧硬拦截是否开启（DEEP-01-T1）。
+
+    `EVOGUARD_OUTPUT_BLOCK` 原先只被 profile_meta 展示，没有任何代码读取，
+    因此把它补进 ENTRY_SECURE_DEFAULTS 也不会真正生效。这里把它接入
+    非流式输出门禁：显式值优先（可用 0 主动 opt-out），未设置时沿用
+    security 的 enforcing()；服务入口裸启动会置 1，于是即便 security
+    因兼容停在 audit，高危输出仍真拦、返回 content_filter。
+    """
+    v = str(os.environ.get("EVOGUARD_OUTPUT_BLOCK") or "").strip().lower()
+    if v in ("0", "false", "off", "no"):
+        # 关闭「额外」输出拦截，但不能把 security=enforce 本身的拦截也关掉
+        return _sec.enforcing()
+    if v in ("1", "true", "yes", "on"):
+        return True
+    return _sec.enforcing()
+
+
 def proxy(payload, *, upstream_url=None, opener=None, agent_type="react",
           registry=None, rails=None, use_semantic=False, judge=None,
           execute=False, enforce_input=None, enforce_output=None):
@@ -176,7 +194,7 @@ def proxy(payload, *, upstream_url=None, opener=None, agent_type="react",
     if enforce_input is None:
         enforce_input = _sec.enforcing()
     if enforce_output is None:
-        enforce_output = _sec.enforcing()
+        enforce_output = output_blocking_enabled()
     audit = {"attempted": False, "executed": False,
              "effect": "unchanged", "checks": []}
     if not isinstance(payload, dict):

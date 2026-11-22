@@ -344,3 +344,82 @@ class TestBypassReversal(unittest.TestCase):
             lines, payload={"messages": []}, agent_type="react",
             registry=self.registry, rails={}, cfg=cfg)
         self.assertEqual(a2["decision"], "deny")
+
+
+class TestBareServeOutputBlock(unittest.TestCase):
+    """DEEP-01：零环境变量裸启动时，非流式高危输出必须真拦。"""
+
+    def test_entry_defaults_include_output_block(self):
+        import env as ENV
+        eff = ENV.entry_defaults({})
+        self.assertEqual(eff.get("EVOGUARD_OUTPUT_BLOCK"), "1",
+                         "入口默认仍漏了输出拦截开关")
+
+    def test_aws_key_is_blocked_with_security_audit(self):
+        """security=audit 但入口补了 OUTPUT_BLOCK=1 -> 私钥仍必须拦断。"""
+        import env as ENV
+        old = {k: os.environ.get(k) for k in
+               ("EVOGUARD_OUTPUT_BLOCK", "AGENTLAB_SECURITY_MODE")}
+        os.environ["EVOGUARD_OUTPUT_BLOCK"] = "1"
+        os.environ["AGENTLAB_SECURITY_MODE"] = "audit"
+        try:
+            # 确认开关真被读取（修复前这个函数根本不存在/恒跟随 audit）
+            self.assertTrue(OP.output_blocking_enabled())
+            resp = {"choices": [_msg("AKIA" + "IOSFODNN7EXAMPLE")]}
+            _c, out, audit = OP.proxy(
+                {"messages": [{"role": "user", "content": "hi"}]},
+                upstream_url="http://u", opener=_upstream(resp),
+                registry=TR.ToolRegistry(), rails={})
+            self.assertEqual(audit["decision"], "deny")
+            self.assertEqual(out["choices"][0]["finish_reason"],
+                             "content_filter")
+            self.assertIsNone(out["choices"][0]["message"]["content"])
+        finally:
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    def test_private_key_is_blocked_under_bare_defaults(self):
+        """模拟裸启动应用入口默认后，私钥类输出被拦。"""
+        import env as ENV
+        eff = ENV.entry_defaults({})
+        old = {k: os.environ.get(k) for k in eff}
+        try:
+            for k, v in eff.items():
+                os.environ[k] = v
+            self.assertTrue(OP.output_blocking_enabled())
+            pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA..."
+            resp = {"choices": [_msg(pem)]}
+            _c, out, audit = OP.proxy(
+                {"messages": [{"role": "user", "content": "hi"}]},
+                upstream_url="http://u", opener=_upstream(resp),
+                registry=TR.ToolRegistry(), rails={})
+            self.assertEqual(audit["decision"], "deny")
+            self.assertEqual(out["choices"][0]["finish_reason"],
+                             "content_filter")
+        finally:
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    def test_explicit_zero_does_not_disable_enforce(self):
+        """显式 0 只关额外拦截，不能把 security=enforce 也关掉。"""
+        import security as SEC
+        old_mode = os.environ.get("AGENTLAB_SECURITY_MODE")
+        old_block = os.environ.get("EVOGUARD_OUTPUT_BLOCK")
+        os.environ["AGENTLAB_SECURITY_MODE"] = "enforce"
+        os.environ["EVOGUARD_OUTPUT_BLOCK"] = "0"
+        try:
+            self.assertTrue(SEC.enforcing())
+            self.assertTrue(OP.output_blocking_enabled())
+        finally:
+            for k, v in (("AGENTLAB_SECURITY_MODE", old_mode),
+                         ("EVOGUARD_OUTPUT_BLOCK", old_block)):
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v

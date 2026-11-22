@@ -58,7 +58,8 @@ class DockerCodeSandbox:
     DEFAULT_IMAGE = "python:3.11-alpine"
 
     def __init__(self, image=None, *, memory="256m", cpus="0.5",
-                 timeout_s=20.0, max_output_bytes=1 << 20):
+                 timeout_s=20.0, max_output_bytes=1 << 20,
+                 probe_daemon=True):
         self.image = image or os.environ.get("EVOGUARD_SANDBOX_IMAGE") \
             or self.DEFAULT_IMAGE
         self.memory = str(memory)
@@ -70,18 +71,22 @@ class DockerCodeSandbox:
             raise DockerSandboxError(
                 "docker_not_available：本机无 docker，代码沙箱不可用；"
                 "按设计不降级到宿主机执行")
-        # 确认 daemon 真能连（只 which 到 client 不够）
-        import subprocess as _sp
-        try:
-            r = _sp.run([self.docker, "info", "--format", "{{.ServerVersion}}"],
-                        capture_output=True, timeout=10, check=False)
-        except Exception as exc:                            # noqa: BLE001
-            raise DockerSandboxError("docker_daemon_unreachable:%s"
-                                     % type(exc).__name__) from exc
-        if r.returncode != 0:
-            raise DockerSandboxError(
-                "docker_daemon_unreachable:%s"
-                % r.stderr.decode("utf-8", "replace")[:120])
+        # 确认 daemon 真能连（只 which 到 client 不够）。
+        # probe_daemon=False 供「只检查参数构造、不真跑容器」的离线单测使用；
+        # 实际 run()/run_workspace() 仍会在 daemon 不在时直连失败，绝不降级。
+        if probe_daemon:
+            import subprocess as _sp
+            try:
+                r = _sp.run([self.docker, "info", "--format",
+                             "{{.ServerVersion}}"],
+                            capture_output=True, timeout=10, check=False)
+            except Exception as exc:                        # noqa: BLE001
+                raise DockerSandboxError("docker_daemon_unreachable:%s"
+                                         % type(exc).__name__) from exc
+            if r.returncode != 0:
+                raise DockerSandboxError(
+                    "docker_daemon_unreachable:%s"
+                    % r.stderr.decode("utf-8", "replace")[:120])
 
     def _base_docker_args(self, name, *, label_ts=None):
         """ZERO-06：三条沙箱路径共享的**完全一致**隔离参数。
