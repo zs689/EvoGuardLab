@@ -21,6 +21,12 @@
 import copy
 import json
 import re
+import uuid
+
+try:
+    from . import core
+except ImportError:
+    import core                                             # type: ignore
 
 try:
     from . import skills as _sk
@@ -280,14 +286,20 @@ def extract_env_invariants(fail_steps, repair_steps=None, env_spec=None):
             if name in blob:
                 named.append(name)
         if "REQUIRED" in named and "FIELDS" in named:
-            rule = ("新字段必须同时登记到 FIELDS 与 REQUIRED 两处"
-                    "（REQUIRED 控制必填校验），只改 FIELDS 会放行空值")
+            rule = ("新字段必须同时登记到 FIELDS 与 REQUIRED 两处，"
+                    "并在 REQUIRED 中设为 True（新字段默认必填，"
+                    "与既有字段同等对待），只改 FIELDS 会放行空值")
         elif named:
-            rule = ("同一字段在 %s 多处登记，必须全部同步，"
-                    "只改一处会静默失效" % "/".join(named[:3]))
+            # 即使证据只点名了一个登记处，也要说清另一处叫什么、怎么改
+            rule = ("新字段必须同时登记到 FIELDS 与 %s，并在 %s 中设为 True"
+                    "（默认必填，与既有字段同等对待）；只加字段声明会放行空值"
+                    % (named[0], named[0]))
         else:
-            rule = ("同一字段有多个登记处（声明与校验表），必须全部同步，"
-                    "只改一处会静默失效")
+            # 证据只点名了一个登记处（如 "missing from REQUIRED table"）时
+            # 也要给出可执行要求；旧泛化表述让模型以为只是"加进 FIELDS"。
+            rule = ("新字段必须同时登记到 FIELDS 与 REQUIRED，并在 REQUIRED "
+                    "中设为 True（默认必填，与既有字段同等对待），"
+                    "只改 FIELDS 会放行空值")
         _add("coupling", rule, ev)
 
     return invs[:4]
@@ -624,6 +636,84 @@ def monitor_and_rollback(store, skill_id, online_runs=None, *,
     except Exception:                                       # noqa: BLE001
         out.setdefault("audit_error", True)
     return out
+
+
+def latest_snapshot(store, skill_id):
+    """取某技能最新版本的**完整快照**（含 skills 表没有的列，如 env_invariants）。
+
+    多轮累积必须从这里恢复，而不是 `skills._get_skill()` —— 后者只返回表字段，
+    会丢掉上一轮刚学到的私有规约（NEXT-01 的根因缺陷）。
+    """
+    with store.conn() as c:
+        r = c.execute(
+            "SELECT version,snapshot FROM skill_versions WHERE skill_id=? "
+            "ORDER BY version DESC, rowid DESC LIMIT 1", (skill_id,)).fetchone()
+    if not r:
+        return None
+    snap = json.loads(r["snapshot"]) if isinstance(
+        r["snapshot"], str) else dict(r["snapshot"] or {})
+    snap["version"] = r["version"]
+    return snap
+
+
+def _inv_key(inv):
+    if not isinstance(inv, dict):
+        return ""
+    return (str(inv.get("domain") or "") + "|" +
+            re.sub(r"\s+", "", str(inv.get("rule") or "")))
+
+
+def refine_skill(store, skill_id, new_traces, *, require_info_gain=True,
+                 env_spec=None):
+    """NEXT-01：多轮累积精炼。把新失败轨迹里**新暴露**的规约合并进 Skill。
+
+    - 从不可变版本快照恢复完整技能（保留上一轮全部规约）；
+    - 新轨迹只过 `extract_env_invariants` 的证据提取器，每条必须有 evidence；
+    - 按 (domain, rule 归一化) 去重，绝不把同一条规约重复写入；
+    - 写入一条**新的不可变版本快照**（version+1），旧快照原样保留可回滚；
+    - 没有新证据时如实返回 added=[]，不伪造"学进步"。
+    """
+    base = latest_snapshot(store, skill_id)
+    if base is None:
+        return {"accepted": {"accepted": False,
+                             "errors": ["技能无版本快照，无法累积精炼"]},
+                "skill": None, "added": []}
+    fails = [x for x in (new_traces or []) if isinstance(x, dict)]
+    repairs = [x for x in (new_traces or []) if isinstance(x, dict)
+               and x.get("status") == "success"]
+    new_invs = extract_env_invariants(fails, repairs, env_spec)
+    if require_info_gain:
+        # 每条都必须带具体 evidence，泛泛套话一律拒收
+        new_invs = [x for x in new_invs
+                    if str(x.get("evidence") or "").strip()]
+    existing = base.get("env_invariants") or []
+    seen = {_inv_key(x) for x in existing}
+    added = []
+    for inv in new_invs:
+        k = _inv_key(inv)
+        if k and k in seen:
+            continue
+        seen.add(k)
+        added.append(inv)
+    if not added:
+        return {"accepted": {"accepted": False,
+                             "errors": ["新轨迹没有暴露出可验证的新规约"]},
+                "skill": None, "added": [], "version": base.get("version")}
+    out = copy.deepcopy(base)
+    out["env_invariants"] = list(existing) + added
+    out["version"] = int(base.get("version") or 1) + 1
+    out["id"] = skill_id
+    out["created_at"] = core.now()
+    # 写成新的不可变快照（不覆盖旧版本）
+    with store.conn() as c:
+        c.execute(
+            "INSERT INTO skill_versions(id,skill_id,version,snapshot,created_at) "
+            "VALUES(?,?,?,?,?)",
+            ("skv_" + uuid.uuid4().hex[:8], skill_id, out["version"],
+             core.dumps(dict(out)), out["created_at"]))
+    return {"accepted": {"accepted": True, "errors": []},
+            "skill": out, "added": added,
+            "version": out["version"], "base_version": base.get("version")}
 
 
 def closed_loop(store, steps, *, target_cases, guard_cases, run_case,

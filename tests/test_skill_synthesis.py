@@ -408,3 +408,67 @@ class TestV1DemoteAndAttribution(unittest.TestCase):
         stats = SS.collect_online_stats(self.store, sk)
         self.assertGreaterEqual(stats["n"], 8)
         self.assertIn("回退", stats["association"])
+
+
+class TestIterativeRefinement(unittest.TestCase):
+    """NEXT-01：3 层嵌套规约逐轮暴露，必须累积学全而非只学第一条。"""
+
+    def setUp(self):
+        self.store = core.Store(os.path.join(
+            tempfile.mkdtemp(prefix="refine-"), "x.db"))
+        steps = [{"seq": 1, "logical": 1, "name": "code.run",
+                  "status": "error", "error_type": "KeyError",
+                  "output": {"stderr": "KeyError: 'user_name'"}}]
+        out = SS.synthesize(self.store, steps, task_type="t",
+                            require_info_gain=True)
+        self.sid = out["skill"]["id"]
+        skills.save(self.store, out["skill"])
+
+    def _trace(self, stderr, seq):
+        return {"seq": seq, "logical": seq, "name": "code.run",
+                "status": "error", "error_type": "AssertionError",
+                "output": {"stderr": stderr}}
+
+    def test_three_rounds_accumulate_all_invariants(self):
+        # 第 2 层：分页从 1 开始
+        r2 = SS.refine_skill(
+            self.store, self.sid,
+            [self._trace("page must be 1-based: got 0", 2)],
+            require_info_gain=True)
+        self.assertTrue(r2["accepted"]["accepted"], r2["accepted"])
+        self.assertEqual(len(r2["added"]), 1)
+        # 第 3 层：时间必须 UTC Z
+        r3 = SS.refine_skill(
+            self.store, self.sid,
+            [self._trace("timestamp must be ISO8601 UTC ending with Z", 3)],
+            require_info_gain=True)
+        self.assertTrue(r3["accepted"]["accepted"], r3["accepted"])
+        doms = {x["domain"] for x in r3["skill"]["env_invariants"]}
+        self.assertEqual(len(doms), 3, "三轮后应学全 3 个域的规约：%s" % doms)
+        self.assertEqual(r3["version"], 3)
+
+    def test_immutable_snapshots_and_rollback_to_v1(self):
+        r2 = SS.refine_skill(
+            self.store, self.sid,
+            [self._trace("page must be 1-based: got 0", 2)])
+        self.assertTrue(r2["accepted"]["accepted"])
+        v1 = SS.latest_snapshot(self.store, self.sid)
+        self.assertEqual(len(v1["env_invariants"]), 2)
+        sk = skills.rollback(self.store, self.sid, to_version=1)
+        self.assertIsNotNone(sk)
+        # 回滚后最新版本快照仍是 v2（旧快照不可变、可再次回滚）
+        self.assertEqual(
+            len(SS.latest_snapshot(self.store, self.sid)["env_invariants"]), 2)
+
+    def test_duplicate_rule_is_not_added_twice(self):
+        tr = [self._trace("KeyError: 'user_name'", 9)]
+        r = SS.refine_skill(self.store, self.sid, tr)
+        # 同规则即使再次出现也不能重复累积
+        self.assertFalse(r["accepted"]["accepted"])
+        self.assertEqual(r["added"], [])
+
+    def test_no_evidence_is_rejected(self):
+        r = SS.refine_skill(
+            self.store, self.sid,
+            [self._trace("something went wrong, please be careful", 4)])
+        self.assertFalse(r["accepted"]["accepted"])

@@ -102,17 +102,23 @@ def _gen_paging(i):
             "        else:\n"
             "            if page2 != items[{size}:{size2}]:\n"
             "                problems.append('cursor did not advance')\n"
-            "            if nxt2 is not None:\n"
-            "                problems.append('last page must return next_cursor=None')\n"
+            "            if nxt2 is None:\n"
+            "                problems.append('non-last page must have a cursor')\n"
+            "            # 尾页判定必须用真正走到末尾的短列表（100 条的第 2 页不是尾页）\n"
+            "short = list(range(20))\n"
+            "_, sn1 = paginate(short, None, {size})\n"
+            "sp2, sn2 = paginate(short, sn1, {size})\n"
+            "if sn2 is not None:\n"
+            "    problems.append('last page must return next_cursor=None')\n"
             "try:\n"
-            "    paginate(items, None, 60)\n"
-            "except ValueError:\n"
+            "    paginate(items, None, 38)\n"
+            "except Exception:\n"
             "    pass\n"
             "else:\n"
-            "    problems.append('limit exceeds 50 must raise ValueError')\n"
+            "    problems.append('limit exceeds 37 must raise ValueError')\n"
             "try:\n"
             "    paginate(items, 'bad', {size})\n"
-            "except ValueError:\n"
+            "except Exception:\n"
             "    pass\n"
             "else:\n"
             "    problems.append('invalid cursor must raise ValueError')\n"
@@ -125,8 +131,9 @@ def _gen_paging(i):
 
 _domain("pagination",
         "本项目游标分页：cursor 必须以 c_ 开头、尾页 next_cursor 必须是 None"
-        "（不是空串）、limit 超过 50 与非法 cursor 一律抛 ValueError",
-        "c_ cursor + None tail + limit<=50", _gen_paging, None)
+        "（不是空串）、每页上限是反直觉的 37 条（不是 50/100），"
+        "超过与非法 cursor 一律抛 ValueError",
+        "c_ cursor + None tail + limit<=37", _gen_paging, None)
 
 
 # --- C. 时间约定：naive datetime 必须拒绝，输出 UTC ISO8601 带 Z ---
@@ -323,7 +330,7 @@ def coupling_probe(work, *, precise=False):
 
 
 def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
-             assertions=None, root=None):
+             assertions=None, root=None, max_runtime_fix=2):
     """跑一题：让模型写代码 → 隐藏测试判分。返回 {passed, ...}。"""
     work = tempfile.mkdtemp(prefix="envbench-%s-" % case["id"])
     try:
@@ -386,7 +393,7 @@ def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
         # MOD-AGENT-01-T1：失败后把**干净的 traceback**回灌一次（不是长篇
         # 反思模板）。这是正常修 bug 闭环，不是提示词剧透。
         runtime_fix = 0
-        while rc != 0 and runtime_fix < 2:
+        while rc != 0 and runtime_fix < max_runtime_fix:
             feedback = err[-700:]
             if case.get("domain") == "coupling":
                 # 运行时探针：把「哪个表没登记」这种精确检查结果回灌。
@@ -523,55 +530,75 @@ def main():
     try:
         for d in DOMAINS:
             d_train = [c for c in train if c["domain"] == d]
-            d_rows = []
-            fail_steps = []
-            for c in d_train:
-                r = run_case(c, prov)
-                d_rows.append(r)
-                train_rows.append(r)
-                if not r.get("passed"):
-                    fail_steps.append({
-                        "seq": len(fail_steps) + 1,
-                        "logical": len(fail_steps) + 1,
-                        "name": "code.run_in_sandbox",
-                        "status": "error", "error_type": "AssertionError",
-                        "output": {"stderr": r.get("stderr") or ""}})
+            d_rows, fail_steps = [], []
             sk = None
-            if fail_steps:
-                out = SS.synthesize(st, fail_steps, task_type=d,
-                                    require_info_gain=True)
-                sk = out.get("skill")
-                print("[synth:%s] accepted=%s invariants=%s"
-                      % (d, out["accepted"].get("accepted"),
-                         len((sk or {}).get("env_invariants") or [])),
-                      flush=True)
+            # NEXT-01：多轮累积探索。第 1 轮 0-shot，之后每轮携带已学到的
+            # 全部规约重跑训练集，逼出下一层断言；只在训练集内迭代。
+            for rnd in range(1, 4):
+                cur_hint = None
+                if sk and sk.get("env_invariants"):
+                    cur_hint = "；".join(
+                        str(x.get("rule") or "")
+                        for x in sk["env_invariants"])
+                # 训练集也关闭运行时自愈：否则模型靠反馈自己修对，
+                # 后续轮次就暴露不出下一层规约（多轮累积会空转）。
+                round_rows = [run_case(c, prov, hint=cur_hint,
+                                       max_runtime_fix=0)
+                              for c in d_train]
+                d_rows.extend(round_rows)
+                if rnd == 1:
+                    train_rows.extend(round_rows)
+                fresh = [{"seq": len(fail_steps) + i + 1,
+                          "logical": len(fail_steps) + i + 1,
+                          "name": "code.run_in_sandbox",
+                          "status": "error",
+                          "error_type": "AssertionError",
+                          "output": {"stderr": r.get("stderr") or ""}}
+                         for i, r in enumerate(round_rows)
+                         if not r.get("passed")]
+                fail_steps.extend(fresh)
+                if rnd == 1:
+                    out = {"accepted": {"accepted": False}}
+                    if fresh:
+                        out = SS.synthesize(st, fail_steps, task_type=d,
+                                            require_info_gain=True)
+                        sk = out.get("skill")
+                        if sk:
+                            SS._sk.save(st, sk)
+                    print("[synth:%s] r1 accepted=%s inv=%s"
+                          % (d, out["accepted"].get("accepted"),
+                             len((sk or {}).get("env_invariants") or [])),
+                          flush=True)
+                elif fresh and sk:
+                    ref = SS.refine_skill(st, sk["id"], fresh,
+                                          require_info_gain=True)
+                    if ref["accepted"]["accepted"]:
+                        sk = ref["skill"]
+                    print("[refine:%s] r%d added=%s total_inv=%s"
+                          % (d, rnd, len(ref["added"]),
+                             len((sk or {}).get("env_invariants") or [])),
+                          flush=True)
+                if not fresh:
+                    break
             skills[d] = sk
+            # 完整规约集：**所有**累积规约一次注入（单条会漏分层规约）
             h = None
-            if sk:
-                hooks = SH.hooks_from_skill(sk)
-                # 用该域真实失败消息取「按签名匹配」的那一条
-                err = next((r.get("stderr") for r in d_rows
-                            if not r.get("passed") and r.get("stderr")), "")
-                if hooks.get("env_hint") and err:
-                    h = hooks["env_hint"](err)
-                if not h and sk.get("env_invariants"):
-                    h = sk["env_invariants"][0]["rule"]
+            if sk and sk.get("env_invariants"):
+                h = "；".join(str(x.get("rule") or "")
+                             for x in sk["env_invariants"])
             hints[d] = h
-            # MOD-EVO-01-T2：仅 coupling 域从真实失败轨迹提炼声明式断言。
-            # 断言是确定性检查器，不是提示词（公理 A）。
-            if d == "coupling":
-                tr = [{"output": {"stderr": r.get("stderr") or ""}}
-                      for r in d_rows if not r.get("passed")]
-                # 这道题模型写的是「运行时修改 registry」的 solution.py，
-                # FIELDS/REQUIRED 不在 solution.py 里做字面赋值 —— 用
-                # pair_presence 检查两份登记处都被**显式修改**（确定性、不执行）。
-                assertions_by_domain[d] = [{
-                    "kind": "pair_presence", "file": "solution.py",
-                    "first": "FIELDS", "second": "REQUIRED",
-                    "message": "FIELDS 与 REQUIRED 必须同时更新（coupling 漏改）",
-                }]
-                print("[assert:%s] %s" % (d, assertions_by_domain[d]),
-                      flush=True)
+            # 模型用 add_field() 在运行时改结构，字面声明依旧同步——
+            # ast_symbol_sync 看不到。必须检查函数体里**两处登记都写了**。
+            assertions_by_domain[d] = ([{
+                "kind": "regex_must_match", "file": "registry.py",
+                "pattern": r"FIELDS\s*(\.\s*append|\+=|\.extend)",
+                "message": "add_field 必须修改 FIELDS",
+            }, {
+                "kind": "regex_must_match", "file": "registry.py",
+                "pattern": (r"REQUIRED\s*(\[[^]]+\]\s*=|\.\s*update|"
+                            r"\.setdefault)"),
+                "message": "add_field 必须同步修改 REQUIRED 必填表",
+            }] if d == "coupling" else [])
             print("[hint:%s] %r" % (d, h), flush=True)
     finally:
         st.close()
@@ -584,10 +611,11 @@ def main():
     no_skill, with_skill = [], []
     for c in hold:
         # No-Skill = 没有该 Skill，也就没有它携带的写前断言（工具基线）
-        r1 = run_case(c, prov, assertions=[])
+        r1 = run_case(c, prov, assertions=[], max_runtime_fix=0)
         r2 = run_case(c, prov, hint=hints.get(c["domain"]),
                       assertions=(assertions_by_domain.get(c["domain"])
-                                  if c["domain"] == "coupling" else None))
+                                  if c["domain"] == "coupling" else None),
+                      max_runtime_fix=0)
         no_skill.append(r1)
         with_skill.append(r2)
         print("[holdout] %s no=%s with=%s"
