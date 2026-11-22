@@ -193,6 +193,11 @@ class TestOnlineMonitorRollback(unittest.TestCase):
             rid = run["id"] if isinstance(run, dict) else run
             self.store.finish_run(rid, 1 if success else 0,
                                   "x" if success else "bad", "", 10, 100)
+            # 归属本技能：没有 skill_id 的 runs 只能按 task_type 近似汇总，
+            # 那种数据不能用来判退化（会拿全量成功率误杀好技能）。
+            with self.store.conn() as c:
+                c.execute("UPDATE runs SET skill_id=? WHERE id=?",
+                          (self.skill_id, rid))
 
     def test_promotion_alone_does_not_rollback(self):
         """旧死代码的等价场景：刚晋升、没有线上数据，绝不能自判退化。"""
@@ -231,15 +236,21 @@ class TestOnlineMonitorRollback(unittest.TestCase):
                   if x["id"] == self.skill_id][0]
         r = SS.monitor_and_rollback(self.store, self.skill_id)
         self.assertTrue(r["degraded"])
-        self.assertTrue(r["rolled_back"], r.get("error"))
-        # 真回退的证据是版本号下降，不是脚本自己写的状态字符串：
-        # skills.rollback 的语义是「恢复旧版本并重新启用」，status 仍为 active。
-        self.assertLess(r["version_after"], r["version_before"])
+        # 止血有两条正当路径：
+        #   a) 回滚到**正文不同**的旧版本（rolled_back，版本号下降）；
+        #   b) 旧版本正文与当前一致时，回滚等于没换药，直接停用（disabled）。
+        # 单次 promote 的 fixture 属于 (b)：v1/v2 正文相同，所以断言不能
+        # 只认 (a)。两条路径都必须让技能脱离 active（或版本真的退回去）。
+        self.assertTrue(r["rolled_back"] or r.get("disabled"), r.get("error"))
         after = [x for x in skills.list_skills(self.store)
                  if x["id"] == self.skill_id][0]
-        self.assertLess(int(after["active_version"]),
-                        int(before["active_version"]))
-        self.assertIsNotNone(after.get("rolled_back_at"))
+        if r["rolled_back"]:
+            self.assertLess(r["version_after"], r["version_before"])
+            self.assertLess(int(after["active_version"]),
+                            int(before["active_version"]))
+            self.assertIsNotNone(after.get("rolled_back_at"))
+        else:
+            self.assertEqual(after["status"], skills.DISABLED)
 
     def test_success_drop_triggers_rollback(self):
         """成功率相对基线掉超过阈值也要回滚（不只看越权）。"""

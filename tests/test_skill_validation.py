@@ -12,6 +12,7 @@ import skills
 
 
 def cases(prefix, n=3):
+    """默认 3 题（工程证据下限；统计功效见 chance_p_value 披露）。"""
     return [{"case_id": prefix + str(i), "agent_type": "order",
              "task_id": prefix + str(i), "fault_type": "missing_field", "seed": 7}
             for i in range(n)]
@@ -148,6 +149,8 @@ class TestSkillValidation(unittest.TestCase):
         result = self.evaluate()
         self.assertEqual(result["neg_transfer_rate"], 0.0)
         self.assertEqual(result["guard_both_failed"], 1)
+        self.assertEqual(result["guard_baseline_success_tasks"],
+                         len(self.guard) - 1)
         self.assertEqual(result["verdict"], "NEEDS_REVIEW")
 
     def test_repeated_family_is_not_three_independent_tasks(self):

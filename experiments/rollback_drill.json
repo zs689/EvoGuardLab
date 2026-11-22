@@ -1,0 +1,122 @@
+{
+  "drill": {
+    "ok": true,
+    "steps": [
+      {
+        "step": "synthesize",
+        "skill_id": "sk_887134f8ce",
+        "invariants": 1
+      },
+      {
+        "step": "audit",
+        "verdict": "PROMOTE",
+        "gain_pp": 100.0,
+        "chance_p": 0.0312,
+        "target_n": 5
+      },
+      {
+        "step": "promote",
+        "status": "active"
+      },
+      {
+        "step": "monitor",
+        "degraded": true,
+        "reasons": [
+          "成功率下降 90.0pp > 15.0pp（基线 1.000 → 线上 0.100）",
+          "告警率 0.950 > 0.250",
+          "回滚目标正文与当前一致（hash 相同），已改为 disable 止血"
+        ],
+        "rolled_back": false,
+        "baseline": {
+          "success_rate": 1.0,
+          "gain_pp": 100.0
+        }
+      },
+      {
+        "step": "verify",
+        "status_after": "disabled",
+        "rollback_audit_rows": 1
+      },
+      {
+        "step": "inject_blocked",
+        "still_candidate": false,
+        "note": "disabled 技能不参与注入检索"
+      }
+    ]
+  },
+  "production_audit": {
+    "active_skills": 7,
+    "checked": [
+      {
+        "skill_id": "sk_ad2c69895c",
+        "task_type": "planner",
+        "degraded": false,
+        "baseline": {
+          "success_rate": 1.0,
+          "gain_pp": 100.0
+        },
+        "online_n": 670
+      },
+      {
+        "skill_id": "sk_76318e0967",
+        "task_type": "kb",
+        "degraded": false,
+        "baseline": {
+          "success_rate": 1.0,
+          "gain_pp": 100.0
+        },
+        "online_n": 772
+      },
+      {
+        "skill_id": "sk_0151f47125",
+        "task_type": "kb",
+        "degraded": false,
+        "baseline": {
+          "success_rate": 1.0,
+          "gain_pp": 100.0
+        },
+        "online_n": 772
+      },
+      {
+        "skill_id": "sk_840f42a59d",
+        "task_type": "order",
+        "degraded": false,
+        "baseline": {
+          "success_rate": 1.0,
+          "gain_pp": 100.0
+        },
+        "online_n": 1425
+      },
+      {
+        "skill_id": "sk_f1dc716f87",
+        "task_type": "order",
+        "degraded": false,
+        "baseline": {
+          "success_rate": 1.0,
+          "gain_pp": 100.0
+        },
+        "online_n": 1425
+      },
+      {
+        "skill_id": "sk_2246d26e55",
+        "task_type": "planner",
+        "degraded": false,
+        "baseline": {
+          "success_rate": 1.0,
+          "gain_pp": 100.0
+        },
+        "online_n": 670
+      },
+      {
+        "skill_id": "sk_7291d4f312",
+        "task_type": "kb",
+        "degraded": false,
+        "baseline": {
+          "success_rate": 1.0,
+          "gain_pp": 100.0
+        },
+        "online_n": 772
+      }
+    ]
+  }
+}

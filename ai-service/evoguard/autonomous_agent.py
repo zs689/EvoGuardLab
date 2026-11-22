@@ -521,6 +521,15 @@ class ReActAgent:
             return ""
         try:
             rows = _sk.list_skills(self.store, status="candidate") or []
+            # 双保险：存量的「已评估但状态没回写」的候选也不能注入。
+            try:
+                with self.store.conn() as c:
+                    bad = {r["skill_id"] for r in c.execute(
+                        "SELECT DISTINCT skill_id FROM skill_evaluations "
+                        "WHERE verdict IN ('REJECT','NEEDS_REVIEW')")}
+            except Exception:                            # noqa: BLE001
+                bad = set()
+            rows = [r for r in rows if r.get("id") not in bad]
         except Exception:                                # noqa: BLE001
             return ""
         rules = []

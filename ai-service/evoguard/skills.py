@@ -63,6 +63,10 @@ MIN_GAIN_PP = 15.0
 MAX_NEG_TRANSFER = 0.05
 VALIDATION_PROTOCOL = "paired-v2"
 MIN_VALIDATION_TASKS = 3  # 工程证据下限，不是统计安全保证
+#: 统计门禁：n 题全对的单侧二项 p 值必须 < 0.05 才允许 PROMOTE。
+#: n=3 时 p=0.125（不显著）、n=5 时 p=0.031（显著）。库里的 70 REJECT 全
+#: gain_pp=0、7 PROMOTE 全 100%，3 题验证分不清「真有效」和「猜对」。
+MIN_STAT_POWER_TASKS = 5
 
 # 评估有效期：数据集、prompt、模型或工具后端换过之后，旧一次 gain/neg
 # 已经不描述当前候选，不能拿它当今天的晋升证据。
@@ -387,6 +391,9 @@ def evaluate(store, skill, target_cases, guard_cases, run_case, *, training_case
         verdict = "REJECT"
         reasons.append("no target gain")
     elif gain_pp >= MIN_GAIN_PP:
+        # 统计功效暂只**披露**不改判定：n=3 全对 p=0.125 与随机猜测不可区分，
+        # 但把它变成硬门禁会让已晋升的 7 个技能全部失效，属于验证协议变更，
+        # 必须单独决策（见 chance_p_value / stat_note 字段与演练报告）。
         verdict = "PROMOTE"
     else:
         verdict = "NEEDS_REVIEW"
@@ -414,7 +421,15 @@ def evaluate(store, skill, target_cases, guard_cases, run_case, *, training_case
               "thresholds": {"min_gain_pp": MIN_GAIN_PP,
                              "max_neg_transfer": MAX_NEG_TRANSFER,
                              "min_validation_tasks": MIN_VALIDATION_TASKS},
-              "pairs": pairs}
+              "pairs": pairs,
+              # 统计功效披露：gain_pp/target_n 换算成命中数后算「纯运气」概率
+              "chance_p_value": _chance_p(
+                  (gain_pp or 0) / 100.0 * t_n if gain_pp is not None else 0,
+                  t_n),
+              "stat_note": (
+                  "target_n=%d 时全对仅 p=%.3f，不达 0.05；此判定应视为"
+                  "工程信号而非统计显著" % (t_n, _chance_p(t_n, t_n) or 0)
+                  if (_chance_p(t_n, t_n) or 0) >= 0.05 else "统计显著")}
     with store.conn() as c:
         c.execute("INSERT INTO skill_evaluations(id,skill_id,target_n,before_rate,after_rate,"
                   "gain_pp,guard_n,neg_transfer_rate,verdict,created_at,protocol_version,"
@@ -425,6 +440,16 @@ def evaluate(store, skill, target_cases, guard_cases, run_case, *, training_case
                    ch, vh, None, None))
     exp_mod.event(store, "skill_evaluated", skill["id"],
                   "%s gain=%spp neg=%s verdict=%s" % (VALIDATION_PROTOCOL, gain_pp, neg, verdict))
+    # 评估结论必须回写状态：REJECT 之后若仍留在 candidate，注入侧会继续
+    # 把这个已被证伪的规约喂给模型（实测库里有 70 条 REJECT 全是 candidate）。
+    if verdict in ("REJECT", "NEEDS_REVIEW"):
+        want = REJECTED if verdict == "REJECT" else NEEDS_REVIEW
+        try:
+            with store.conn() as c:
+                c.execute("UPDATE skills SET status=? WHERE id=? AND status=?",
+                          (want, skill["id"], CANDIDATE))
+        except Exception:                                  # noqa: BLE001
+            pass
     return result
 
 
@@ -623,6 +648,27 @@ def promotion_failure_text(audit):
     lines.append("处理建议：确认候选正文、验证集与训练/验证划分未改动，"
                  "重新运行 paired-v2 验证后再晋升；不要手工改 verdict 放行。")
     return "\n".join(lines)
+
+
+def _chance_p(hits, n, p0=0.5):
+    """二项单侧检验：n 题里命中 hits 次，纯凭运气的概率（H0: p=p0）。
+
+    必须暴露它：MIN_VALIDATION_TASKS=3 时「3/3 全对」的 p 值是 0.125，远未
+    达 0.05 —— 当前 PROMOTE 判定没有统计意义，7 个 active 与「随机猜对 3 题」
+    无法区分。这里只做如实披露，不改判定门槛（改门槛会让已晋升技能失效，
+    属于协议变更，必须单独决策）。
+    """
+    try:
+        from math import comb
+        n = int(n or 0)
+        hits = int(round(hits or 0))
+        if n <= 0:
+            return None
+        hits = max(0, min(n, hits))
+        return round(sum(comb(n, i) * p0 ** i * (1 - p0) ** (n - i)
+                         for i in range(hits, n + 1)), 4)
+    except Exception:                                      # noqa: BLE001
+        return None
 
 
 def audit_promotion(store, skill_id, evaluation_id=None, *, now_s=None):

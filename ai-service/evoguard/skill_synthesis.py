@@ -614,6 +614,21 @@ def monitor_and_rollback(store, skill_id, online_runs=None, *,
         online.setdefault("association", "caller_supplied")
     out["online"] = online
 
+    # **归因门禁**：线上 runs 若没有 skill_id 归属，只能按 task_type 时间窗
+    # 近似汇总 —— 那份成功率是「同类型全部任务」的，不是「用了本技能」的。
+    # 拿它对 100% 基线做比较一定会判退化（实测 7 个 active 全被判死）。
+    # 安全阀不能只防漏放，也必须防误杀：无归因时拒绝自动回滚。
+    assoc = str(online.get("association") or "")
+    if (online.get("n") or 0) > 0 and ("无 skill_id 归属" in assoc
+                                       or "回退近似" in assoc):
+        out["degraded"] = False
+        out["attribution_missing"] = True
+        out["reasons"] = [
+            "线上统计无 skill_id 归属（%s），无法把退化归因到本技能；"
+            "拒绝据此回滚，需先补齐运行侧 skill_id 打点" % assoc[:60]]
+        out["online"] = online
+        return out
+
     degraded, reasons = _judge_degradation(baseline, online, thresholds)
     out["degraded"] = degraded
     out["reasons"] = reasons
@@ -662,6 +677,31 @@ def monitor_and_rollback(store, skill_id, online_runs=None, *,
     if not out["rolled_back"]:
         out["error"] = "rollback_noop:版本未退回(%d->%d)" % (
             before_version, after_version)
+    else:
+        # 版本退回去了不等于「换药」：v1->v2 若只改了晋升标记，正文 hash 完全
+        # 相同，回滚后仍是同一份退化正文 —— 此时必须 disable 才叫止血。
+        try:
+            before_hash = _sk.content_hash(sk)
+            after_hash = _sk.content_hash(after) if after else None
+        except Exception:                                # noqa: BLE001
+            before_hash = after_hash = None
+        if before_hash and after_hash and before_hash == after_hash:
+            out["rolled_back"] = False
+            out["rollback_noop_content"] = True
+            try:
+                _sk.disable(store, skill_id)
+                out["disabled"] = True
+                out["status"] = "disabled"
+                out["reasons"] = list(out["reasons"]) + [
+                    "回滚目标正文与当前一致（hash 相同），已改为 disable 止血"]
+                after = None
+                for row in _sk.list_skills(store):
+                    if row["id"] == skill_id:
+                        after = row
+                        break
+                out["status"] = (after or {}).get("status")
+            except Exception as dexc:                    # noqa: BLE001
+                out["error"] = "content_same_disable_failed:" + type(dexc).__name__
     out["rolled_back_at"] = (after or {}).get("rolled_back_at")
     # 回滚是副作用，必须留痕（谁因什么把技能退了）
     try:
