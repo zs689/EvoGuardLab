@@ -23,6 +23,7 @@ import argparse
 import collections
 import hashlib
 import concurrent.futures
+import threading
 import io
 import json
 import os
@@ -92,9 +93,10 @@ def detect_layered(text, *, judge=None, channel="tool_output"):
             if dec in ("deny", "block"):
                 return True, "L2_semantic", dec
             if dec == "report":
-                # 判官不可用**不算拦截成功**，但也不当 miss：
-                # 由 _eval_set 的 degraded 计数单独统计，避免自证。
-                return False, "L2_unavailable", "report"
+                # 判官"不确定"（confidence 不足）与服务"不可用"是两件事：
+                # 前者是模型给了判断但证据不够，后者是压根没跑成。混记成
+                # L2_unavailable 会让「服务挂了」的指标永远不清零。
+                return False, "L2_undecided", "report"
         except Exception as exc:                            # noqa: BLE001
             return False, "L2_unavailable", "error:" + type(exc).__name__
     return False, "none", "allow"
@@ -136,6 +138,39 @@ def _benign_text(row):
     return str(row.get("text") or row.get("user_instruction") or "")
 
 
+
+class _TokenBucket:
+    """进程内令牌桶：限制对上游判官的请求速率（rps<=0 表示不限速）。
+
+    为什么需要它：8 并发裸打会触发上游限流，被限流的请求要么 60s 超时
+    要么直接 429，整批进度倒退。限速把「并发」与「速率」解耦 ——
+    并发负责隐藏单次延迟，桶负责不超过对方允许的 QPS。
+    """
+
+    def __init__(self, rps):
+        self.rps = float(rps or 0)
+        self.cap = max(1.0, self.rps)
+        self.tokens = self.cap
+        self.updated = time.monotonic()
+        self.lock = threading.Lock()
+
+    def acquire(self):
+        if self.rps <= 0:
+            return 0.0
+        with self.lock:
+            now = time.monotonic()
+            self.tokens = min(self.cap,
+                              self.tokens + (now - self.updated) * self.rps)
+            self.updated = now
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return 0.0
+            wait = (1.0 - self.tokens) / self.rps
+            self.tokens = 0.0
+            self.updated = now + wait
+            return wait
+
+
 def _load_cache(path):
     """JSONL 断点缓存：key=sha256(text)，value=检测结论。"""
     out = {}
@@ -148,20 +183,26 @@ def _load_cache(path):
                     continue
                 try:
                     rec = json.loads(line)
-                    out[str(rec.get("key"))] = rec
                 except Exception:                          # noqa: BLE001
                     continue
+                # 判官「不可用」是瞬时状态，不是结论。缓存在这里会让一次
+                # 限流永久固化成 L2_unavailable（实测 136 条一直不复算）。
+                if rec.get("layer") == "L2_unavailable":
+                    continue
+                out[str(rec.get("key"))] = rec
     except Exception:                                      # noqa: BLE001
         pass
     return out
 
 
 def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1,
-              judge_total_timeout=900):
+              judge_total_timeout=900, rps=0.0, max_retry=3,
+              channel="tool_output"):
     if limit and limit > 0:
         rows = rows[:limit]
     hits = {"L1_light": 0, "L1_high_stakes": 0, "L2_semantic": 0,
-            "L2_unavailable": 0, "tool_gate": 0, "missed": 0}
+            "L2_unavailable": 0, "L2_undecided": 0, "tool_gate": 0,
+            "missed": 0}
 
     # NEXT-02-T2：按 text 哈希去重。同一条 attacker_instruction 在 2108 条里
     # 大量重复，串行逐个打 API 是 >30min 的主因。
@@ -174,13 +215,37 @@ def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1,
         uniq.setdefault(key, str(text))
     fresh = [(k, t) for k, t in uniq.items() if k not in cache]
 
+    bucket = _TokenBucket(rps)
+
     def _judge_one(item):
         key, text = item
-        t0 = time.perf_counter()
-        blocked, layer, dec = detect_layered(text, judge=judge)
-        return {"key": key, "blocked": bool(blocked), "layer": layer,
-                "decision": dec,
-                "ms": round((time.perf_counter() - t0) * 1000, 3)}
+        last = None
+        for attempt in range(max(1, max_retry)):
+            w = bucket.acquire()
+            if w:
+                time.sleep(w)
+            t0 = time.perf_counter()
+            try:
+                blocked, layer, dec = detect_layered(
+                    text, judge=judge, channel=channel)
+            except Exception as exc:                       # noqa: BLE001
+                last = "error:" + type(exc).__name__
+                if attempt + 1 < max_retry:
+                    time.sleep(2 ** attempt)               # 指数退避
+                    continue
+                return {"key": key, "blocked": False,
+                        "layer": "L2_unavailable", "decision": last,
+                        "ms": round((time.perf_counter() - t0) * 1000, 3)}
+            # 判官自己报不可用（多为 429/超时）：退避重试，别直接记死
+            if layer == "L2_unavailable" and attempt + 1 < max_retry:
+                last = "unavailable_retry"
+                time.sleep(2 ** attempt)
+                continue
+            return {"key": key, "blocked": bool(blocked), "layer": layer,
+                    "decision": dec,
+                    "ms": round((time.perf_counter() - t0) * 1000, 3)}
+        return {"key": key, "blocked": False, "layer": "L2_unavailable",
+                "decision": last or "retry_exhausted", "ms": 0}
 
     if fresh:
         # 流式落盘：每完成一条立刻写缓存。旧实现用 ex.map 按提交顺序取结果，
@@ -248,8 +313,8 @@ def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1,
             hits[layer] += 1
             continue
         # L2_unavailable 是诊断标记，不是独立最终桶；样本仍落到下面两桶之一。
-        if layer == "L2_unavailable":
-            hits["L2_unavailable"] += 1
+        if layer in ("L2_unavailable", "L2_undecided"):
+            hits[layer] += 1
         if tool_gate_blocks(r.get("attacker_tools")):
             hits["tool_gate"] += 1
         else:
@@ -297,21 +362,28 @@ def _is_benign(r):
     return int(v) == 0
 
 
-def _utility(rows, *, judge):
-    """Utility under Attack：良性（负样本）请求未被误拦的比例。"""
+def _utility(rows, *, judge, cache_path=None, workers=1, rps=0.0,
+             timeout=900, max_retry=3):
+    """Utility under Attack：良性（负样本）请求未被误拦的比例。
+
+    必须复用 `_eval_set` 的去重缓存 + 并发 + 限速：旧实现逐条串行调判官
+    （且没有缓存），2108 行里良性样本会把整个评测拖到十几分钟不结束
+    ——这才是 NEXT-02「L2 全量超时」的真正卡点，不是攻击集那一侧。
+    """
     benign = [r for r in rows if _is_benign(r)]
     if not benign:
         return None, 0
-    passed = 0
-    for r in benign:
-        # FINAL-01-T1：良性 user_instruction 是可信主指令，走 user_input
-        # 通道（不跑 action_scope），这才是与攻击集同来源的正确口径。
-        text = r.get("text") or r.get("user_instruction") or ""
-        blocked, _layer, _d = detect_layered(
-            text, judge=judge, channel="user_input")
-        if not blocked:
-            passed += 1
-    return round(passed / len(benign), 4), len(benign)
+    # 良性 user_instruction 是可信主指令，走 user_input 通道（不跑
+    # action_scope），与攻击集同来源才有可比口径。
+    res = _eval_set("utility", benign, judge=judge, cache_path=cache_path,
+                    workers=workers, judge_total_timeout=timeout,
+                    rps=rps, max_retry=max_retry, channel="user_input")
+    # blocked_by 里只有这三个是「真的被拦住」；missed / L2_unavailable
+    # 是未拦住的分桶，算进去会让 pass_rate 恒为 0。
+    bb = res["blocked_by"]
+    blocked = (bb.get("L1_light", 0) + bb.get("L1_high_stakes", 0)
+               + bb.get("L2_semantic", 0))
+    return round((res["n"] - blocked) / res["n"], 4), res["n"]
 
 
 def main():
@@ -326,6 +398,10 @@ def main():
                     help="L2 判官结果的 JSONL 断点缓存（sha256 去重）")
     ap.add_argument("--judge-timeout", type=int, default=20,
                     help="判官单次调用超时（秒）")
+    ap.add_argument("--rps", type=float, default=0.0,
+                    help="判官请求速率上限（次/秒，0=不限）")
+    ap.add_argument("--max-retry", type=int, default=3,
+                    help="判官失败/不可用时的重试次数（指数退避）")
     ap.add_argument("--judge-total-timeout", type=int, default=900,
                     help="单集判官总时间预算（秒），超时未完成记为不可用")
     ap.add_argument("--workers", type=int, default=1,
@@ -397,7 +473,8 @@ def main():
             **_eval_set("injecagent", rows, judge=judge, limit=a.limit,
                                cache_path=a.cache or None,
                                workers=a.workers,
-                               judge_total_timeout=a.judge_total_timeout)}
+                               judge_total_timeout=a.judge_total_timeout,
+                               rps=a.rps, max_retry=a.max_retry)}
 
     ad = _read_jsonl(os.path.join(DATA, "agentdojo", "cases.jsonl"))
     if ad:
@@ -410,7 +487,8 @@ def main():
             **_eval_set("agentdojo", rows, judge=judge, limit=a.limit,
                                cache_path=a.cache or None,
                                workers=a.workers,
-                               judge_total_timeout=a.judge_total_timeout)}
+                               judge_total_timeout=a.judge_total_timeout,
+                               rps=a.rps, max_retry=a.max_retry)}
 
     # SCORE-01-T3：Utility 必须和攻击集**同语种、同来源**。
     # 之前拿中文自建良性文本配英文 InjecAgent 攻击集 —— 语种错配，
@@ -426,7 +504,10 @@ def main():
         ben = [{"text": r.get("text") or "", "label": r.get("label")}
                for r in ch if _is_benign(r)]
         provenance = "self-built chinese benign (fallback, 与英文攻击集不同源)"
-    u, nb = _utility(ben, judge=judge)
+    u, nb = _utility(ben, judge=judge, cache_path=a.cache or None,
+                     workers=a.workers, rps=a.rps,
+                     timeout=a.judge_total_timeout,
+                     max_retry=a.max_retry)
     rep["utility_under_attack"] = {
         "benign_n": nb, "pass_rate": u,
         "false_positive_rate": round(1 - u, 4) if u is not None else None,

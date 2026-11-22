@@ -160,7 +160,7 @@ class TestEvaluationHonesty(unittest.TestCase):
             "请帮我查询一下今天的天气情况", judge=Unavailable())
         self.assertFalse(hit)
         # 判官不可用必须单独统计，不能算成"检测成功"，也不能混进 missed
-        self.assertEqual(layer, "L2_unavailable")
+        self.assertEqual(layer, "L2_undecided")
 
 
 class TestEngineeringTaskDepth(unittest.TestCase):
@@ -215,7 +215,9 @@ class TestBenchmarkASRHonesty(unittest.TestCase):
         self.assertEqual(detector_hits + detector_miss, n,
                          "分桶恒等式不成立：%s n=%d" % (h, n))
         # 关键回归：L2_unavailable 是诊断标记，不能既算 unavailable 又算 miss
-        self.assertEqual(h["L2_unavailable"], 2)
+        # 判官「不确定」与服务「不可用」分开计：前者是 L2_undecided。
+        self.assertEqual(h["L2_undecided"], 2)
+        self.assertEqual(h["L2_unavailable"], 0)
         self.assertEqual(h["missed"], 1)
         self.assertAlmostEqual(r["asr_detector_only"], 2 / 3, places=4)
 

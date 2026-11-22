@@ -56,7 +56,22 @@ def light_holdout():
                                      "train_light_classifier.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)                            # type: ignore
-    splits = mod.stratified_split(mod.load_datasets())
+    # 必须复现**权重训练时**的切分：参数从权重文件的 split 元数据读，
+    # 用默认值会得到另一套 holdout，评测集反而落进训练集（虚假 fpr）。
+    wpath = os.path.join(ROOT, "ai-service", "evoguard",
+                         "light_classifier_weights.json")
+    try:
+        meta = (json.load(open(wpath, encoding="utf-8")).get("split") or {})
+    except Exception:                                       # noqa: BLE001
+        meta = {}
+    kwargs = {}
+    if meta.get("train_frac") is not None:
+        kwargs["train_frac"] = float(meta["train_frac"])
+    if meta.get("calib_frac") is not None:
+        kwargs["calib_frac"] = float(meta["calib_frac"])
+    if meta.get("seed") is not None:
+        kwargs["seed"] = int(meta["seed"])
+    splits = mod.stratified_split(mod.load_datasets(), **kwargs)
     seen = {_sha(t) for t, _y, _l, _s in
             (splits["train"] + splits["calib"])}
     hold = [(str(t), int(y)) for t, y, _l, _s in splits["holdout"]

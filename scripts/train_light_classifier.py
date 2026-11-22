@@ -117,6 +117,14 @@ def feats(text, vocab=None):
             out[g] = out.get(g, 0) + 1
     for tok in semantic_tokens(t):
         out[tok] = out.get(tok, 0) + _sem.TOKEN_WEIGHT
+    # 必须与推理侧 `light_classifier._feats` **完全一致**：推理还会加
+    # pinyin_tokens，训练不加就成了「运行时多出一类特征、权重从未训练过」，
+    # 分数被系统性推高（实测英文良性 0.14 -> 0.87）。
+    try:
+        for tok in _sem.pinyin_tokens(t):
+            out[tok] = out.get(tok, 0) + _sem.TOKEN_WEIGHT
+    except Exception:                                       # noqa: BLE001
+        pass
     return out
 
 
@@ -327,6 +335,10 @@ def main():
     out = {"version": "light-v4",
            "ngrams": list(NGRAMS),
            "split_seed": a.seed,
+           # 切分参数必须落盘：否则下游评测无法复现同一 holdout，
+           # 会拿训练集当留出集（实测把 fpr 从 0.045 虚报成 0.46）。
+           "split": {"train_frac": a.train_frac, "calib_frac": a.calib_frac,
+                     "seed": a.seed},
            "models": {lang: {"vocab": m["vocab"],
                              "idf": [round(x, 6) for x in
                                      (m["idf"][g] for g in m["vocab"])],

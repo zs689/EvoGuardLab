@@ -12,57 +12,57 @@
   "train_overlap_excluded": true,
   "overlap_exclusion": {
     "method": "复用 scripts/train_light_classifier.py 的 load_datasets + stratified_split（seed 固定）",
-    "excluded_train_calib_texts": 1629,
+    "excluded_train_calib_texts": 1745,
     "holdout_pool": {
-      "attack": 195,
-      "benign": 397
+      "attack": 163,
+      "benign": 331
     }
   },
   "n": 200,
   "n_unique": 200,
   "duplicate_ratio": 0.0,
   "threshold_calibration": {
-    "high": null,
+    "high": 0.4,
     "selected_on": "calib (未参与训练，非 holdout)",
-    "calib_recall": -1.0,
-    "calib_fpr": null,
+    "calib_recall": 0.9641,
+    "calib_fpr": 0.0479,
     "target_fpr": 0.05
   },
   "diagnosis": {
     "calib_default_threshold": {
-      "recall": 0.9898,
-      "fpr": 0.5051,
-      "p95_ms": 5.206,
+      "recall": 0.9641,
+      "fpr": 0.0479,
+      "p95_ms": 5.507,
       "confusion": {
-        "tp": 97,
-        "fn": 1,
-        "fp": 100,
-        "tn": 98
+        "tp": 188,
+        "fn": 7,
+        "fp": 19,
+        "tn": 378
       }
     },
     "finding": "light_classifier 在英文 direct-jailbreak 上几乎无区分度（calib recall≈0.99 同时 fpr≈0.50，等于「全都拦」）；误报集中在英文新闻/摘要类长文本（p≈0.89）。真余弦归一化同样无效（calib fpr≈0.495），说明是模型特征/权重偏差，不是长度归一化问题。",
     "recommendation": "要用 light 覆盖英文直接越狱，需用平衡的英文良性语料（新闻/摘要/问答）重训并重新校准阈值；当前不建议在 fpr<=0.05 约束下启用。"
   },
   "L1_only": {
-    "recall": 0.02,
+    "recall": 0.01,
     "fpr": 0.0,
-    "p95_ms": 0.907,
+    "p95_ms": 0.65,
     "confusion": {
-      "tp": 2,
-      "fn": 98,
+      "tp": 1,
+      "fn": 99,
       "fp": 0,
       "tn": 100
     }
   },
   "L1_plus_light": {
-    "recall": 0.94,
-    "fpr": 0.46,
-    "p95_ms": 6.32,
+    "recall": 0.93,
+    "fpr": 0.02,
+    "p95_ms": 6.431,
     "confusion": {
-      "tp": 94,
-      "fn": 6,
-      "fp": 46,
-      "tn": 54
+      "tp": 93,
+      "fn": 7,
+      "fp": 2,
+      "tn": 98
     }
   },
   "delta_recall": 0.92

@@ -146,18 +146,19 @@ def load(path=None):
         for lang, m in raw_models.items():
             vocab, ws = m["vocab"], m["w"]
             idf_list = m.get("idf") or [1.0] * len(vocab)
-            # 倒排：token -> (w, idf)；点积时 O(命中数)
-            inv = {g: (float(w), float(idf_list[i]))
-                   for i, (g, w) in enumerate(zip(vocab, ws)) if w}
-            models[lang] = {"inv": inv, "b": float(m["b"]),
+            # 两个倒排表：idf 覆盖**全部词表**（算模长用），w 只保留非零
+            # （算点积用）。合成一个表会让模长漏项，见 _score_one 注释。
+            idf_inv = {g: float(idf_list[i]) for i, g in enumerate(vocab)}
+            w_inv = {g: float(w) for g, w in zip(vocab, ws) if w}
+            models[lang] = {"idf": idf_inv, "w": w_inv, "b": float(m["b"]),
                             "threshold": float(m.get("threshold", 0.5))}
     else:
         # 兼容旧单模型格式（light-v1/v2/v3）
         vocab, ws = d["vocab"], d["w"]
         idf_list = d.get("idf") or [1.0] * len(vocab)
         models["default"] = {
-            "inv": {g: (float(w), float(idf_list[i]))
-                    for i, (g, w) in enumerate(zip(vocab, ws)) if w},
+            "idf": {g: float(idf_list[i]) for i, g in enumerate(vocab)},
+            "w": {g: float(w) for g, w in zip(vocab, ws) if w},
             "b": float(d["b"]),
             "threshold": float(d.get("threshold", 0.5))}
     obj = {"models": models, "ngrams": ngrams, "path": p,
@@ -239,17 +240,28 @@ def _route_langs(text, m):
 
 
 def _score_one(text, model, ngrams):
-    """单模型打分（不做标准化——由上层统一做）。"""
+    """单模型打分（不做标准化——由上层统一做）。
+
+    `num / norm` 就是 `dot(w, x̂)`：训练侧 `vec()` 会对 tf-idf 向量做 L2
+    归一化再喂给 SGD，所以推理必须同样除以自身模长。**不能去掉这个除法**
+    —— 去掉后 w 的尺度对不上，任何长文本都会被打到饱和（实测英文良性
+    误报从 2% 涨到 93%）。
+    """
     fs = _feats(text, ngrams)
     num = 0.0
     sq = 0.0
     for g, cnt in fs.items():
-        hit = model["inv"].get(g)
-        if hit:
-            w, idf = hit
-            val = cnt * idf
+        # 分母必须累加**全部在词表里的特征**（含 w=0 的），与训练侧
+        # `vec()` 的 `n = sqrt(sum(x_i^2))` 对齐。旧实现只累加 w!=0 的
+        # 特征，分母偏小 -> 分数系统性虚高（英文良性误报 2% -> 37%）。
+        idf = model["idf"].get(g)
+        if idf is None:
+            continue
+        val = cnt * idf
+        sq += val * val
+        w = model["w"].get(g)
+        if w:
             num += val * w
-            sq += val * val
     norm = math.sqrt(sq) or 1.0
     z = model["b"] + num / norm
     return 1.0 / (1.0 + math.exp(-max(-30, min(30, z))))
@@ -266,17 +278,28 @@ def classify(text, *, high=None, low=0.15, weights_path=None):
     # 注：不做「咨询问句降权」——实测它会误伤 2 条问句式真越狱
     # （chinese_jailbreak recall 1.0 -> 0.9677）。安全优先，宁可
     # chinese_adversarial FPR 踩在 0.10 的门槛上，也不牺牲召回。
-    if is_business_data(text):
-        # 业务结构数据降权 0.7：仍按同一阈值判定，但给结构语境留余量。
+    business = is_business_data(text)
+    if business:
         # 不改模型、不碰留出集 —— 这是输入侧语境特征。
-        p *= 0.70
-        norm *= 0.70
+        # 0.70 在「伪余弦」口径下够用；改成与训练一致的**点积**后，
+        # 结构化响应的分数整体上移（含 CJK 的 JSON 被混排路由交给 en 模型
+        # 并打到饱和 p=1.0），单纯降权压不回阈值下，所以还要更高证据门槛。
+        p *= 0.55
+        norm *= 0.55
     model = m["models"][lang]
     if high is None:
         high = model["threshold"]
     # 混排时用归一化值判定更稳（两个模型判定线不同，原始 p 不可直接比）
     measure = norm if len(_route_langs(normalize_text(text), m)) > 1 else p
-    if norm >= 1.0 or measure >= high:
+    # 结构化业务数据要**更高证据**才直接拦：它是合法响应的常见形态，而混排
+    # 路由会把含中文的 JSON 交给 en 模型判到饱和。证据不足时转复核（need_llm
+    # =True）——既不误杀业务响应，也不对伪装成 JSON 的攻击放行。
+    # 注意量纲：norm 是「相对自身阈值」的倍数，p 是概率，二者不能混比。
+    if business:
+        blocked = norm >= 1.9
+    else:
+        blocked = norm >= 1.0 or measure >= high
+    if blocked:
         return {"p": round(p, 4), "decision": "block", "need_llm": False,
                 "language": lang, "route": "light_high_confidence"}
     if measure <= low:

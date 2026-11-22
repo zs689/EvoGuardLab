@@ -7,6 +7,7 @@
 
 **词表来自领域常识，不是从留出集里挑词** —— 否则等于变相用测试集调参。
 """
+import re
 
 SEMANTIC_CLUSTERS = {
     "<IGN>": ("忽略", "无视", "忘记", "别管", "不要理会", "disregard",
@@ -82,7 +83,15 @@ def pinyin_tokens(text):
     compact = raw.replace(" ", "").replace("\u200b", "")
     hits = []
     for word, tok in PINYIN_TO_CLUSTER.items():
-        if word in compact:
+        if len(word) >= 4:
+            ok = word in compact
+        else:
+            # 短码（sc / rg / qb …）必须按**词边界**匹配。用子串匹配时
+            # 英文里 "score"/"description" 全都会命中，实测把正常英文
+            # 文本的分数从 0.14 推到 0.87（虚高 6 倍），是英文误报的主因。
+            ok = re.search(r"(?<![a-z])%s(?![a-z])" % re.escape(word),
+                           raw) is not None
+        if ok:
             hits.append(tok)
     if not hits:
         return []
