@@ -73,6 +73,12 @@ MIN_STAT_POWER_TASKS = 5
 MAX_EVALUATION_AGE_S = 24 * 3600
 # 门禁自身的版本：评估明细里的字段布局变了，旧明细就不能再被新门禁读取。
 PROMOTION_PROTOCOL = "promotion-gate-v1"
+# HARD-03-T1：新晋升协议 v2 —— 最小 8 配对样本 + 单侧 chance p < 0.05。
+# v1_legacy 仅供历史库里已 active 的 7 个技能保留，不强行使其失效。
+EVAL_PROTOCOL_V2 = "v2"
+EVAL_PROTOCOL_V1 = "v1_legacy"
+MIN_PAIRED_V2 = 8
+MAX_CHANCE_P = 0.05
 
 # 技能「正文」= 决定执行行为的全部字段。status / version / 时间戳刻意排除：
 # 晋升本身会改它们，纳入哈希会让同一评估在幂等重放时立刻失效。
@@ -318,7 +324,8 @@ def _outcome(result):
     return bool(success), rid, cost
 
 
-def evaluate(store, skill, target_cases, guard_cases, run_case, *, training_cases=()):
+def evaluate(store, skill, target_cases, guard_cases, run_case, *,
+             training_cases=(), protocol=EVAL_PROTOCOL_V1):
     """同 case/seed 成对验证。空分母不可估计；不足三项独立任务不得自动晋升。
 
     training_cases 用于排除训练任务/家族，两个正式入口必须传入。
@@ -399,6 +406,23 @@ def evaluate(store, skill, target_cases, guard_cases, run_case, *, training_case
         verdict = "NEEDS_REVIEW"
         reasons.append("target gain below promotion threshold")
 
+    # HARD-03-T1：v2 统计显著门禁。v1_legacy 保持旧工程信号判定不变。
+    if protocol not in (EVAL_PROTOCOL_V1, EVAL_PROTOCOL_V2):
+        raise ValueError("未知晋升评估协议：%r（可选 v2/v1_legacy）" % protocol)
+    chance_p = _chance_p(
+        (gain_pp or 0) / 100.0 * t_n if gain_pp is not None else 0, t_n)
+    stat_sig = bool(chance_p is not None and chance_p < MAX_CHANCE_P
+                    and t_n >= MIN_PAIRED_V2)
+    if protocol == EVAL_PROTOCOL_V2 and verdict == "PROMOTE":
+        if t_n < MIN_PAIRED_V2:
+            verdict = "REJECT"
+            reasons.append("统计样本不足：v2 要求配对样本 >= %d（当前 %d）"
+                           % (MIN_PAIRED_V2, t_n))
+        elif not stat_sig:
+            verdict = "REJECT"
+            reasons.append("统计不显著：chance p=%.4f >= %.2f"
+                           % (chance_p or 1.0, MAX_CHANCE_P))
+
     # 评估绑定的是「这一份候选正文」和「这一组验证题」。晋升时重新指纹比对，
     # 正文被改、验证题被换或配对明细被篡改都会让旧评估失效。
     vc = _validation_cases(target_cases, guard_cases, training_cases)
@@ -423,9 +447,9 @@ def evaluate(store, skill, target_cases, guard_cases, run_case, *, training_case
                              "min_validation_tasks": MIN_VALIDATION_TASKS},
               "pairs": pairs,
               # 统计功效披露：gain_pp/target_n 换算成命中数后算「纯运气」概率
-              "chance_p_value": _chance_p(
-                  (gain_pp or 0) / 100.0 * t_n if gain_pp is not None else 0,
-                  t_n),
+              "chance_p_value": chance_p,
+              "stat_significant": stat_sig,
+              "eval_protocol": protocol,
               "stat_note": (
                   "target_n=%d 时全对仅 p=%.3f，不达 0.05；此判定应视为"
                   "工程信号而非统计显著" % (t_n, _chance_p(t_n, t_n) or 0)
@@ -890,4 +914,27 @@ def list_skills(store, status=None, limit=None, cursor=None):
         sql += " LIMIT ?"
         args.append(int(limit))
     with store.conn() as c:
-        return [dict(r) for r in c.execute(sql, args).fetchall()]
+        rows = [dict(r) for r in c.execute(sql, args).fetchall()]
+    # HARD-03-T1：透出统计显著性。历史 active 技能在引入 v2 前晋升，
+    # 没有 stat_significant 字段 -> 标 v1_legacy，不强行使其失效。
+    for row in rows:
+        sid = row.get("id")
+        ev = None
+        with store.conn() as c:
+            try:
+                ev = c.execute(
+                    "SELECT stat_significant, eval_protocol, chance_p_value "
+                    "FROM skill_evaluations WHERE skill_id=? "
+                    "ORDER BY created_at DESC LIMIT 1", (sid,)).fetchone()
+            except Exception:                              # noqa: BLE001
+                ev = None                  # 旧库无新列，降级为空
+        row["eval_protocol"] = (
+            (dict(ev).get("eval_protocol") if ev else None)
+            or (row.get("eval_protocol") or EVAL_PROTOCOL_V1))
+        row["stat_significant"] = (
+            bool(dict(ev).get("stat_significant")) if ev
+            else (row.get("status") == ACTIVE and
+                  row["eval_protocol"] == EVAL_PROTOCOL_V1))
+        row["legacy_active"] = (row["eval_protocol"] == EVAL_PROTOCOL_V1
+                                and row.get("status") == ACTIVE)
+    return rows

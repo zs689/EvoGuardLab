@@ -436,16 +436,28 @@ def _extract_structured(diag, steps, repair_steps, cause, env_spec=None):
 def evaluate_and_promote(store, skill, target_cases, guard_cases,
                          run_case, *, training_cases=(),
                          auto_rollback_on_regression=True,
-                         require_info_gain=False):
+                         require_info_gain=False,
+                         protocol="v2"):
     """独立验证 → 晋升；出现退化则回滚。返回完整审计 dict。
 
     EVO-REBUILD-01-T1：晋升前强制信息增量门禁——泛泛流程提示即使 A/B
     数字好看也不许上线（实测这类提示在真模型上 -20pp）。
     """
+    # HARD-03-T1：真实晋升路径默认走统计显著 v2（n>=8 且 p<0.05）。
+    # 小样本工程机制场景（<=7 题，历史闭环单测/演示范例）自动降级 v1_legacy，
+    # 并在结果里显式标注 small_n_legacy —— 不冒充统计显著。
+    effective_protocol = protocol
+    small_n_legacy = False
+    if protocol == "v2" and len(target_cases or []) < 8:
+        effective_protocol = "v1_legacy"
+        small_n_legacy = True
     ev = _sk.evaluate(store, skill, target_cases, guard_cases,
-                      run_case, training_cases=training_cases)
+                      run_case, training_cases=training_cases,
+                      protocol=effective_protocol)
+    ev["small_n_legacy"] = small_n_legacy
     out = {"evaluation": ev, "promoted": False, "rolled_back": False,
-           "status": ev["verdict"]}
+           "status": ev["verdict"],
+           "small_n_legacy": small_n_legacy}
     if require_info_gain:
         gain_errors = _cs.validate_info_gain(skill)
         if gain_errors:

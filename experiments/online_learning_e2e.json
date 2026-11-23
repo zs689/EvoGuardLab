@@ -1,0 +1,115 @@
+{
+  "generated_at": "2026-11-23T13:26:04",
+  "honest_note": "默认规则驱动，验证协议/状态机闭环；**不是**真模型上的学习收益证明。未使用 DeepSeek（遵守用户约定）。",
+  "mode": "rule-driven (model-free)",
+  "phases": [
+    "learn_and_reuse",
+    "drift_detected",
+    "retire_and_relearn",
+    "relearned_reuse"
+  ],
+  "provider": null,
+  "summary": {
+    "drift_detected": true,
+    "first_6_pass": true,
+    "four_stage_closed": true,
+    "last_5_pass": true,
+    "n": 13
+  },
+  "trace": [
+    {
+      "active_rule": "v1",
+      "phase": "learn_and_reuse",
+      "rule": "v1",
+      "step": 1,
+      "success": true
+    },
+    {
+      "active_rule": "v1",
+      "phase": "learn_and_reuse",
+      "rule": "v1",
+      "step": 2,
+      "success": true
+    },
+    {
+      "active_rule": "v1",
+      "phase": "learn_and_reuse",
+      "rule": "v1",
+      "step": 3,
+      "success": true
+    },
+    {
+      "active_rule": "v1",
+      "phase": "learn_and_reuse",
+      "rule": "v1",
+      "step": 4,
+      "success": true
+    },
+    {
+      "active_rule": "v1",
+      "phase": "learn_and_reuse",
+      "rule": "v1",
+      "step": 5,
+      "success": true
+    },
+    {
+      "active_rule": "v1",
+      "phase": "learn_and_reuse",
+      "rule": "v1",
+      "step": 6,
+      "success": true
+    },
+    {
+      "active_rule": "v1",
+      "phase": "drift_detected",
+      "regression_detected": true,
+      "rule": "v2",
+      "step": 7,
+      "success": false
+    },
+    {
+      "learned": "v2",
+      "new_sha256": "dfcf8ac4e4f8e9aa",
+      "old_sha256": "0c265dafc23a4903",
+      "phase": "retire_and_relearn",
+      "retired": "v1",
+      "step": 8
+    },
+    {
+      "active_rule": "v2",
+      "phase": "relearned_reuse",
+      "rule": "v2",
+      "step": 9,
+      "success": true
+    },
+    {
+      "active_rule": "v2",
+      "phase": "relearned_reuse",
+      "rule": "v2",
+      "step": 10,
+      "success": true
+    },
+    {
+      "active_rule": "v2",
+      "phase": "relearned_reuse",
+      "rule": "v2",
+      "step": 11,
+      "success": true
+    },
+    {
+      "active_rule": "v2",
+      "phase": "relearned_reuse",
+      "rule": "v2",
+      "step": 12,
+      "success": true
+    },
+    {
+      "active_rule": "v2",
+      "phase": "relearned_reuse",
+      "rule": "v2",
+      "step": 13,
+      "success": true
+    }
+  ],
+  "version": 1
+}
