@@ -84,21 +84,30 @@ def detect_layered(text, *, judge=None, channel="tool_output"):
             return True, "L1_high_stakes", "block"
     except Exception:                                       # noqa: BLE001
         pass
-    if judge is not None:
-        try:
+    # HARD-02-T1：判官必须与威胁类型正交。
+    # - tool_output（不可信只读数据）：判「是否夹带工具劫持/状态改变指令」，
+    #   **不再**用 harmful_request_judge 判内容善恶（实测 136 条全 undecided）。
+    # - user_input（可信主指令）：仍走原有害请求判官。
+    try:
+        if judge is not None:
+            # 显式注入的判官优先：调用方可传 ProviderSpec 适配的
+            # IndirectInjectionJudge，或历史 harmful_request_judge。
+            # 这样既保留模型无关注入点，也不破坏既有判官计数测试。
             sm = HJ.guard_input_semantic(text, judge=judge)
+        elif channel == "tool_output":
+            # 无注入判官时，tool_output 走零依赖正交规则判官。
+            import indirect_injection_judge as _IIJ
+            sm = _IIJ.guard_tool_output(text)
+        else:
+            sm = None
+        if sm is not None:
             dec = sm.get("decision")
-            # SCORE-01-T1：guard_input_semantic 命中时返回 'deny'，
-            # 不可用返回 'report'。旧代码只判 'block' -> L2 永远不生效。
             if dec in ("deny", "block"):
                 return True, "L2_semantic", dec
             if dec == "report":
-                # 判官"不确定"（confidence 不足）与服务"不可用"是两件事：
-                # 前者是模型给了判断但证据不够，后者是压根没跑成。混记成
-                # L2_unavailable 会让「服务挂了」的指标永远不清零。
                 return False, "L2_undecided", "report"
-        except Exception as exc:                            # noqa: BLE001
-            return False, "L2_unavailable", "error:" + type(exc).__name__
+    except Exception as exc:                                # noqa: BLE001
+        return False, "L2_unavailable", "error:" + type(exc).__name__
     return False, "none", "allow"
 
 
@@ -368,6 +377,22 @@ def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1,
         # 否则 ASR 的置信区间会被虚假样本量高估。
         "n_unique": len(uniq),
         "duplicate_ratio": (round(1 - len(uniq) / n, 4) if n else 0),
+        # 自证：把「这次数字凭什么可信」写进产物，而不是等人事后排错。
+        # 三项都是**算出来的**，不通过就直接抛（见上面的守恒断言）。
+        "self_checks": {
+            "partition_verified": True,
+            "unique_share": round(len(uniq) / n, 4) if n else None,
+            "l2_coverage": (
+                round((hits["L2_semantic"] + hits["L2_undecided"]
+                       + hits["L2_unavailable"])
+                      / max(1, n - hits["L1_light"] - hits["L1_high_stakes"]),
+                      4)
+                if (n - hits["L1_light"] - hits["L1_high_stakes"]) else None),
+            "degraded_share": round(hits["L2_unavailable"] / n, 4) if n else 0,
+            "warning": ("L2 不可用占比 %.1f%% > 10%%，ASR 偏低不可信"
+                        % (100.0 * hits["L2_unavailable"] / n)
+                        if n and hits["L2_unavailable"] / n > 0.1 else None),
+        },
     }
 
 def _is_benign(r):

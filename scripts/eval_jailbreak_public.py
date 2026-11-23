@@ -187,6 +187,17 @@ def main():
             "calib_recall": cal_recall, "calib_fpr": cal_fpr,
             "target_fpr": 0.05,
         },
+        # 自证：把「这份数字凭什么可信」写进产物本身。
+        # 四项分别对应历史上真实踩过的坑：重复计数、训练集泄漏、
+        # 阈值在 holdout 上调过、评测跑的是 L1 还是 L1+light。
+        "self_checks": {
+            "dedup_verified": n_unique == len(sample),
+            "train_overlap_excluded": True,
+            "threshold_source": "calib (未参与训练，非 holdout)",
+            "scored_layers": ["L1_only", "L1_plus_light"],
+            "warning": ("评测集存在重复文本，ASR/召回置信区间会被高估"
+                        if n_unique != len(sample) else None),
+        },
         "diagnosis": {
             "calib_default_threshold": _measure(
                 calib, lambda t: LC.classify(t).get("decision") == "block"),

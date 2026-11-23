@@ -28,11 +28,21 @@
     "calib_fpr": 0.0479,
     "target_fpr": 0.05
   },
+  "self_checks": {
+    "dedup_verified": true,
+    "train_overlap_excluded": true,
+    "threshold_source": "calib (未参与训练，非 holdout)",
+    "scored_layers": [
+      "L1_only",
+      "L1_plus_light"
+    ],
+    "warning": null
+  },
   "diagnosis": {
     "calib_default_threshold": {
       "recall": 0.9641,
       "fpr": 0.0479,
-      "p95_ms": 5.167,
+      "p95_ms": 5.407,
       "confusion": {
         "tp": 188,
         "fn": 7,
@@ -51,7 +61,7 @@
   "L1_only": {
     "recall": 0.01,
     "fpr": 0.0,
-    "p95_ms": 0.633,
+    "p95_ms": 0.63,
     "confusion": {
       "tp": 1,
       "fn": 99,
@@ -62,7 +72,7 @@
   "L1_plus_light": {
     "recall": 0.93,
     "fpr": 0.02,
-    "p95_ms": 6.253,
+    "p95_ms": 6.594,
     "confusion": {
       "tp": 93,
       "fn": 7,

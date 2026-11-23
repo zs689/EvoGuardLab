@@ -844,6 +844,46 @@ def c_static_names():
                    "pyflakes ai-service/evoguard/*.py")
 
 
+def c_eval_self_checks():
+    """EG-025：评测产物必须自带 self_checks，而不是靠人记得排错。
+
+    历史上同一份产物出过：重复计数（0.129 应为 0.0645）、训练集自评、
+    限流被永久缓存成 136 条 unavailable、切分参数不同导致 fpr 从 0.045
+    变 0.46。这些都不是算错，是**没人核对口径**。产物里显式写清"验了什么"，
+    复核时先看这一块，比事后对照代码快得多。
+    """
+    need = {
+        "experiments/pub_jailbreak_layered.json": ("dedup_verified",
+                                                   "train_overlap_excluded"),
+        "experiments/pub_bench_layered.json": ("partition_verified",),
+    }
+    missing = []
+    for rel, keys in need.items():
+        p = os.path.join(ROOT, rel)
+        if not os.path.isfile(p):
+            missing.append("%s 不存在" % rel)
+            continue
+        try:
+            d = json.load(open(p, encoding="utf-8"))
+        except Exception:                                  # noqa: BLE001
+            missing.append("%s 无法解析" % rel)
+            continue
+        node = d.get("self_checks")
+        if node is None and isinstance(d.get("sets"), dict):
+            node = (d["sets"].get("injecagent_public") or {}).get("self_checks")
+        if not isinstance(node, dict):
+            missing.append("%s 缺 self_checks" % rel)
+            continue
+        for k in keys:
+            if k not in node:
+                missing.append("%s 缺 %s" % (rel, k))
+    ok = not missing
+    return _result("EG-025/eval-self-check", ok,
+                   ("评测产物自带 self_checks（去重/隔离/分桶）"
+                    if ok else "；".join(missing[:3])),
+                   "experiments/pub_*_layered.json")
+
+
 CHECKS = [
     ("EG-003", c_dockerignore),
     ("EG-003", c_dockerfile_copy),
@@ -860,6 +900,7 @@ CHECKS = [
     ("EG-020", c_frontend_session),
     ("EG-023", c_gate_in_ci),
     ("EG-024", c_static_names),
+    ("EG-025", c_eval_self_checks),
     ("EG-001", c_enterprise_e2e),
     ("EG-009", c_jobs_e2e),
     ("EG-008", c_audit_multiprocess),
