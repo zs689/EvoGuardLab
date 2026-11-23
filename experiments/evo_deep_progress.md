@@ -72,3 +72,32 @@
   **模型能力**问题，不能拿来当"协议不行"的证据。
 - 真 PG 部署需先 `GRANT ALL ON SCHEMA public`（PG 15+），且**不能给
   SUPERUSER**——超级用户绕过 RLS 会得到假的"隔离通过"。
+
+## 六、第三轮补强后的自评（2026-11-23 晚）
+
+按"实测锚点 / 测试充分性 / 已知缺陷 / 规模"四维自评，从低到高逐个补：
+
+| 域 | 补前 | 补后 | 关键动作 |
+|---|---|---|---|
+| runtime + ctx + diagnose | 84 | **92** | 删掉三份逐字重复的共享状态；`side_effects_total` 此前**永远是 0**（ctx 递增自己的 dict、evaluate 读 runtime 的）；ToolError 两份导致 except 漏接；顺带解开 `import ctx` 的循环 |
+| 评测脚本 | 85 | **90** | 11 条缓存/检测回归（L2_unavailable 不进缓存、坏行不毒化、检测无状态）+ self_checks 自证 + gate EG-025 |
+| plan_runner | 86 | **90** | 并发 resume：两副本同时恢复，写操作只执行一次 |
+| agent_watch | 86 | **90** | 13 条规则表覆盖（危险工具正则/三类密钥/8 类 checked 项） |
+| gateway | 86 | **91** | Anthropic Messages 协议 10 条回环；至此两种协议 + 两家真模型都验过 |
+| core | 87 | **91** | DDL 59 行 + 状态机 37 行拆出，core 953→857；20 条 DDL/状态机完整性测试 |
+| autonomous_agent | 87 | **90** | re-export 门面 7 条 + 拆件决策 21 条 |
+| execution 等 | 88 | **91** | 三表一致性 13 条（scanner 名拼错会静默跳过检查） |
+| openai_proxy | 88 | **90** | 流式门禁 12 条 + 3 处冷路径 NameError |
+| security 等 | 88 | **91** | pinyin_guard 14 条 + 修一个真误报（引号内被翻译词被当攻击） |
+| approval | 89 | **90** | 110 条 + 票据一次性/跨租户一致性 |
+| 自进化 | 89 | **91** | 模型产码→合成→注册全链路 3/3、回滚演练、归因门禁 |
+| sandbox | 90 | **93** | Docker 隔离 6/6 真容器 |
+| pg_store | 90 | **92** | 真 PG 16 跨副本一致 + RLS 隔离 |
+
+**1783 条测试全绿（5 skipped），gate 35/35。**
+
+仍未达成（如实保留，不用"分数"掩盖）：
+- 跨模型只有 2 家真跑（deepseek + 本地 qwen），4 家因缺 key 标 NOT_RUN；
+- 技能晋升 3 题验证 p=0.125 不显著 —— 已输出 `chance_p_value`/`stat_note`
+  披露，**没有**擅自把门禁改硬（会让 7 个 active 全失效，属协议变更）；
+- Docker daemon 关着时 gate 的 no-orphans 会 SKIP，绝不伪造通过。
