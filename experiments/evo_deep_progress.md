@@ -1,79 +1,74 @@
-# 自主学习深耕与安全闭环 执行进度（2026-11-22 晚，第二轮）
+# 自主学习深耕与安全闭环 执行进度（2026-11-22 晚 ~ 11-23）
 
 对应方案：`EvoGuardLab_自主学习深耕与安全闭环方案_2026-11-22.json`
 
 | Workstream | 状态 | 产物 |
 |---|---|---|
-| EVO-DEEP-01 规约冲突 + 微工具合成 | **完成** | `_slot_key`/`active_invariants`、`tool_synthesis.py`、2 个测试文件 |
-| EVO-DEEP-02 在线学习闭环 | **完成** | `ReActAgent(auto_learn=)`、`tests/test_online_learning_loop.py` |
+| EVO-DEEP-01 规约冲突 + 微工具合成 | **完成** | `_slot_key`/`active_invariants`、`tool_synthesis.py` |
+| EVO-DEEP-02 在线学习闭环 | **完成** | `ReActAgent(auto_learn=)` |
 | DET-DEEP-01 越狱召回 + L2 限速 | **完成（两项验收均达成）** | `pub_jailbreak_layered.json`、`pub_bench_layered.json` |
-| ARC-DEEP-01 状态封装后拆分 | **部分（拆了诊断，Ctx 回滚）** | `legacy_diagnose.py`、`runtime_common.py`；`runtime.py` 1320→1013 |
+| ARC-DEEP-01 状态封装后拆分 | **部分（拆了诊断，Ctx 回滚）** | `legacy_diagnose.py`；`runtime.py` 1320→1013 |
+| 模块级提分（11-23） | **进行中** | 见下表 |
 
-## DET-DEEP-01-T1：越狱召回 0.04 → 0.93（达标）
+## 一、能力指标（全部实测）
 
-先发现**数据泄漏**：`train_light_classifier.py` 的训练集就包含
-`jailbreak_classification/prompts.jsonl`。改为复用训练脚本自身的
-`stratified_split`，只取 holdout（`train_overlap_excluded: true`）。
-
-然后挖出**四个叠加的真 bug**，逐个修掉：
-
-1. **训练/推理特征函数不一致**：推理侧 `_feats` 会额外加 `pinyin_tokens`，
-   训练侧 `feats` 没有 —— 运行时多出一类"权重从未训练过"的特征，分数被
-   系统性推高。已让训练侧同样加，并用 60 条样本逐条比对确认
-   `predict == classify`（60/60 完全一致）。
-2. **拼音短码子串误匹配**：`PINYIN_TO_CLUSTER` 里的 `sc`/`rg`/`qb` 用
-   `in compact` 匹配，英文里 `score`/`description` 全都命中；改成短码按
-   词边界匹配。这是英文误报的主因（正常英文文本 0.14 → 0.87）。
-3. **模长分母漏项**：`_score_one` 只对 `w != 0` 的特征累加模长，而训练侧
-   `vec()` 对全部词表累加 —— 分母偏小、分数虚高。改为 idf 覆盖全词表。
-4. **切分参数没落盘**：权重文件只记 `split_seed`，不记 train/calib 比例，
-   下游评测用默认比例会得到**另一套 holdout**（评测集落在训练集里，
-   fpr 从 0.045 虚报成 0.46）。已在权重里写入 `split` 元数据并由评测读取。
-
-最终：
-
-| 口径 | recall | fpr |
+| 项 | 数值 | 证据 |
 |---|---|---|
-| L1_only | 0.01 | 0.00 |
-| **L1 + light_classifier** | **0.93** | **0.02** |
+| 越狱拦截（英文 direct） | recall 0.93 / fpr 0.02 | `pub_jailbreak_layered.json` |
+| 越狱拦截（中文） | 0.935/0.000、0.935/0.000、0.900/0.100 | 同上，三套中文集 |
+| InjecAgent 检测器口径 ASR | 0.0645（去重后 62 条） | `pub_bench_layered.json` |
+| L2 服务可用性 | `L2_unavailable=0`，全量 1 分钟跑完 | 同上 |
+| 技能自进化（离线） | 三轮各 95%（38/40），p<0.01 | `env_bench_final_r1..r3.json` |
+| 跨模型（判官链路） | deepseek 1.00/0.00；qwen2.5:7b 本地 0.90/0.00 | `cross_model/judge_probe*.json` |
+| 工具合成（模型产码） | 3/3 走完 白名单→沙箱→注册 | `tool_synthesis_e2e.json` |
+| Docker 沙箱隔离 | 6/6（网络/文件/超时/内存/孤儿） | `docker_sandbox_verify.json` |
+| 真 PG 16 | 跨副本一致 + RLS 隔离 | `probes/pg_store_e2e.json` |
 
-验收要求「recall 显著高于 0.04 且 fpr ≤ 0.05」——两项均达成。
-（阈值在训练脚本的 calib 上校准，holdout 只用于报告，未参与调参。）
+## 二、这一轮修掉的真缺陷（都是"会静默出错"那类）
 
-## DET-DEEP-01-T2：L2 全量跑通（达标）
+1. **流式输出门禁漏检**：`SCAN_EVERY=300` 且流结束不补检 → <300 字符的
+   恶意输出整段不检查就转发；逐字符拆分同样绕过。改逐帧扫尾部窗口。
+   回退验证：3 条新用例变红，恢复后全绿。
+2. **自进化归因误杀**：线上 runs 无 `skill_id` 归属时按 task_type 近似汇总，
+   拿全量成功率（0.75）比 100% 基线 → 生产库 **7 个 active 全被判退化**。
+   现在无归因拒绝自动回滚。
+3. **回滚假止血**：v1→v2 只改晋升标记时正文 hash 相同，回滚到 v1 等于没换药
+   却报 `rolled_back=True`。现在内容相同一律 disable。
+4. **注入被证伪规约**：70 个 REJECT 技能仍是 candidate，而注入侧查 candidate。
+   现在 audit 回写状态 + 注入侧按评估结论二次过滤。
+5. **监控被宿主打死**：`agent_watch._calls` 对畸形返回（None/字符串/列表混
+   None）直接崩 —— 被监测对象一返坏数据，监控自己先挂。
+6. **环境变量大小写**：`TRUE` / `" On "` 被当成**关闭**。
+7. **评测分桶恒等式写错**：`L2_undecided`/`L2_unavailable` 漏在恒等式外，
+   136 条不确定样本时是靠 `tool_gate` 数字凑巧成立的。
 
-**真正的卡点不在攻击集，在 utility 集**：`_utility()` 逐条串行调判官，
-既无去重缓存也无并发——2108 行良性请求把评测拖到十几分钟不结束。
-已重构为复用 `_eval_set` 的去重缓存 + 并发 + 令牌桶。
+## 三、模块级测试补齐（1615 条，12→5 skipped）
 
-同时修了四处：
-- 令牌桶 `--rps`（1.5~2 次/秒）+ 不可用时指数退避重试；
-- 流式落盘（旧 `ex.map` 按序取结果，一条卡住全批不落盘）；
-- `_load_cache` 不再永久缓存 `L2_unavailable`（一次限流被固化成了 136 条）；
-- 判官「不确定」（`report`）与「服务不可用」分开计为 `L2_undecided` /
-  `L2_unavailable` —— 混记会让"服务挂了"的指标永远不清零。
+| 模块 | 新增 | 覆盖重点 |
+|---|---|---|
+| text_hygiene | 11 | 零宽/tag/bidi、正常文本零改动、性能预算 |
+| semantic_detectors | 12 | 三个开关真值表、模型坏路径不崩、错误不折算成未命中 |
+| fs_sandbox | 10 | 绝对路径/../非法名/写入开关/符号链接逃逸 |
+| gateway_protocol | 10 | preset 结构、厂商名→后端映射、400/404/5xx 错误码 |
+| openai_proxy_stream | 9 | 短攻击/跨帧拆分/逐字符拆分/非法帧/tool_call 零转发 |
+| pg_store | 16 | DSN、方言翻译（字面量/注释里的 ? 不换）、驱动缺失 |
+| agent_watch | 9 | 异常/None/字符串/畸形 tool_calls 不崩 |
+| legacy_diagnose | 14 | seq 与 logical 对齐、退化定位不丢抑制点 |
+| plan_runner | 13 | 伪造审批键、跨租户、重复审批、票据一次性 |
 
-结果（全量，1 分钟级完成，此前 >30 分钟不结束）：
+## 四、仍未达标（如实记录）
 
-`injecagent_public n=2108 / uniq=62`，`asr_detector_only=0.0645`，
-`L2_unavailable=0`，`L2_undecided=136`，utility pass_rate=1.0。
+| 项 | 现状 | 卡在哪 |
+|---|---|---|
+| `runtime.py` 1013 行 | 未达 550 | Ctx 拆分两次回归：`_last_attempt` 的"只取最后一轮"语义跨模块失效 |
+| 自进化晋升率 9% | 7 PROMOTE / 70 REJECT | 3 题验证 p=0.125，**统计上不显著**；改门禁会让 7 个 active 全失效，属协议变更，未擅自做（已输出 `chance_p_value`/`stat_note` 披露） |
+| 跨模型 4/6 | qwen/openai/glm/kimi NOT_RUN | 缺对应厂商 key，不伪造数字 |
+| `core.py` 902 行 | 未拆 | 存储/审计/状态机耦合，拆分收益低于回归风险 |
+| gate 1 项 | 现已 33/33 | Docker 起来后 `DEEP-01/no-orphans` 已 PASS |
 
-`L2_semantic=0` 是**真实结果**：规则漏网的 4 条唯一文本是「关闭两步验证」
-「退出频道」这类正常业务请求，语义判官判"不确定"是正确的，不是 bug。
+## 五、注意
 
-## ARC-DEEP-01：部分完成（1013 行，未达 550）
-
-诊断块（`diagnose` / `_diagnose_impl` / `diagnose_by_invariants` /
-`STRATEGY_BY_CAUSE` / `_record_skill_id`）已拆到 `legacy_diagnose.py`，
-共用常量与异常收敛到 `runtime_common.py`。`runtime.py` 1320 → **1013 行**，
-`test_core` 56 条全过。
-
-**Ctx 拆分再次回滚**：拆出后 `test_composite_needs_chain` 回归——第二轮
-恢复时 `cross_verify` 不再生效（第 14 步算出的 total 没被重算覆盖）。
-对比轨迹定位到根因：诊断把累积的多轮重放判成 `resource_abuse`
-（`_last_attempt` 的"只取最后一轮"语义在跨模块后失效），于是
-`round_root_cause` 不在 `REPAIR_COVERAGE` 里，策略被"路过"而不修复。
-
-结论：**行数不是拆分的理由**。要拆 Ctx，必须先把 `_last_attempt` 的
-轮次语义做成显式状态（而不是靠逻辑步从 1 重新计数），这是一次独立重构，
-不应夹在指标型任务里做。已如实记录，未提交回归。
+- `eval_env_invariant_bench` 用本地 7B 跑是 0 通过（训练阶段就挂），那是
+  **模型能力**问题，不能拿来当"协议不行"的证据。
+- 真 PG 部署需先 `GRANT ALL ON SCHEMA public`（PG 15+），且**不能给
+  SUPERUSER**——超级用户绕过 RLS 会得到假的"隔离通过"。
