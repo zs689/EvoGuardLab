@@ -1,0 +1,10 @@
+{
+  "model": "deepseek-chat",
+  "model_denied": 0,
+  "model_only_hits": 0,
+  "note": "候选=规则判官放行的去重攻击文本；model_only_hits 是模型独立补上的命中（规则未覆盖）。这不是全量 recall，只用于归因：证明模型判官不是陪跑。",
+  "provider": "deepseek",
+  "rows": [],
+  "rule_allow_candidates": 0,
+  "version": 1
+}
