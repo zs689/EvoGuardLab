@@ -1,0 +1,26 @@
+{
+  "detection": {
+    "L1": 56,
+    "L2": 4,
+    "asr_detector_only": 0.0,
+    "attack_unique_texts": 62,
+    "fpr_expanded": {
+      "fpr": 0.0,
+      "n": 1322,
+      "note": "jailbreak_classification 公开良性英文 1322 条唯一；Wilson95%上界<0.3%"
+    },
+    "fpr_same_source": {
+      "fpr": 0.0,
+      "n": 17,
+      "note": "InjecAgent user_instruction 唯一17条，严格但分母小"
+    }
+  },
+  "gateway": {
+    "fix": "get_provider(force=<preset>) 自动套预设 backend/base/key/model",
+    "verified": "force=deepseek -> openai_compat + api.deepseek.com/v1 + deepseek-chat，真调用返回 OK",
+    "why": "此前落到 LocalProvider 连 127.0.0.1，失败后静默回退，报告写 deepseek 但没调过"
+  },
+  "generated_at": "2026-11-23T19:5x",
+  "honest_note": "FPR=0/1322 说明误报率确实很低，但扩充集与 InjecAgent 非同任务分布，只给统计分母，不外推。ASR=0 是检测+门禁上界，非业务损失率。",
+  "version": 1
+}

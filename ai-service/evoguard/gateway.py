@@ -774,6 +774,23 @@ def get_provider(force=None, *, role=None, spec=None):
     """
     sp = spec or ProviderSpec.from_env(role=role)
     mode = (force or sp.backend or "mock").strip()
+    # HARD-网关防静默降级：force 传的若是**预设名**（deepseek/qwen/openai…），
+    # 必须自动套预设的 backend/base/key/model。否则会落到 else->LocalProvider
+    # 连 127.0.0.1:1234，调用失败后判官静默回退规则，报告却写着该厂商——
+    # 这是实测踩过的假绿坑（scripts/provider_from_preset.py 有记录）。
+    # 显式 spec 里已给的字段优先，不被预设覆盖。
+    _pre = PROVIDER_PRESETS.get(mode.lower())
+    if _pre and spec is None:
+        _be, _base, _keyenv, _model, _tools = _pre
+        sp = ProviderSpec(
+            backend=_be,
+            base_url=sp.base_url or _base,
+            model=sp.model or _model,
+            api_key_env=sp.api_key_env or _keyenv,
+            supports_tools=sp.supports_tools,
+            supports_json_mode=sp.supports_json_mode,
+            extra_body=sp.extra_body, timeout=sp.timeout)
+        mode = _be
     # 缓存键要包含"实际生效的模型/端点"，否则按角色路由会串用别的角色的连接：
     # 同一个 mode 但不同 base/model 必须分开缓存。
     key = "%s|%s|%s|%s" % (mode, sp.base_url or "", sp.model or "",

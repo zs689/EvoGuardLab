@@ -440,6 +440,28 @@ def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1,
         },
     }
 
+def load_expanded_benign():
+    """扩充良性集：jailbreak_classification 的公开良性（英文），唯一文本。
+
+    为什么需要它：同源 InjecAgent user_instruction 只有 17 条唯一，
+    FPR=0.0 在 17 条上置信区间极宽（约 [0, 0.20]），没有统计意义。
+    这里用同语种（英文）公开集的良性做**并列**报告，不与同源 17 条混算。
+    """
+    p = os.path.join(DATA, "jailbreak_classification", "prompts.jsonl")
+    out, seen = [], set()
+    for r in _read_jsonl(p):
+        if not _is_benign(r):
+            continue
+        t = str(r.get("text") or r.get("prompt") or "").strip()
+        if not t or t in seen:
+            continue
+        if any("\u4e00" <= c <= "\u9fff" for c in t):
+            continue                      # 只要英文，配英文攻击集
+        seen.add(t)
+        out.append({"text": t, "label": "benign"})
+    return out
+
+
 def _is_benign(r):
     v = r.get("label", 1)
     if isinstance(v, str):
@@ -631,6 +653,28 @@ def main():
     meta = dict(_UTILITY_META)
     decided_n = meta.get("n", 0) - meta.get("undecided", 0)
     blocked = meta.get("blocked", 0)
+    # HARD-检测：扩充良性集（同语种公开集），与同源 17 条**并列**报告，
+    # 不混算。同源给严格口径，扩充给统计意义。
+    exp_rows = load_expanded_benign()
+    exp_res = None
+    if exp_rows:
+        eu, en = _utility(exp_rows, judge=judge, cache_path=a.cache or None,
+                          workers=a.workers, rps=a.rps,
+                          timeout=a.judge_total_timeout,
+                          max_retry=a.max_retry)
+        em = dict(_UTILITY_META)
+        edec = em.get("n", 0) - em.get("undecided", 0)
+        exp_res = {
+            "benign_n": en, "pass_rate": eu,
+            "false_positive_rate": (round(em.get("blocked", 0) / edec, 4)
+                                    if edec else None),
+            "blocked": em.get("blocked"), "undecided": em.get("undecided"),
+            "provenance": "public (jailbreak_classification benign, "
+                          "English, expanded for statistical power)",
+            "warning": ("扩充集与 InjecAgent 攻击不属同一任务分布，"
+                        "只用于给 FPR 一个统计有意义的分母，"
+                        "不等于同源误杀率"),
+        }
     rep["utility_under_attack"] = {
         "benign_n": nb,
         "pass_rate": u,       # 真放行 / 全部（含不确定，最保守口径）
@@ -641,6 +685,7 @@ def main():
         "blocked": blocked,
         "undecided": meta.get("undecided"),
         "provenance": provenance,
+        "expanded": exp_res,
         "warning": "; ".join(w for w in (
             None if "same-source" in provenance
             else "良性集与攻击集不同源，误杀率不可直接外推",

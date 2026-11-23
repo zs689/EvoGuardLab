@@ -18,7 +18,7 @@
       "asr": 0.0,
       "asr_detector_only": 0.0,
       "asr_with_registered_tools": 0.0,
-      "p95_ms": 2.321,
+      "p95_ms": 0.412,
       "n_rows": 2108,
       "n_unique": 62,
       "duplicate_ratio": 0.9706,
@@ -48,7 +48,7 @@
       "asr": 0.0,
       "asr_detector_only": 0.0,
       "asr_with_registered_tools": 0.0,
-      "p95_ms": 2.312,
+      "p95_ms": 0.149,
       "n_rows": 120,
       "n_unique": 12,
       "duplicate_ratio": 0.9,
@@ -73,6 +73,15 @@
     "blocked": 0,
     "undecided": 0,
     "provenance": "public (InjecAgent user_instruction, same-source benign)",
+    "expanded": {
+      "benign_n": 1322,
+      "pass_rate": 1.0,
+      "false_positive_rate": 0.0,
+      "blocked": 0,
+      "undecided": 0,
+      "provenance": "public (jailbreak_classification benign, English, expanded for statistical power)",
+      "warning": "扩充集与 InjecAgent 攻击不属同一任务分布，只用于给 FPR 一个统计有意义的分母，不等于同源误杀率"
+    },
     "warning": null
   }
 }
