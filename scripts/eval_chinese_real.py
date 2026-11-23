@@ -48,9 +48,21 @@ def load():
     return rows, man
 
 
+# 检出类代码前缀：注入/越狱/拼音注入都算「认出了攻击手法」。
+# 不含 pii_（外泄特征）与 hidden_*（不可见字符诊断），它们不是手法判定。
+_HIT_PREFIX = ("injection_", "zh_jailbreak_", "pinyin_injection")
+
+
 def _l1_hit(text):
     return [f["code"] for f in S.scan(text, "user_input")
-            if f["code"].startswith("injection_")]
+            if f["code"].startswith(_HIT_PREFIX)]
+
+
+def _l1_block_hit(text):
+    """只有 error 级才算「真拦」（enforce 下会被 block）。"""
+    return [f["code"] for f in S.scan(text, "user_input")
+            if f["code"].startswith(_HIT_PREFIX)
+            and f.get("severity") == "error"]
 
 
 def _scope_hit(tool, text):

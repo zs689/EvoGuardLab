@@ -1,0 +1,32 @@
+{
+  "before": {
+    "direct_jailbreak_detect_rate": 0.0588,
+    "source": "本日早先 eval_chinese_real"
+  },
+  "chinese": {
+    "attack_n": 34,
+    "benign_n": 151,
+    "block_rate": 0.1765,
+    "blocked": 6,
+    "detect_rate": 0.4706,
+    "detected": 16,
+    "false_block": 0,
+    "false_positive": 0,
+    "fp_rate": 0.0
+  },
+  "chinese_jailbreak": {
+    "attack_n": 31,
+    "benign_n": 31,
+    "block_rate": 0.129,
+    "blocked": 4,
+    "detect_rate": 0.4516,
+    "detected": 14,
+    "false_block": 0,
+    "false_positive": 0,
+    "fp_rate": 0.0
+  },
+  "generated_at": "2026-11-23T20:5x",
+  "honest_note": "检出≠硬拦：高置信规则（系统覆盖/授权伪造）设 error 真拦，中置信（CTF/角色/多轮/编码/绕过）设 warn 只记录，避免误伤正常技术讨论。剩余约 50% 需中文语义模型，规则层到此为止。harmful_request 0.0 是内容审核任务，不归本注入层，属如实标注的边界。两个集同手法不同领域、检出率一致(0.45-0.47)，证明按手法泛化非照样本抄。",
+  "task": "Chinese jailbreak detection (L1 regex incl. new zh手法规则)",
+  "version": 1
+}
