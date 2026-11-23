@@ -14,6 +14,7 @@
 零第三方依赖。
 """
 import ast
+import os
 import concurrent.futures as _cf
 import importlib
 
@@ -90,13 +91,37 @@ def check_source(source, func_name):
             fn = node.func
             if isinstance(fn, ast.Name) and fn.id in BANNED_NAMES:
                 found.append("禁止调用 %s（第 %d 行）" % (fn.id, node.lineno))
-            if isinstance(fn, ast.Attribute) and fn.attr in BANNED_ATTRS:
+            if isinstance(fn, ast.Attribute) and (fn.attr.startswith("_")
+                                                  or fn.attr in BANNED_ATTRS):
                 found.append("禁止调用 .%s（第 %d 行）"
                              % (fn.attr, node.lineno))
+            if isinstance(fn, ast.Name) and fn.id == "range":
+                for arg in node.args:
+                    if isinstance(arg, ast.Constant) \
+                            and isinstance(arg.value, int) \
+                            and arg.value > 100000:
+                        found.append("range 上界过大（第 %d 行）"
+                                     % node.lineno)
+                    if isinstance(arg, ast.BinOp) \
+                            and isinstance(arg.op, ast.Pow):
+                        found.append("range 上界含幂运算（第 %d 行）"
+                                     % node.lineno)
         elif isinstance(node, ast.Attribute):
-            if node.attr in BANNED_ATTRS:
+            # HARD-01-T1：不再靠黑名单猜危险属性 —— 任何下划线开头
+            # 属性一律拒（dunder / 私有引用 / 模块内部逃逸都在这里断）。
+            if node.attr.startswith("_") or node.attr in BANNED_ATTRS:
                 found.append("禁止访问 .%s（第 %d 行）"
                              % (node.attr, node.lineno))
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            # HARD-01-T1：幂运算右操作数必须是小字面量，否则 10**(10**8)
+            # 这种常数炸弹会在沙箱里直接 OOM。
+            r = node.right
+            if isinstance(r, ast.Constant) and isinstance(r.value, int) \
+                    and r.value > 1000:
+                found.append("幂指数过大（第 %d 行）" % node.lineno)
+            elif not isinstance(r, ast.Constant):
+                found.append("幂指数必须是小整数字面量（第 %d 行）"
+                             % node.lineno)
         elif isinstance(node, ast.Name):
             if node.id in ("__builtins__", "__import__", "__loader__",
                            "__spec__"):
@@ -111,63 +136,74 @@ def check_source(source, func_name):
     return None
 
 
+
+def check_test_call(expr):
+    """HARD-01-T1：tests[].call 只许「函数名(纯字面量参数)」。
+
+    禁止属性访问/下标/推导式/lambda/布尔运算等任何可逃逸语法。
+    """
+    expr = str(expr or "").strip()
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError as exc:
+        raise ToolSynthesisError("测试表达式语法错误：%s" % exc) from exc
+    body = tree.body
+    if not isinstance(body, ast.Call) or not isinstance(body.func, ast.Name):
+        raise ToolSynthesisError("测试 call 必须是 函数名(字面量参数)")
+    if body.keywords:
+        raise ToolSynthesisError("测试 call 不允许关键字参数")
+    for arg in ast.walk(body):
+        # 负数字面量（-1）是合法纯参数：UnaryOp 只允许 +/- 包 Constant
+        unary_ok = (isinstance(arg, ast.UnaryOp)
+                    and isinstance(arg.op, (ast.USub, ast.UAdd))
+                    and isinstance(arg.operand, ast.Constant)
+                    and isinstance(arg.operand.value, (int, float)))
+        banned = (ast.Attribute, ast.Subscript, ast.Lambda,
+                  ast.ListComp, ast.DictComp, ast.SetComp,
+                  ast.GeneratorExp, ast.BinOp, ast.BoolOp,
+                  ast.IfExp, ast.NamedExpr, ast.Starred)
+        if (isinstance(arg, banned)
+                or (isinstance(arg, ast.UnaryOp) and not unary_ok)):
+            raise ToolSynthesisError(
+                "测试 call 含禁止的语法：%s" % type(arg).__name__)
+        if isinstance(arg, ast.Call) and arg is not body:
+            raise ToolSynthesisError("测试 call 不允许嵌套调用")
+        if isinstance(arg, ast.Name) and arg is not body.func:
+            raise ToolSynthesisError("测试 call 只允许被测函数名")
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str) \
+                and len(arg.value) > 4096:
+            raise ToolSynthesisError("测试字面量过长")
+    return body.func.id
+
+
 def _safe_import(name, *args, **kwargs):
     if _banned_import(name):
         raise ImportError("合成工具禁止导入 %s" % name)
     return importlib.import_module(name)
 
 
-def run_tests(source, func_name, tests, timeout_s=5):
-    """在受限 builtins 下跑正反例。tests=[{"call":"f(1)","expect":2}]。
-
-    `expect_exc` 用于反例：期望抛出的异常类型名。
-    """
-    if len(tests or []) < 3:
-        raise ToolSynthesisError("至少需要 3 条正反例测试（当前 %d）"
-                                 % len(tests or []))
+def _run_tests_child(source, func_name, tests):
+    """子进程 worker：受限 builtins 下 exec 源码 + 逐条 AST 校验过的 call。"""
     builtins = dict(SAFE_BUILTINS)
     builtins["__import__"] = _safe_import
     ns = {"__builtins__": builtins, "__name__": "synth_tool"}
-    try:
-        exec(compile(source, "<synthesized>", "exec"), ns)   # noqa: S102
-    except Exception as exc:                                # noqa: BLE001
-        raise ToolSynthesisError("源码执行失败：%s: %s"
-                                 % (type(exc).__name__, exc)) from exc
+    exec(compile(source, "<synthesized>", "exec"), ns)       # noqa: S102
     fn = ns.get(func_name)
     if not callable(fn):
         raise ToolSynthesisError("函数 %s 未定义或不可调用" % func_name)
-    # 超时保护（第二道）：`while` 已在 AST 层拒绝，但 `for i in range(10**9)`
-    # 这类仍可能极慢。注意线程无法强杀，超时只是「不再等」——真正的强隔离
-    # 需要子进程，这里只保证不把整个流程卡住。
-    # 不能用 `with`：ThreadPoolExecutor.__exit__ 会 join 工作线程，
-    # 而死循环线程永不结束 —— 退出时就把自己挂死了（实测卡到 SIGTERM）。
-    ex = _cf.ThreadPoolExecutor(max_workers=1)
-    try:
-        ex.submit(_run_case_loop, fn, tests, builtins,
-                  func_name).result(timeout=timeout_s)
-    except _cf.TimeoutError:
-        raise ToolSynthesisError(
-            "沙箱测试超时（>%ss），拒绝注册：疑似死循环/阻塞" % timeout_s)
-    finally:
-        # wait=False：放弃等待，让泄漏线程自行消亡；注册表不收录该工具。
-        ex.shutdown(wait=False, cancel_futures=True)
-    return True
-
-
-def _run_case_loop(fn, tests, builtins, func_name):
+    scope = {"__builtins__": builtins, func_name: fn}
     for i, t in enumerate(tests, 1):
         expr = str(t.get("call") or "").strip()
-        if not expr:
-            raise ToolSynthesisError("第 %d 条测试缺少 call" % i)
+        check_test_call(expr)                 # 子进程内再校验一次（纵深）
         try:
-            got = eval(expr, {"__builtins__": builtins, func_name: fn})  # noqa: S307
-        except Exception as exc:                            # noqa: BLE001
+            got = eval(expr, scope)            # noqa: S307
+        except Exception as exc:               # noqa: BLE001
             want = t.get("expect_exc")
             if want and type(exc).__name__ == want:
                 continue
             raise ToolSynthesisError(
-                "第 %d 条测试异常：%s: %s" % (i, type(exc).__name__, exc)
-            ) from exc
+                "第 %d 条测试异常：%s: %s"
+                % (i, type(exc).__name__, exc)) from exc
         if "expect_exc" in t:
             raise ToolSynthesisError(
                 "第 %d 条测试期望抛 %s，但正常返回 %r"
@@ -179,8 +215,81 @@ def _run_case_loop(fn, tests, builtins, func_name):
     return True
 
 
+_CHILD_TEMPLATE = """# -*- coding: utf-8 -*-
+import json, sys, os
+_here = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _here)
+import tool_synthesis as _ts
+payload = json.loads(sys.stdin.read())
+try:
+    _ts._run_tests_child(payload['source'], payload['func'],
+                         payload['tests'])
+    print(json.dumps({'ok': True}))
+except BaseException as exc:
+    print(json.dumps({'ok': False, 'error':
+                      type(exc).__name__ + ': ' + str(exc)[:300]}))
+"""
+
+
+def run_tests(source, func_name, tests, timeout_s=5):
+    """HARD-01-T2：在**独立短命子进程**里跑测试，超时直接 kill。
+
+    第一性原理：Python 线程无法强杀且共享主进程内存/GIL。旧实现用
+    ThreadPoolExecutor + wait=False 放弃等待，泄漏线程会继续吃满 CPU
+    并拖垮主服务。这里改用 subprocess + stdin/stdout JSON，超时
+    proc.kill() 彻底回收，主进程零线程泄漏、零 OOM 风险。
+    """
+    import json as _json
+    import subprocess as _sp
+    import sys as _sys
+    if len(tests or []) < 3:
+        raise ToolSynthesisError("至少需要 3 条正反例测试（当前 %d）"
+                                 % len(tests or []))
+    # 主进程先做 AST 校验（fail fast），子进程内再校验一次（纵深）
+    check_source(source, func_name)
+    for i, t in enumerate(tests, 1):
+        try:
+            check_test_call(str(t.get("call") or ""))
+        except ToolSynthesisError as exc:
+            raise ToolSynthesisError("第 %d 条测试：%s" % (i, exc)) from exc
+    here = os.path.dirname(os.path.abspath(__file__))
+    worker = os.path.join(here, "_synth_child.py")
+    if not os.path.isfile(worker):
+        with open(worker, "w", encoding="utf-8", newline="\n") as f:
+            f.write(_CHILD_TEMPLATE)
+    payload = _json.dumps({"source": source, "func": func_name,
+                           "tests": tests}, ensure_ascii=False)
+    try:
+        proc = _sp.Popen([_sys.executable, worker], cwd=here,
+                         stdin=_sp.PIPE, stdout=_sp.PIPE,
+                         stderr=_sp.PIPE, text=True,
+                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    except OSError as exc:
+        raise ToolSynthesisError("无法启动隔离子进程：%s" % exc) from exc
+    try:
+        out, _err = proc.communicate(payload, timeout=float(timeout_s))
+    except _sp.TimeoutExpired:
+        proc.kill()
+        proc.communicate()                    # 回收，避免僵尸
+        raise ToolSynthesisError(
+            "沙箱测试超时（>%ss），已强杀子进程；疑似死循环/阻塞"
+            % timeout_s)
+    finally:
+        if proc.poll() is None:               # 兜底：任何异常路径都杀
+            proc.kill()
+            proc.communicate()
+    try:
+        rep = _json.loads((out or "").strip().splitlines()[-1])
+    except (ValueError, IndexError) as exc:
+        raise ToolSynthesisError("隔离子进程无有效输出") from exc
+    if not rep.get("ok"):
+        raise ToolSynthesisError("沙箱测试失败：" + str(rep.get("error")))
+    return True
+
+
 def synthesize_tool(name, source, tests, *, registry=None, func_name=None,
-                    description="", schema=None, identities=None):
+                    description="", schema=None, identities=None,
+                    store=None):
     """校验 -> 沙箱测试 -> 上架。返回 {name, func, contract}。
 
     拒绝时不注册任何东西（失败即无副作用）。
@@ -198,6 +307,9 @@ def synthesize_tool(name, source, tests, *, registry=None, func_name=None,
     func = ns[fn_name]
     contract = {"read_only": True, "side_effect": "none",
                 "source": "synthesized", "description": description[:200]}
+    if store is not None:
+        store.save_synthesized_tool(name, source, fn_name, schema, tests,
+                                    version=1)
     if registry is not None:
         # 必须走 from_json_schema：裸 register 没有参数模型与身份，
         # 真实执行前的结构契约会直接拒绝（<tool>.known_schema 不合规）。
@@ -210,6 +322,40 @@ def synthesize_tool(name, source, tests, *, registry=None, func_name=None,
         # 不要再调 registry.register：它会用简化契约**覆盖**上面生成的结构
         # 契约（参数模型/身份全丢），真实执行前的 preflight 必然拒绝。
     return {"name": name, "func": func, "contract": contract}
+
+
+
+def reload_synthesized(store, registry):
+    """HARD-01-T3：从库里重载合成工具，先 sha256 + AST 双重复验。
+
+    数据库被篡改（源码换了但 sha256 没更新）直接拒绝加载，
+    不把库写权限等同于代码执行权限。
+    """
+    import hashlib as _hl
+    rows = store.load_synthesized_tools()
+    loaded = []
+    for rec in rows:
+        src = str(rec.get("source") or "")
+        got = _hl.sha256(src.encode("utf-8")).hexdigest()
+        if got != str(rec.get("source_sha256") or ""):
+            raise ToolSynthesisError(
+                "合成工具 %s 源码 sha256 不符，拒绝加载（库可能被篡改）"
+                % rec.get("name"))
+        fn = str(rec.get("func_name") or "")
+        check_source(src, fn)                 # AST 重新过一遍白名单
+        run_tests(src, fn, rec.get("tests") or [])
+        builtins = dict(SAFE_BUILTINS)
+        builtins["__import__"] = _safe_import
+        ns = {"__builtins__": builtins, "__name__": "synth_tool"}
+        exec(compile(src, "<synthesized-reloaded>", "exec"), ns)  # noqa: S102
+        import tool_contract as _tc
+        _tc.register_schema(rec["name"], rec.get("schema") or {})
+        registry.from_json_schema(
+            rec["name"], rec.get("schema") or {"type": "object",
+                                              "properties": {}},
+            scope="read_only", source="synthesized", identities=["react"])
+        loaded.append(rec["name"])
+    return loaded
 
 
 def describe():

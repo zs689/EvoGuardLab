@@ -192,6 +192,13 @@ CREATE TABLE IF NOT EXISTS agent_plans(
   next_step INTEGER, status TEXT, results TEXT,
   created_at REAL, updated_at REAL);
 
+-- HARD-01-T3：合成微工具持久化（重启后 AST 复验 + sha256 才能重载）
+CREATE TABLE IF NOT EXISTS synthesized_tools(
+  name TEXT PRIMARY KEY, tenant_id TEXT, source TEXT,
+  source_sha256 TEXT, schema_json TEXT, tests_json TEXT,
+  func_name TEXT, version INTEGER, status TEXT, created_at REAL);
+CREATE INDEX IF NOT EXISTS idx_synth_tenant ON synthesized_tools(tenant_id);
+
 CREATE INDEX IF NOT EXISTS idx_steps_run ON steps(run_id, seq);
 CREATE INDEX IF NOT EXISTS idx_faults_run ON faults(run_id);
 """
@@ -633,6 +640,50 @@ class Store:
             run_cols = {r[1] for r in c.execute("PRAGMA table_info(runs)")}
             if "skill_id" not in run_cols:
                 c.execute("ALTER TABLE runs ADD COLUMN skill_id TEXT")
+
+
+    # ---------- 合成工具持久化（HARD-01-T3）----------
+    def save_synthesized_tool(self, name, source, func_name, schema,
+                              tests, version=1, *, tenant_id="default",
+                              status="active"):
+        import hashlib as _hl
+        import json as _js
+        import time as _tm
+        with self.conn() as c:
+            c.execute(
+                "INSERT INTO synthesized_tools("
+                "name,tenant_id,source,source_sha256,schema_json,"
+                "tests_json,func_name,version,status,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(name) DO UPDATE SET "
+                "source=excluded.source, source_sha256=excluded.source_sha256,"
+                "schema_json=excluded.schema_json, tests_json=excluded.tests_json,"
+                "func_name=excluded.func_name, version=excluded.version,"
+                "status=excluded.status",
+                (str(name), str(tenant_id), str(source),
+                 _hl.sha256(source.encode("utf-8")).hexdigest(),
+                 _js.dumps(schema or {}, ensure_ascii=False, sort_keys=True),
+                 _js.dumps(tests or [], ensure_ascii=False, sort_keys=True),
+                 str(func_name), int(version), str(status), _tm.time()))
+        return str(name)
+
+    def load_synthesized_tools(self, *, tenant_id="default",
+                               status="active"):
+        import json as _js
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT name,source,source_sha256,schema_json,tests_json,"
+                "func_name,version,status FROM synthesized_tools "
+                "WHERE tenant_id=? AND status=? ORDER BY name",
+                (str(tenant_id), str(status))).fetchall()
+        out = []
+        for r in rows:
+            out.append({
+                "name": r[0], "source": r[1], "source_sha256": r[2],
+                "schema": _js.loads(r[3] or "{}"),
+                "tests": _js.loads(r[4] or "[]"),
+                "func_name": r[5], "version": r[6], "status": r[7]})
+        return out
 
     # ---------- 实验 ----------
     def create_experiment(self, name, agent_type, task_id, fault_type,
