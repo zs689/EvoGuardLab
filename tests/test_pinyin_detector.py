@@ -71,3 +71,27 @@ class TestSecurityIntegration(unittest.TestCase):
                    where="user_input")
         codes = [x["code"] for x in f]
         self.assertNotIn("pinyin_injection", codes, codes)
+
+
+class TestRealCorpusRegression(unittest.TestCase):
+    """真实中文语料良性上的误报必须为 0（防规则改动悄悄引入误报）。"""
+
+    def test_no_fp_on_real_chinese_benign(self):
+        import glob
+        benign = set()
+        for p in glob.glob(os.path.join(
+                ROOT, "data", "external", "chinese*", "cases.jsonl")):
+            for line in open(p, encoding="utf-8"):
+                if not line.strip():
+                    continue
+                r = json.loads(line)
+                if str(r.get("label")) in ("benign", "0", "safe", "normal"):
+                    t = str(r.get("text") or "").strip()
+                    if t:
+                        benign.add(t)
+        self.assertGreaterEqual(len(benign), 50,
+                                "真实中文良性语料应 >=50 条唯一")
+        fp = [t for t in benign if PG.scan(t)["hit"]]
+        self.assertEqual(len(fp), 0,
+                         "真实中文良性误报 %d/%d: %s"
+                         % (len(fp), len(benign), fp[:3]))

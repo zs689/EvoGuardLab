@@ -55,15 +55,18 @@
 | `AlertSink` | `resilience.py` | PagerDuty / Webhook / 飞书。现在只算出告警事件，不负责投递。 |
 | 证书轮换 | `tls_proxy.py` | ACME / 内部 CA 轮换。现在只接受现成证书路径。 |
 
-## 三、明确不做（写清楚，免得被当成「应该有」）
+## 三、默认不做 / 需企业侧自己接（写清楚，免得被当成「应该有」）
 
-- **数据库层行级隔离（RLS）**：sqlite 没有 RLS，本仓库也没有 PostgreSQL。
-  企业模式下改用**按租户分库**：`tenant_db_path()` 给每个租户一个独立
-  sqlite 文件，`get_store(tenant)` 按身份取对应库；`scripts/enterprise_smoke.py`
-  实测 acme 有 1 条 run 时 beta 查到 0 条。这是**物理隔离**，比原来的
-  `require_tenant_filter()` 字符串守门强得多，但**仍然不是 RLS**：跨库聚合、
-  统一备份、schema 变更要企业侧自己处理；换成 PostgreSQL + `ROW LEVEL
-  SECURITY` 才是数据库层策略。见台账 EG-001。
+- **数据库层行级隔离（RLS）默认不启用**：需要说明准确——本仓库**自带**
+  PG RLS 实现（`pg_rls.py` + `deploy/init-rls.sql`），并在**真 PostgreSQL**
+  上验过隔离：`probes/pg_rls_live.json` 记录 A/B 各见自己 1 行、无租户上下文
+  见 0 行、表 owner 也受限；`pg_audit_e2e.json` 记录两副本都能验全链、能检出
+  篡改。但**默认部署路径不是 RLS**：企业模式用**按租户分库**
+  （`tenant_db_path()` 每租户一个独立 sqlite，`get_store(tenant)` 按身份取库；
+  `scripts/enterprise_smoke.py` 实测 acme 有 1 条 run 时 beta 查到 0 条）。
+  两者区别：分库是**物理隔离**，比 `require_tenant_filter()` 字符串守门强，
+  但跨库聚合/统一备份/ schema 变更要企业侧自理；要数据库层策略需企业自己起
+  PG 并执行 `deploy/init-rls.sql`。**"验过"不等于"开箱启用"**。见台账 EG-001。
 - **持久作业与写路径性能**：同步 `POST /api/run` 仍在兼容期；新增
   `/api/jobs` 把提交与执行拆开（8 并发提交 P95 14.1 ms，完成 P95 1785 ms）。
   作业化改善的是**提交响应**，不是实验本身变快。同负载改前改后对比显示
@@ -129,7 +132,8 @@ wheel 制品在源码树外可用、请求体上限与堆栈不外泄、审计�
 **没解决的硬缺口**（不因改了一堆代码就改口）：
 
 1. 核心检测 v2 **仍未过自己的预注册线**；v3 只完成预注册，实验与独立复跑都没做；
-2. 隔离是按租户分库，**不是数据库 RLS**；
+2. 隔离**默认**是按租户分库，不是数据库 RLS（RLS 实现已提供并在真库验过，
+   只是不是默认部署路径，见 §三）；
 3. 写路径性能**有可开启的解法（只开池）但默认未启用**，WAL 已判定不可用；
 4. 单进程限流/指标、无真实业务流量、无 SSO、无多副本验证；
 5. Docker 镜像层与 GitHub CI **本轮未实测**（daemon / 远程仓库都没连）。
