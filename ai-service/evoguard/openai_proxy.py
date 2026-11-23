@@ -300,10 +300,14 @@ def describe():
 
 # ---- FIX-PRX-T2：SSE 流式门禁 -------------------------------------------
 #: 流式下「先发出去的话收不回来」，所以策略必须分两类：
-#: - 文本增量：每累计 SCAN_EVERY 字符扫一次 L1，命中高危立即中止并发错误帧
+#: - 文本增量：**每一帧都扫**，但只扫「累积缓冲的尾部窗口」。原先每累计
+#:   300 字符才扫一次，且流结束不补检 —— 一段 <300 字符的恶意输出会**一次
+#:   都没被检查**就转发给客户端（实测可绕过，见 test_stream_short_attack）。
+#:   逐帧扫尾部窗口既保证跨帧拆分的攻击能拼回来，又把单次开销压成常数。
 #: - tool_calls 增量：**一个字节都不转发**，聚合到流结束再判定，
 #:   通过才一次性发出。这样客户端永远不会拿到「半截参数」去执行。
-SCAN_EVERY = 300
+SCAN_EVERY = 300          # 保留：尾部窗口大小（>= 一次扫描需覆盖的跨帧长度）
+TAIL_WINDOW = 400
 
 
 def _sse(obj):
@@ -367,18 +371,17 @@ def process_sse(lines, *, payload, agent_type, registry, rails, cfg,
         if content:
             content_buf.append(content)
             scanned += len(content)
-            if scanned >= SCAN_EVERY:
-                chunk = "".join(content_buf)
-                f = _sec.scan(chunk, "assistant_output")
-                hard = [x for x in f if x.get("severity") == "error"]
-                audit["checks"].append({"stage": "stream_content",
-                                        "codes": [x["code"] for x in hard]})
-                if hard:
-                    blocked = {"reason": "stream_output_blocked",
-                               "codes": [x["code"] for x in hard]}
-                    break
-                content_buf = []
-                scanned = 0
+            # 每一帧都检查：只扫尾部窗口，保证 (a) 跨帧拆分的攻击能拼回来、
+            # (b) 短于 SCAN_EVERY 的输出不会漏检、(c) 单帧开销恒定。
+            chunk = "".join(content_buf)[-TAIL_WINDOW:]
+            f = _sec.scan(chunk, "assistant_output")
+            hard = [x for x in f if x.get("severity") == "error"]
+            audit["checks"].append({"stage": "stream_content",
+                                    "codes": [x["code"] for x in hard]})
+            if hard:
+                blocked = {"reason": "stream_output_blocked",
+                           "codes": [x["code"] for x in hard]}
+                break
         # 只转发「已通过检查的文本」与元数据
         safe_obj = json.loads(json.dumps(obj))
         for ch in (safe_obj.get("choices") or []):
