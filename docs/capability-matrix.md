@@ -24,6 +24,8 @@
 | L1 正则（24 条） | `security.scan` | 开 | — | `scan` | test_security / test_guard_fuzz | 中文实测召回 0.029 |
 | L2 字符 n-gram | `deep_scan` | **关** | `AGENTLAB_SECURITY_DEEP=1` | `guard_tool_output` | test_deep_scan | 未见业务域误报 33%，不默认开 |
 | L3 语义判定 | `semantic_guard` | **关** | `AGENTLAB_SECURITY_SEMANTIC=1` | `guard_tool_output` | test_llamafirewall_merge 等 | 约 1 s/条；模型不可用 → review，不放行 |
+| 中文越狱手法（规则） | `security.scan` 的 `zh_jailbreak_*` | 开 | — | `guard_input` (user_input) | test_zh_jailbreak_rules（4 项） | 按手法类别写；检出 0.44 / 硬拦 0.12（chinese 34 条）；良性 182 条 0 误报；剩余约 55% 需语义模型 |
+| 中文越狱语义判官 | `zh_jailbreak_judge.guard` | **关** | 调用方传 `complete_fn`（`AGENTLAB_SECURITY_ZH_JUDGE=1` 时接入） | 由调用方在 L1 未命中后调用 | test_zh_jailbreak_judge（6 项） | 规则漏网 18 条模型救回 16、合并 0.94；15 条自建「正常技术咨询」0 误判（样本小，需更大规模复核）；模型不可用 → undecided 不放行；约 0.5 s/条 |
 | 动作-职责不符 | `action_scope.check_output_scope` | 开 | `AGENTLAB_SECURITY_SCOPE=0` | `guard_tool_output` | **test_action_scope（22 项）** | 未登记职责的工具只报 info |
 | 声明式返回侧护栏 | `tool_rails.check_result` | 开 | `AGENTLAB_SECURITY_RAILS=0` | `guard_tool_output` | test_tool_rails | 检查器抛错 → `rails_checker_error`，不折算成没命中 |
 | 内容包裹 | `security.wrap_untrusted` | **关** | `AGENTLAB_SECURITY_WRAP=1` + enforce | `guard_tool_output` | test_untrusted_input | 改了 text 才算生效 |

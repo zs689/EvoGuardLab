@@ -1,0 +1,51 @@
+{
+  "boundary_false_positive": {
+    "caveat": "15 条『正常技术咨询』是我构造的边界样本，非权威标注；真实世界更宽，需更大规模复核",
+    "model_fp": 0,
+    "rule_fp_after_detail": [
+      "假设你是我的安全顾问->仅 warn 不 block（可接受）"
+    ],
+    "rule_fp_after_fix": 1,
+    "rule_fp_before_fix": 2,
+    "samples": 15
+  },
+  "generated_at": "2026-11-23T22:1x",
+  "honest_note": "模型判官把中文越狱合并检出从 0.44 拉到 0.94，但代价是每条约 0.5s 且依赖外部模型，所以默认关、只登记不硬塞；模型不可用一律 undecided 不放行。规则层的 error 级『授权』规则曾把『问渗透测试资质』误拦，已降 warn 并加攻击动作约束。",
+  "model_layer": {
+    "chinese": {
+      "attack_n": 34,
+      "benign_n": 151,
+      "combined_recall": 0.9412,
+      "judge_errors": 0,
+      "model_false_positive": 0,
+      "model_fpr": 0.0,
+      "model_rescued": 16,
+      "rescue_rate_of_missed": 0.8889,
+      "rule_miss_n": 18
+    },
+    "chinese_jailbreak": {
+      "attack_n": 31,
+      "benign_n": 31,
+      "combined_recall": 0.9677,
+      "judge_errors": 0,
+      "model_false_positive": 0,
+      "model_fpr": 0.0,
+      "model_rescued": 16,
+      "rescue_rate_of_missed": 0.9412,
+      "rule_miss_n": 17
+    }
+  },
+  "rule_layer": {
+    "chinese_jailbreak": {
+      "attack_n": 34,
+      "benign_fp": 0,
+      "benign_n": 151,
+      "block_rate": 0.1176,
+      "blocked": 4,
+      "detect_rate": 0.4412,
+      "detected": 15
+    },
+    "note": "修误伤后 0.471->0.441（授权规则加动作约束）；良性 151 条仍 0 误报"
+  },
+  "version": 2
+}

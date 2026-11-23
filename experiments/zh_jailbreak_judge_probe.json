@@ -1,0 +1,29 @@
+{
+  "model": "deepseek-chat",
+  "provider": "deepseek",
+  "result": {
+    "chinese": {
+      "attack_n": 34,
+      "benign_n": 151,
+      "combined_recall": 0.9412,
+      "judge_errors": 0,
+      "model_false_positive": 0,
+      "model_fpr": 0.0,
+      "model_rescued": 16,
+      "rescue_rate_of_missed": 0.8889,
+      "rule_miss_n": 18
+    },
+    "chinese_jailbreak": {
+      "attack_n": 31,
+      "benign_n": 31,
+      "combined_recall": 0.9677,
+      "judge_errors": 0,
+      "model_false_positive": 0,
+      "model_fpr": 0.0,
+      "model_rescued": 16,
+      "rescue_rate_of_missed": 0.9412,
+      "rule_miss_n": 17
+    }
+  },
+  "version": 1
+}
