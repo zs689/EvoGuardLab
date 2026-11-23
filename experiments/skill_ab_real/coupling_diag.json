@@ -1,0 +1,228 @@
+{
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "protocol": "按域各用 5 道训练题 0-shot 失败轨迹提炼 env_invariant，40 道未见留出题配对评测；判分为真实执行的隐藏测试；统计用 McNemar 精确检验",
+  "n_train": 2,
+  "n_holdout": 2,
+  "train_pass_rate": 0.0,
+  "skills": {
+    "unit": {
+      "id": "sk_48220a7025",
+      "env_invariants": [
+        {
+          "domain": "unit",
+          "rule": "金额对外单位与本项目内部一致（分），不要做除以 100 的元换算",
+          "evidence": "unit mismatch",
+          "slot_key": "unit.scale"
+        }
+      ],
+      "pre_checks": []
+    },
+    "pagination": null,
+    "timezone": null,
+    "coupling": null
+  },
+  "hints": {
+    "unit": "金额对外单位与本项目内部一致（分），不要做除以 100 的元换算",
+    "pagination": null,
+    "timezone": null,
+    "coupling": null
+  },
+  "post_write_assertions": {
+    "unit": [],
+    "pagination": [],
+    "timezone": [],
+    "coupling": [
+      {
+        "kind": "regex_must_match",
+        "file": "registry.py",
+        "pattern": "FIELDS\\s*(\\.\\s*append|\\+=|\\.extend)",
+        "message": "add_field 必须修改 FIELDS"
+      },
+      {
+        "kind": "regex_must_match",
+        "file": "registry.py",
+        "pattern": "REQUIRED\\s*(\\[[^]]+\\]\\s*=|\\.\\s*update|\\.setdefault)",
+        "message": "add_field 必须同步修改 REQUIRED 必填表"
+      }
+    ]
+  },
+  "overall": {
+    "n": 2,
+    "both_pass": 0,
+    "both_fail": 0,
+    "only_with": 2,
+    "only_no": 0,
+    "no_skill_rate": 0.0,
+    "with_skill_rate": 1.0,
+    "delta_pp": 100.0,
+    "mcnemar_p": 0.5,
+    "with_ci95": [
+      0.3424,
+      1.0
+    ],
+    "no_ci95": [
+      0.0,
+      0.6576
+    ]
+  },
+  "by_domain": {
+    "unit": {
+      "n": 2,
+      "both_pass": 0,
+      "both_fail": 0,
+      "only_with": 2,
+      "only_no": 0,
+      "no_skill_rate": 0.0,
+      "with_skill_rate": 1.0,
+      "delta_pp": 100.0,
+      "mcnemar_p": 0.5,
+      "with_ci95": [
+        0.3424,
+        1.0
+      ],
+      "no_ci95": [
+        0.0,
+        0.6576
+      ]
+    },
+    "pagination": {
+      "n": 0,
+      "both_pass": 0,
+      "both_fail": 0,
+      "only_with": 0,
+      "only_no": 0,
+      "no_skill_rate": 0,
+      "with_skill_rate": 0,
+      "delta_pp": 0,
+      "mcnemar_p": 1.0,
+      "with_ci95": [
+        0.0,
+        0.0
+      ],
+      "no_ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "timezone": {
+      "n": 0,
+      "both_pass": 0,
+      "both_fail": 0,
+      "only_with": 0,
+      "only_no": 0,
+      "no_skill_rate": 0,
+      "with_skill_rate": 0,
+      "delta_pp": 0,
+      "mcnemar_p": 1.0,
+      "with_ci95": [
+        0.0,
+        0.0
+      ],
+      "no_ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "coupling": {
+      "n": 0,
+      "both_pass": 0,
+      "both_fail": 0,
+      "only_with": 0,
+      "only_no": 0,
+      "no_skill_rate": 0,
+      "with_skill_rate": 0,
+      "delta_pp": 0,
+      "mcnemar_p": 1.0,
+      "with_ci95": [
+        0.0,
+        0.0
+      ],
+      "no_ci95": [
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "verdict": "NO_SIGNIFICANT_DIFFERENCE",
+  "detail": {
+    "no_skill": [
+      {
+        "id": "unit-h-05",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-h-05-ae_df22t\\_hidden_test.py\", line 4, in <module>\r\n    assert '45600' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('45600', s))\r\n           ^^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 45600, got '$456.00' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0,
+        "fix_reason": null
+      },
+      {
+        "id": "unit-h-06",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-h-06-lq2llops\\_hidden_test.py\", line 4, in <module>\r\n    assert '3000' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('3000', s))\r\n           ^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 3000, got '$30.00' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0,
+        "fix_reason": null
+      }
+    ],
+    "with_skill": [
+      {
+        "id": "unit-h-05",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0,
+        "fix_reason": null
+      },
+      {
+        "id": "unit-h-06",
+        "domain": "unit",
+        "split": "holdout",
+        "passed": true,
+        "returncode": 0,
+        "stderr": "",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0,
+        "fix_reason": null
+      }
+    ],
+    "train": [
+      {
+        "id": "unit-t-00",
+        "domain": "unit",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-t-00-x2nax95m\\_hidden_test.py\", line 4, in <module>\r\n    assert '12345' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('12345', s))\r\n           ^^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 12345, got '$123.45' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0,
+        "fix_reason": null
+      },
+      {
+        "id": "unit-t-01",
+        "domain": "unit",
+        "split": "train",
+        "passed": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\r\n  File \"<TMP>\\AppData\\Local\\Temp\\envbench-unit-t-01-0hin4pue\\_hidden_test.py\", line 4, in <module>\r\n    assert '99900' in s, ('unit mismatch: expected cents %s, got %r -> did you convert to yuan?' % ('99900', s))\r\n           ^^^^^^^^^^^^\r\nAssertionError: unit mismatch: expected cents 99900, got '$999.00' -> did you convert to yuan?\r\n",
+        "assertion_repairs": 0,
+        "assertion_ok": true,
+        "runtime_fix": 0,
+        "fix_reason": null
+      }
+    ]
+  }
+}

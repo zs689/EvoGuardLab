@@ -1,0 +1,31 @@
+{
+  "after": {
+    "delta_pp": 0.0,
+    "mean": 1.0,
+    "no_skill": 1.0,
+    "rounds": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "source": "experiments/skill_ab_real/coupling_spec_final_r{1,2,3}.json",
+    "spec_hint": true,
+    "with_skill": 1.0
+  },
+  "before": {
+    "mean": 0.7,
+    "note": "上轮精确行号反馈版，均值70%未达85%",
+    "rounds": [
+      0.6,
+      0.6,
+      0.9
+    ],
+    "source": "experiments/skill_ab_real/env_bench_precise_r{1,2,3}.json",
+    "spec_hint": false
+  },
+  "generated_at": "2026-11-23",
+  "honest_note": "不是塞答案代码：只给领域规约，不给修复实现。三轮全 1.00 且 No-Skill/With-Skill 相同，说明此域不需要额外 Skill。",
+  "metric": "coupling domain holdout pass rate (n=10), 3 rounds",
+  "root_cause": "旧 prompt 只暗示『登记处都是 list/dict』，未说明『一个字段由多处登记表共同定义、必须全部登记才生效』。把项目规约写清后模型 10/10 稳定通过；Skill 增量归零——好规约比提示 Skill 更有效。",
+  "version": 1
+}

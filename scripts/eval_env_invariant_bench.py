@@ -330,7 +330,8 @@ def coupling_probe(work, *, precise=False):
 
 
 def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
-             assertions=None, root=None, max_runtime_fix=2):
+             assertions=None, root=None, max_runtime_fix=2,
+             spec_hint=False):
     """跑一题：让模型写代码 → 隐藏测试判分。返回 {passed, ...}。"""
     work = tempfile.mkdtemp(prefix="envbench-%s-" % case["id"])
     try:
@@ -338,6 +339,11 @@ def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
             with open(os.path.join(work, name), "w", encoding="utf-8") as f:
                 f.write(body)
         prompt = case["prompt"]
+        if spec_hint and case.get("domain") == "coupling":
+            prompt += ("\n\n【项目规约·字段登记】本系统一个字段由多处登记表"
+                       "共同定义；新增字段只有在**所有**登记表（FIELDS 列表"
+                       "与 REQUIRED 字典）都出现，才与既有字段同等生效。"
+                       "少登记任何一处，校验会静默放过空值。")
         if hint:
             # Skill 注入：单行私有环境事实（不是答案、不是整段规约）
             prompt = prompt + "\n\n【本项目约定】%s" % hint
@@ -393,6 +399,7 @@ def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
         # MOD-AGENT-01-T1：失败后把**干净的 traceback**回灌一次（不是长篇
         # 反思模板）。这是正常修 bug 闭环，不是提示词剧透。
         runtime_fix = 0
+        fix_reason = None
         while rc != 0 and runtime_fix < max_runtime_fix:
             feedback = err[-700:]
             if case.get("domain") == "coupling":
@@ -410,9 +417,13 @@ def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
             try:
                 text3, _t3, _m3 = provider.complete(
                     retry, temperature=0.0, max_tokens=900)
-            except Exception:                              # noqa: BLE001
+            except Exception as exc:                       # noqa: BLE001
+                # 不静默吞：API 失败必须和「模型修不对」分开记，
+                # 否则会把基础设施故障算成模型能力不足。
+                fix_reason = "api_error:" + type(exc).__name__
                 break
             if not text3:
+                fix_reason = "empty_model_output"
                 break
             with open(sol, "w", encoding="utf-8") as f:
                 f.write(extract_code(text3))
@@ -424,7 +435,8 @@ def run_case(case, provider, *, hint=None, timeout=40, use_docker=False,
                 "returncode": rc, "stderr": err[-400:],
                 "assertion_repairs": fixed,
                 "assertion_ok": not verdict_errors,
-                "runtime_fix": runtime_fix}
+                "runtime_fix": runtime_fix,
+                "fix_reason": fix_reason}
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
@@ -499,6 +511,12 @@ def main():
     ap.add_argument("--skip-train", action="store_true",
                     help="跳过训练集，直接用 --skill-file 里的 Skill")
     ap.add_argument("--skill-file", default="")
+    ap.add_argument("--spec-hint", dest="spec_hint", action="store_true",
+                    default=True,
+                    help="coupling 域显式注入「字段需在多个登记表同步」规约"
+                         "（默认开；--no-spec-hint 复现旧口径）")
+    ap.add_argument("--no-spec-hint", dest="spec_hint",
+                    action="store_false", help="关闭规约明示，复现旧 56.7%% 口径")
     ap.add_argument("--repeat", type=int, default=1,
                     help="重复轮数（消除单模型单轮噪声，MOD-AGENT-01-T3）")
     a = ap.parse_args()
@@ -543,6 +561,7 @@ def main():
                 # 训练集也关闭运行时自愈：否则模型靠反馈自己修对，
                 # 后续轮次就暴露不出下一层规约（多轮累积会空转）。
                 round_rows = [run_case(c, prov, hint=cur_hint,
+                                       spec_hint=a.spec_hint,
                                        max_runtime_fix=0)
                               for c in d_train]
                 d_rows.extend(round_rows)
@@ -611,8 +630,10 @@ def main():
     no_skill, with_skill = [], []
     for c in hold:
         # No-Skill = 没有该 Skill，也就没有它携带的写前断言（工具基线）
-        r1 = run_case(c, prov, assertions=[], max_runtime_fix=0)
+        r1 = run_case(c, prov, assertions=[], max_runtime_fix=0,
+                      spec_hint=a.spec_hint)
         r2 = run_case(c, prov, hint=hints.get(c["domain"]),
+                      spec_hint=a.spec_hint,
                       assertions=(assertions_by_domain.get(c["domain"])
                                   if c["domain"] == "coupling" else None),
                       max_runtime_fix=0)

@@ -1,0 +1,74 @@
+[synth:unit] r1 accepted=True inv=1
+[hint:unit] '金额对外单位与本项目内部一致（分），不要做除以 100 的元换算'
+[synth:pagination] r1 accepted=False inv=0
+[hint:pagination] None
+[synth:timezone] r1 accepted=False inv=0
+[hint:timezone] None
+[synth:coupling] r1 accepted=False inv=0
+[hint:coupling] None
+[holdout] unit-h-05 no=False with=True
+[holdout] unit-h-06 no=False with=True
+{
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "protocol": "按域各用 5 道训练题 0-shot 失败轨迹提炼 env_invariant，40 道未见留出题配对评测；判分为真实执行的隐藏测试；统计用 McNemar 精确检验",
+  "n_train": 2,
+  "n_holdout": 2,
+  "train_pass_rate": 0.0,
+  "skills": {
+    "unit": {
+      "id": "sk_48220a7025",
+      "env_invariants": [
+        {
+          "domain": "unit",
+          "rule": "金额对外单位与本项目内部一致（分），不要做除以 100 的元换算",
+          "evidence": "unit mismatch",
+          "slot_key": "unit.scale"
+        }
+      ],
+      "pre_checks": []
+    },
+    "pagination": null,
+    "timezone": null,
+    "coupling": null
+  },
+  "hints": {
+    "unit": "金额对外单位与本项目内部一致（分），不要做除以 100 的元换算",
+    "pagination": null,
+    "timezone": null,
+    "coupling": null
+  },
+  "post_write_assertions": {
+    "unit": [],
+    "pagination": [],
+    "timezone": [],
+    "coupling": [
+      {
+        "kind": "regex_must_match",
+        "file": "registry.py",
+        "pattern": "FIELDS\\s*(\\.\\s*append|\\+=|\\.extend)",
+        "message": "add_field 必须修改 FIELDS"
+      },
+      {
+        "kind": "regex_must_match",
+        "file": "registry.py",
+        "pattern": "REQUIRED\\s*(\\[[^]]+\\]\\s*=|\\.\\s*update|\\.setdefault)",
+        "message": "add_field 必须同步修改 REQUIRED 必填表"
+      }
+    ]
+  },
+  "overall": {
+    "n": 2,
+    "both_pass": 0,
+    "both_fail": 0,
+    "only_with": 2,
+    "only_no": 0,
+    "no_skill_rate": 0.0,
+    "with_skill_rate": 1.0,
+    "delta_pp": 100.0,
+    "mcnemar_p": 0.5,
+    "with_ci95": [
+      0.3424,
+      1.0
+    ],
+    "
