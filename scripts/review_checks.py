@@ -16,6 +16,7 @@
 import argparse
 import io
 import json
+import glob
 import os
 import re
 import subprocess
@@ -811,6 +812,38 @@ def c_sandbox_no_orphans():
                        "live")
 
 
+def c_static_names():
+    """EG-024：核心模块里不能有**未定义名**。
+
+    为什么单列一项：这类错误只在冷路径触发。实测靠 pyflakes 扫出 3 处
+    （`ApiError`/`_recompute`/`enforce_input`），其中 `proxy_stream` 那处
+    意味着"带攻击输入的流式请求会 500 而不是 400" —— 功能测试全绿也发现
+    不了，因为没人走到那条分支。
+
+    star import（`from x import *`）会让 pyflakes 报"may be undefined"，
+    那是设计选择不是缺陷，只统计明确的 `undefined name`。
+    """
+    import subprocess
+    try:
+        r = subprocess.run([sys.executable, "-m", "pyflakes"] + sorted(
+            glob.glob(os.path.join(ROOT, "ai-service", "evoguard", "*.py"))),
+            capture_output=True, text=True, timeout=120)
+    except FileNotFoundError:
+        return _result("EG-024/static-names", True,
+                       "未安装 pyflakes，跳过（CI 应 pip install pyflakes）",
+                       "pip install pyflakes", skipped=True)
+    except subprocess.TimeoutExpired:
+        return _result("EG-024/static-names", False, "pyflakes 超时", "")
+    out = (r.stdout or "") + (r.stderr or "")
+    bad = [ln for ln in out.splitlines() if "undefined name" in ln
+           and "unable to detect undefined names" not in ln]
+    ok = not bad
+    return _result("EG-024/static-names", ok,
+                   ("核心模块无未定义名（star import 的 may-be 告警不计）"
+                    if ok else "%d 处未定义名：%s" % (len(bad), bad[:3])),
+                   "pyflakes ai-service/evoguard/*.py")
+
+
 CHECKS = [
     ("EG-003", c_dockerignore),
     ("EG-003", c_dockerfile_copy),
@@ -826,6 +859,7 @@ CHECKS = [
     ("EG-021", c_frontend_optional),
     ("EG-020", c_frontend_session),
     ("EG-023", c_gate_in_ci),
+    ("EG-024", c_static_names),
     ("EG-001", c_enterprise_e2e),
     ("EG-009", c_jobs_e2e),
     ("EG-008", c_audit_multiprocess),
