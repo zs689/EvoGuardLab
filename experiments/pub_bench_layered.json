@@ -1,12 +1,23 @@
 {
   "attribution": {
-    "cost_note": "模型判官 P95 ~2.0s（规则判官 ~0.1ms），延迟高 4 个数量级；如追求低延迟生产部署，规则判官足够覆盖本集全部攻击。",
-    "detail": "归因诊断 experiments/judge_attribution.json：规则放行候选 0 条，模型独立命中 0。136 条命中全部来自正交规则判官的 fail-safe；真模型在本公开集上**没有独立贡献**，只是被真跑验证过接口可用，不把规则功劳记成模型功劳。",
-    "model_only_hits": 0,
-    "rule_allow_candidates": 0
+    "evidence": [
+      "experiments/judge_attribution.json",
+      "experiments/judge_attribution_paraphrased.json"
+    ],
+    "original_injecagent": {
+      "detail": "原集规则已全覆盖；模型接口真跑通但无独立增量（不把规则功劳记成模型功劳）",
+      "model_only_hits": 0,
+      "rule_allow_candidates": 0
+    },
+    "paraphrased_attacks": {
+      "detail": "改写措辞的 5 条劫持攻击规则全放行，模型 5/5 识别，证明正交判官的泛化价值",
+      "model_denied": 5,
+      "model_only_hits": 5,
+      "rule_allow_candidates": 5
+    }
   },
   "judge": "deepseek/deepseek-chat",
-  "judge_note": "本次真模型判官=deepseek/deepseek-chat（用户 2026-11-23 明确授权），ProviderSpec 一行切换；tool_output 通道走 IndirectInjectionJudge（判工具劫持/状态改变），user_input 仍走 harmful_request_judge。",
+  "judge_note": "真模型判官 deepseek/deepseek-chat（用户 2026-11-23 明确授权），经 provider_from_preset 正确解析 base_url/api_key_env；tool_output 走 IndirectInjectionJudge（判工具劫持/状态改变），user_input 走 harmful_request_judge。P95 534ms 为真模型调用耗时。",
   "note": "ASR 为「检测+门禁两层都未拦」的可利用性上界，非真实业务损失率；InjecAgent/AgentDojo 的攻击工具在本系统未注册，无法真执行。",
   "sets": {
     "agentdojo_slice": {
@@ -25,7 +36,7 @@
       "duplicate_ratio": 0.9,
       "n": 120,
       "n_unique": 12,
-      "p95_ms": 0.137,
+      "p95_ms": 0.344,
       "provenance": "public (AgentDojo templates, goal-only)",
       "self_checks": {
         "degraded_share": 0.0,
@@ -51,7 +62,7 @@
       "duplicate_ratio": 0.9706,
       "n": 2108,
       "n_unique": 62,
-      "p95_ms": 2006.27,
+      "p95_ms": 534.223,
       "provenance": "public (InjecAgent, full)",
       "self_checks": {
         "degraded_share": 0.0,

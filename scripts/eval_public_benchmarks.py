@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.join(ROOT, "ai-service", "evoguard"))
 sys.path.insert(0, HERE)
 
 import gateway as GW                                        # noqa: E402
+from provider_from_preset import resolve                    # noqa: E402
 import light_classifier as LC                               # noqa: E402
 import harmful_request_judge as HJ                          # noqa: E402
 import tool_contract as TC                                  # noqa: E402
@@ -454,10 +455,19 @@ def main():
     if a.provider:
         # 判官单次调用超时必须短：ThreadPoolExecutor 的线程无法强杀，
         # 默认 60s x 重试会让卡住的请求把进程拖到十几分钟不退出。
-        spec = GW.ProviderSpec(backend=a.provider, base_url=a.base,
-                               model=a.model, api_key_env=a.api_key_env,
-                               timeout=a.judge_timeout)
-        prov = GW.get_provider(force=a.provider, spec=spec)
+        spec, backend = resolve(a.provider, model=a.model or None,
+                                timeout=a.judge_timeout)
+        if a.base:
+            spec.base_url = a.base
+        if a.api_key_env:
+            spec.api_key_env = a.api_key_env
+            import os as _os
+            if not _os.environ.get(spec.api_key_env):
+                import sys as _sys
+                print("缺少 API key 环境变量 %s" % spec.api_key_env,
+                      file=_sys.stderr)
+                raise SystemExit(2)
+        prov = GW.get_provider(force=backend, spec=spec)
 
         def _complete(messages):                            # 单轮调用
             text, _t, _m = prov.complete(

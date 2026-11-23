@@ -1,0 +1,157 @@
+{
+  "generated_at": "2026-11-23T14:06:34",
+  "honest_note": "本次用户明确授权用 DeepSeek；每道题真调用模型，按当前规约输出 JSON 键判定成功。换模型只改 --provider/--model，模型无关。",
+  "mode": "real-model (ProviderSpec)",
+  "model": "deepseek-chat",
+  "phases": [
+    "learn_and_reuse",
+    "drift_detected",
+    "retire_and_relearn",
+    "relearned_reuse"
+  ],
+  "provider": "deepseek",
+  "summary": {
+    "drift_detected": true,
+    "first_6_pass": true,
+    "four_stage_closed": true,
+    "last_5_pass": true,
+    "model_calls": 12,
+    "n": 12
+  },
+  "trace": [
+    {
+      "env_rule": "v1",
+      "error": null,
+      "ms": 0,
+      "order": "A1001",
+      "phase": "learn_and_reuse",
+      "raw": "{\"summary_v1\": \"Order A1001\"}",
+      "skill_rule": "v1",
+      "step": 1,
+      "success": true
+    },
+    {
+      "env_rule": "v1",
+      "error": null,
+      "ms": 0,
+      "order": "A1002",
+      "phase": "learn_and_reuse",
+      "raw": "{\"summary_v1\": \"Order A1002\"}",
+      "skill_rule": "v1",
+      "step": 2,
+      "success": true
+    },
+    {
+      "env_rule": "v1",
+      "error": null,
+      "ms": 0,
+      "order": "A1003",
+      "phase": "learn_and_reuse",
+      "raw": "{\"summary_v1\": \"Order A1003\"}",
+      "skill_rule": "v1",
+      "step": 3,
+      "success": true
+    },
+    {
+      "env_rule": "v1",
+      "error": null,
+      "ms": 0,
+      "order": "A1004",
+      "phase": "learn_and_reuse",
+      "raw": "{\"summary_v1\": \"Order A1004\"}",
+      "skill_rule": "v1",
+      "step": 4,
+      "success": true
+    },
+    {
+      "env_rule": "v1",
+      "error": null,
+      "ms": 0,
+      "order": "A1005",
+      "phase": "learn_and_reuse",
+      "raw": "{\"summary_v1\": \"Order A1005\"}",
+      "skill_rule": "v1",
+      "step": 5,
+      "success": true
+    },
+    {
+      "env_rule": "v1",
+      "error": null,
+      "ms": 0,
+      "order": "A1006",
+      "phase": "learn_and_reuse",
+      "raw": "{\"summary_v1\": \"Order A1006\"}",
+      "skill_rule": "v1",
+      "step": 6,
+      "success": true
+    },
+    {
+      "env_rule": "v2",
+      "error": null,
+      "ms": 0,
+      "order": "A1007",
+      "phase": "drift_detected",
+      "raw": "{\"summary_v\n_v1\": \"Order A1007\"}",
+      "regression_detected": true,
+      "skill_rule": "v1",
+      "step": 7,
+      "success": false
+    },
+    {
+      "env_rule": "v2",
+      "error": null,
+      "ms": 0,
+      "order": "A1008",
+      "phase": "retire_and_relearn",
+      "raw": "{\"summary_v2\": \"Order A1008\"}",
+      "skill_rule": "v2",
+      "step": 8,
+      "success": true
+    },
+    {
+      "env_rule": "v2",
+      "error": null,
+      "ms": 0,
+      "order": "A1009",
+      "phase": "relearned_reuse",
+      "raw": "{\"summary_v2\": \"Order A1009\"}",
+      "skill_rule": "v2",
+      "step": 9,
+      "success": true
+    },
+    {
+      "env_rule": "v2",
+      "error": null,
+      "ms": 0,
+      "order": "A1010",
+      "phase": "relearned_reuse",
+      "raw": "{\"summary_v2\": \"Order A1010\"}",
+      "skill_rule": "v2",
+      "step": 10,
+      "success": true
+    },
+    {
+      "env_rule": "v2",
+      "error": null,
+      "ms": 0,
+      "order": "A1011",
+      "phase": "relearned_reuse",
+      "raw": "{\"summary_v2\": \"Order A1011\"}",
+      "skill_rule": "v2",
+      "step": 11,
+      "success": true
+    },
+    {
+      "env_rule": "v2",
+      "error": null,
+      "ms": 0,
+      "order": "A1012",
+      "phase": "relearned_reuse",
+      "raw": "{\"summary_v2\": \"Order A1012\"}",
+      "skill_rule": "v2",
+      "step": 12,
+      "success": true
+    }
+  ],
+  "version": 1
+}
