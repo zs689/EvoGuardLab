@@ -1,0 +1,43 @@
+{
+  "provider": "ollama",
+  "model": "qwen2.5:7b",
+  "protocol": "ollama",
+  "n": 3,
+  "passed_n": 3,
+  "tasks": [
+    {
+      "tool": "text.word_count",
+      "stage": "register",
+      "code": "def word_count(s):\n    return len(s.split()) if s else 0",
+      "renamed_to_task_func": false,
+      "synthesized": true,
+      "registered": true,
+      "verified_by_cases": true,
+      "n_cases": 3,
+      "ok": true
+    },
+    {
+      "tool": "math.clamp01",
+      "stage": "register",
+      "code": "def clamp01(x):\n    return max(0, min(1, x))",
+      "renamed_to_task_func": false,
+      "synthesized": true,
+      "registered": true,
+      "verified_by_cases": true,
+      "n_cases": 3,
+      "ok": true
+    },
+    {
+      "tool": "text.initials",
+      "stage": "register",
+      "code": "def initials(s):\n    return ''.join([word[0].upper() for word in s.split()])",
+      "renamed_to_task_func": false,
+      "synthesized": true,
+      "registered": true,
+      "verified_by_cases": true,
+      "n_cases": 3,
+      "ok": true
+    }
+  ],
+  "note": "模型产码 -> AST 白名单 -> 沙箱测试 -> 注册的全链路；任何一段失败都如实记在对应 task 的 stage/error 里"
+}

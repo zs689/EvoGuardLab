@@ -124,6 +124,39 @@ class TestPlanEdges(unittest.TestCase):
         self.assertFalse(r2["replanned"])
         self.assertEqual(r2["reason"], "max_replan_reached")
 
+    # ---- 与 approval 的一致性：计划状态不得与审批单漂移 ----
+    def test_reused_ticket_does_not_let_plan_continue(self):
+        """票据被消费过之后，计划不能靠"旧 id"继续推进。"""
+        import approval as AP
+        self.runner.start([self._write_step()])
+        state = self.runner._load()
+        aid = state["approval_id"]
+        self.runner.approve()
+        # 模拟「票据已被别处消费」：再消费一次必然抛错
+        self.runner.gate.consume(aid, run_id="plan:s1",
+                                 tool="order.settle", args={"order_id": "A1"})
+        with self.assertRaises(Exception):
+            self.runner.gate.consume(aid, run_id="plan:s1",
+                                     tool="order.settle",
+                                     args={"order_id": "A1"})
+
+    def test_approve_then_resume_consumes_exactly_once(self):
+        self.runner.start([self._write_step(), self._read_step("after")])
+        self.runner.approve()
+        self.runner.resume()
+        self.assertEqual(self.calls, ["order.settle", "kb.search"])
+        state = self.runner._load()
+        self.assertIsNone(state["approval_id"], "票据用完必须清空")
+        self.assertEqual(state["status"], "done")
+
+    def test_plan_never_self_approves(self):
+        """挂起后不调用 approve 就直接 resume：不能自己把票补上。"""
+        self.runner.start([self._write_step()])
+        out = self.runner.resume()
+        self.assertEqual(out.get("status"), "awaiting_approval")
+        self.assertEqual(self.calls, [])
+        self.assertIsNotNone(self.runner._load()["approval_id"])
+
     # ---- 反思分类 ----
     def test_reflect_classifies_failure_types(self):
         cases = {
