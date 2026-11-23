@@ -25,7 +25,7 @@ def deep_enabled():
     不默认打开（`AGENTLAB_SECURITY_DEEP=1` + `AGENTLAB_DEEP_MODEL=<path>`）。
     真实收益与代价见 docs/detector-evolution.md。
     """
-    return (os.environ.get("AGENTLAB_SECURITY_DEEP") or "").strip() in ("1", "true", "on")
+    return (os.environ.get("AGENTLAB_SECURITY_DEEP") or "").strip().lower() in ("1", "true", "on")
 
 
 _DEEP_CACHE = {"path": None, "model": None}
@@ -57,7 +57,7 @@ def _rails_result_findings(tool, text):
     改配置不用改代码。检查器自己抛错时给 `rails_checker_error`，
     绝不折算成「没命中」。
     """
-    if (os.environ.get("AGENTLAB_SECURITY_RAILS") or "1").strip() in ("0", "false", "off"):
+    if (os.environ.get("AGENTLAB_SECURITY_RAILS") or "1").strip().lower() in ("0", "false", "off"):
         return []
     try:
         import tool_rails
@@ -98,7 +98,7 @@ def _scope_findings(tool, text):
     默认**开**：它只产出 info/warn，不会误阻断（见 action_scope 里的边界说明）。
     关掉：`AGENTLAB_SECURITY_SCOPE=0`。
     """
-    if (os.environ.get("AGENTLAB_SECURITY_SCOPE") or "1").strip() in ("0", "false", "off"):
+    if (os.environ.get("AGENTLAB_SECURITY_SCOPE") or "1").strip().lower() in ("0", "false", "off"):
         return []
     try:
         import action_scope

@@ -4,17 +4,25 @@
       "coding_agent": null,
       "env_invariant_40": null,
       "evidence": "experiments\\coding_agent_real\\ab_result.json",
+      "evidence_note": "既有真容器 A/B 产物，本轮未重跑",
+      "judge_chain": {
+        "fpr": 0.0,
+        "n": 20,
+        "recall": 1.0
+      },
       "key_env": "DEEPSEEK_API_KEY",
       "key_present": true,
       "model": "deepseek-chat",
       "provider": "deepseek",
-      "reason": "已有实物证据（见 evidence）；本轮未重跑",
+      "reason": "已有实物证据（见 evidence / evidence_note）；本轮未重跑",
       "status": "DONE"
     },
     {
       "coding_agent": null,
       "env_invariant_40": null,
       "evidence": null,
+      "evidence_note": null,
+      "judge_chain": null,
       "key_env": "DASHSCOPE_API_KEY",
       "key_present": false,
       "model": "qwen-plus",
@@ -26,6 +34,8 @@
       "coding_agent": null,
       "env_invariant_40": null,
       "evidence": null,
+      "evidence_note": null,
+      "judge_chain": null,
       "key_env": "OPENAI_API_KEY",
       "key_present": false,
       "model": "gpt-4o-mini",
@@ -37,6 +47,8 @@
       "coding_agent": null,
       "env_invariant_40": null,
       "evidence": null,
+      "evidence_note": null,
+      "judge_chain": null,
       "key_env": "ZHIPU_API_KEY",
       "key_present": false,
       "model": "glm-4-flash",
@@ -48,6 +60,8 @@
       "coding_agent": null,
       "env_invariant_40": null,
       "evidence": null,
+      "evidence_note": null,
+      "judge_chain": null,
       "key_env": "MOONSHOT_API_KEY",
       "key_present": false,
       "model": "moonshot-v1-8k",
@@ -58,13 +72,19 @@
     {
       "coding_agent": null,
       "env_invariant_40": null,
-      "evidence": null,
+      "evidence": "experiments\\cross_model\\judge_probe.json",
+      "evidence_note": "本地模型判官探针（原生 /api/chat）",
+      "judge_chain": {
+        "fpr": 0.0,
+        "n": 20,
+        "recall": 0.9
+      },
       "key_env": null,
       "key_present": false,
-      "model": null,
+      "model": "qwen2.5:7b",
       "provider": "ollama",
-      "reason": "本地后端：未做真机探针，不把'无需 key'当跑过",
-      "status": "NOT_RUN"
+      "reason": "已有实物证据（见 evidence / evidence_note）；本轮未重跑",
+      "status": "DONE"
     }
   ],
   "honest_note": "本仓库当前只验证过 DeepSeek 单厂商。其它模型即使 key 存在，也必须真跑 eval_coding_agent.py / eval_env_invariant_bench.py 并写入结果后才算 ELIGIBLE->DONE；本报告不代跑、不推算。",

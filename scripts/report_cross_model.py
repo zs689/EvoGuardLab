@@ -85,6 +85,34 @@ def _already_run_providers():
             done[prov] = {"evidence": os.path.relpath(p, ROOT),
                           "model": r.get("model"),
                           "note": "既有真容器 A/B 产物，本轮未重跑"}
+    # 判官链路探针（20 条人工标注）：证明**协议**能跑通另一家/另一种接口，
+    # 与「编码 bench 能否拿到高分」是两件事，必须分开标注。
+    for p in sorted(glob.glob(os.path.join(
+            ROOT, "experiments", "cross_model", "judge_probe*.json"))):
+        if os.path.basename(p) == "judge_probe.json":
+            continue                          # 默认 ollama 那份单独处理
+        r = json.load(open(p, encoding="utf-8"))
+        prov = str(r.get("provider") or "").strip().lower()
+        if prov:
+            done.setdefault(prov, {
+                "evidence": os.path.relpath(p, ROOT),
+                "model": r.get("model"),
+                "note": "判官链路探针（20 条），非编码 bench"})
+            done[prov]["judge_chain"] = {"recall": r.get("recall"),
+                                         "fpr": r.get("fpr"),
+                                         "n": r.get("n")}
+    oll = os.path.join(ROOT, "experiments", "cross_model", "judge_probe.json")
+    if os.path.isfile(oll):
+        r = json.load(open(oll, encoding="utf-8"))
+        prov = str(r.get("provider") or "").strip().lower()
+        if prov:
+            done.setdefault(prov, {"evidence": os.path.relpath(oll, ROOT),
+                                   "model": r.get("model"),
+                                   "note": "本地模型判官探针（原生 /api/chat）"})
+            done[prov]["judge_chain"] = {"recall": r.get("recall"),
+                                         "fpr": r.get("fpr"),
+                                         "n": r.get("n")}
+            done[prov]["model"] = r.get("model")
     return done
 
 
@@ -103,15 +131,18 @@ def cross_model_table():
         have_key = bool(keyenv and os.environ.get(keyenv))
         models.append({
             "provider": key,
-            "model": model,
+            # 有实测记录时以实测模型名为准（本地后端 preset 里 model=None）
+            "model": (ran.get(key) or {}).get("model") or model,
             "key_env": keyenv or None,
             "key_present": have_key,
             "status": ("DONE" if key in ran else "NOT_RUN"),
-            "reason": (("已有实物证据（见 evidence）；本轮未重跑"
+            "reason": (("已有实物证据（见 evidence / evidence_note）；本轮未重跑"
                         if key in ran else
                         ("未设置 %s；不伪造跨模型数字" % keyenv if keyenv else
                          "本地后端：未做真机探针，不把'无需 key'当跑过"))),
             "evidence": (ran.get(key) or {}).get("evidence"),
+            "evidence_note": (ran.get(key) or {}).get("note"),
+            "judge_chain": (ran.get(key) or {}).get("judge_chain"),
             "coding_agent": None,
             "env_invariant_40": None,
         })
