@@ -214,7 +214,7 @@ class LocalProvider(Provider):
                 raise LLMError("E_LLM_AUTH", "接口需要鉴权（%s）" % e.code)
             if e.code in (429,):
                 raise LLMError("E_LLM_RATE", "被限流（429）")
-            if e.code in (502, 503, 504):
+            if e.code >= 500:                       # 500 也是服务端错，可重试
                 raise LLMError("E_LLM_DOWN",
                                "端口通但模型服务没起来（%s）。检查模型是否加载成功" % e.code)
             raise LLMError("E_LLM_HTTP", "HTTP %s：%s" % (e.code, body))
@@ -318,7 +318,7 @@ class OllamaNativeProvider(Provider):
                 pass
             if e.code in (400, 404):
                 raise LLMError("E_LLM_MODEL", "模型名可能不对（%s）：%s" % (e.code, body))
-            if e.code in (502, 503, 504):
+            if e.code >= 500:                       # 500 也是服务端错，可重试
                 raise LLMError("E_LLM_DOWN", "模型服务没起来（%s）" % e.code)
             raise LLMError("E_LLM_HTTP", "HTTP %s：%s" % (e.code, body))
         except (urllib.error.URLError, TimeoutError, OSError) as e:
@@ -557,7 +557,7 @@ class OpenAICompatProvider(Provider):
                 raise LLMError("E_LLM_MODEL", "模型/端点不对（%s）：%s" % (e.code, body))
             if e.code == 429:
                 raise LLMError("E_LLM_RATE", "被限流（429）")
-            if e.code in (502, 503, 504):
+            if e.code >= 500:                       # 500 也是服务端错，可重试
                 raise LLMError("E_LLM_DOWN", "模型服务没起来（%s）" % e.code)
             raise LLMError("E_LLM_HTTP", "HTTP %s：%s" % (e.code, body))
         except (urllib.error.URLError, TimeoutError, OSError) as e:
