@@ -140,5 +140,38 @@ class TestStreamGuard(unittest.TestCase):
                                  {"q": "订单"})
 
 
+class TestStreamInputGuard(unittest.TestCase):
+    """流式入口的**输入**侧门禁。
+
+    修之前 `proxy_stream` 签名里没有 `enforce_input`、函数体却直接引用它：
+    带攻击输入的流式请求会抛 NameError（500），而不是 400 deny —— 等于流式
+    完全没有输入侧硬拦截。
+    """
+
+    def _call(self, content, **kw):
+        payload = {"messages": [{"role": "user", "content": content}],
+                   "stream": True}
+        return OP.proxy_stream(payload, upstream_url="http://127.0.0.1:1/v1",
+                               **kw)
+
+    def test_attack_input_is_denied_with_400_not_nameerror(self):
+        status, body, audit = self._call(SHORT_ATTACK, enforce_input=True)
+        self.assertEqual(status, 400, "流式输入门禁必须返回 400，不能 500")
+        self.assertEqual(audit.get("decision"), "deny")
+
+    def test_explicit_false_allows_audit_mode(self):
+        """显式 False 时不阻断（audit 模式）；不该因为参数缺失而崩。"""
+        try:
+            status, _body, _audit = self._call(SHORT_ATTACK, enforce_input=False)
+        except NameError as exc:
+            self.fail("proxy_stream 仍在引用未定义参数：%s" % exc)
+        self.assertNotEqual(status, 500)
+
+    def test_benign_input_is_not_blocked(self):
+        status, _body, _audit = self._call("帮我查一下订单 A1010", 
+                                           enforce_input=True)
+        self.assertNotEqual(status, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -427,11 +427,21 @@ def process_sse(lines, *, payload, agent_type, registry, rails, cfg,
 
 def proxy_stream(payload, *, upstream_url=None, opener=None,
                  agent_type="react", registry=None, rails=None,
-                 use_semantic=False, judge=None):
+                 use_semantic=False, judge=None, enforce_input=None,
+                 enforce_output=None):
     """流式入口。返回 (status_code, lines_iterable_or_error_body, audit)。
+
+    `enforce_input/enforce_output`：None 跟随全局模式，语义与 `proxy` 一致。
+    （此前签名里没有这两个参数、函数体却直接用了 `enforce_input` —— 流式
+    路径一走到输入门禁判断就 NameError，等于流式完全没有输入侧硬拦截。）
 
     status 200 时第二项是 SSE 行生成器；否则是标准 JSON 错误体。
     """
+    if enforce_input is None:
+        enforce_input = _sec.enforcing()
+    if enforce_output is None:
+        enforce_output = output_blocking_enabled()
+
     messages = payload.get("messages") or []
     goal = _user_text(messages)
     findings, sem = guard_messages(messages, use_semantic=use_semantic,

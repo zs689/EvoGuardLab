@@ -22,6 +22,9 @@ import security
 import sim
 import trajectory_diagnose as _td
 
+from core import ApiError
+from legacy_diagnose import _recompute
+
 from runtime_common import (MAX_STEPS, MAX_RETRY, MAX_CHAIN, TOKEN_BUDGET,
     WRITE_TOOLS, AUTO_APPROVE, SIDE_EFFECT_COUNT, TRANSIENT_FAULTS,
     FORCED_SKILL, STORE_BY_MODE, REPAIR_STRATEGIES, REPAIR_COVERAGE,
