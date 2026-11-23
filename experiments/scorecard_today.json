@@ -1,0 +1,420 @@
+{
+  "dimensions": [
+    {
+      "checks": [
+        {
+          "check": "预注册 v1 四个实验都有结果",
+          "evidence": "experiments/semantic_injection_v1/e*_result.json",
+          "ok": true
+        },
+        {
+          "check": "预注册 v2 已执行",
+          "evidence": "experiments/semantic_injection_v2/result.json",
+          "ok": true
+        },
+        {
+          "check": "至少一个实验达到判定线",
+          "evidence": "v1 通过 2/4",
+          "ok": true
+        },
+        {
+          "check": "申报的检测器变体达到判定线",
+          "evidence": "v2 passed=False",
+          "ok": false
+        },
+        {
+          "check": "逐组判定可见（未隐藏负结果）",
+          "evidence": "per_view_checks",
+          "ok": true
+        }
+      ],
+      "gaps": [
+        "申报的检测器变体达到判定线",
+        "检测器 v2 未过预注册判定线（AUC 下降）；需另立 v3 预注册"
+      ],
+      "key": "detection",
+      "max": 5,
+      "name": "检测能力",
+      "score": 2.0,
+      "weight": 0.22
+    },
+    {
+      "checks": [
+        {
+          "check": "无 token 时返回 401（不是静默放行）",
+          "evidence": "GET /api/health",
+          "ok": true
+        },
+        {
+          "check": "带 token 时返回 200",
+          "evidence": "Authorization: Bearer ***",
+          "ok": true
+        },
+        {
+          "check": "响应头回显 X-Request-Id",
+          "evidence": "X-Request-Id",
+          "ok": true
+        },
+        {
+          "check": "租户头进入请求上下文",
+          "evidence": "X-Tenant-Id: acme",
+          "ok": true
+        },
+        {
+          "check": "审计在真实进程里开启",
+          "evidence": "AGENTLAB_AUDIT_DB",
+          "ok": true
+        },
+        {
+          "check": "Prometheus 端点返回文本指标",
+          "evidence": "GET /metrics",
+          "ok": true
+        },
+        {
+          "check": "既有 /api/metrics JSON 契约未被破坏",
+          "evidence": "GET /api/metrics",
+          "ok": true
+        },
+        {
+          "check": "未知路由 404 且带 request-id",
+          "evidence": "GET /api/definitely-not-a-route",
+          "ok": true
+        },
+        {
+          "check": "审计事件真的落到了库里",
+          "evidence": "audit rows=1",
+          "ok": true
+        }
+      ],
+      "gaps": [],
+      "key": "integration",
+      "max": 5,
+      "name": "进程级验收",
+      "score": 5.0,
+      "weight": 0.15
+    },
+    {
+      "checks": [
+        {
+          "check": "# TYPE 与 label 出现在 Prometheus 文本里",
+          "evidence": "render_prometheus()",
+          "ok": true
+        },
+        {
+          "check": "日志管道注入 tenant_id 与 ts",
+          "evidence": "LogPipeline.emit",
+          "ok": true
+        },
+        {
+          "check": "span 记录时长",
+          "evidence": "Tracer.span",
+          "ok": true
+        },
+        {
+          "check": "流量采样只留白名单、不采正文",
+          "evidence": "TrafficSampler",
+          "ok": true
+        },
+        {
+          "check": "可插拔 exporter 接口存在",
+          "evidence": "MetricsExporter/TraceExporter",
+          "ok": true
+        },
+        {
+          "check": "交付了 Prometheus scrape 配置",
+          "evidence": "deploy/prometheus.yml",
+          "ok": true
+        },
+        {
+          "check": "交付了告警规则",
+          "evidence": "deploy/alerts.yml",
+          "ok": true
+        }
+      ],
+      "gaps": [],
+      "key": "observability",
+      "max": 5,
+      "name": "可观测性",
+      "score": 5.0,
+      "weight": 0.12
+    },
+    {
+      "checks": [
+        {
+          "check": "按请求头解析租户与主体",
+          "evidence": "HeaderResolver",
+          "ok": true
+        },
+        {
+          "check": "每租户配额独立生效",
+          "evidence": "TenantQuota.check",
+          "ok": true
+        },
+        {
+          "check": "未知租户落到最小权限",
+          "evidence": "TenantRegistry.policy（quota=10）",
+          "ok": true
+        },
+        {
+          "check": "SQL 缺租户条件被守门拦下",
+          "evidence": "require_tenant_filter",
+          "ok": true
+        },
+        {
+          "check": "服务入口已接线租户上下文",
+          "evidence": "app.py",
+          "ok": true
+        },
+        {
+          "check": "数据库层行级隔离（非仅字符串守门）",
+          "evidence": "deploy/rls.sql",
+          "ok": false
+        }
+      ],
+      "gaps": [
+        "数据库层行级隔离（非仅字符串守门）"
+      ],
+      "key": "tenancy",
+      "max": 5,
+      "name": "多租户",
+      "score": 4.17,
+      "weight": 0.12
+    },
+    {
+      "checks": [
+        {
+          "check": "schema 迁移到最新版本",
+          "evidence": "SCHEMA_VERSION=5",
+          "ok": true
+        },
+        {
+          "check": "审计事件可写入并按租户查询",
+          "evidence": "AuditStore",
+          "ok": true
+        },
+        {
+          "check": "缺 tenant_id 的审计写入被拒绝",
+          "evidence": "AuditStore.emit",
+          "ok": true
+        },
+        {
+          "check": "保留策略可清理过期事件",
+          "evidence": "purge_before",
+          "ok": true
+        },
+        {
+          "check": "服务入口可开启审计落库",
+          "evidence": "app.py",
+          "ok": true
+        },
+        {
+          "check": "审计链重算通过（防篡改）",
+          "evidence": "rows=2/2",
+          "ok": true
+        },
+        {
+          "check": "审计写入有跨进程事务边界",
+          "evidence": "BEGIN IMMEDIATE + busy_timeout=30s",
+          "ok": true
+        },
+        {
+          "check": "未启用会引发 readonly 的 WAL",
+          "evidence": "按验收证据撤回，见 perf-before-after.md",
+          "ok": true
+        }
+      ],
+      "gaps": [],
+      "key": "audit",
+      "max": 5,
+      "name": "审计与迁移",
+      "score": 5.0,
+      "weight": 0.12
+    },
+    {
+      "checks": [
+        {
+          "check": "连续失败后熔断打开",
+          "evidence": "CircuitBreaker",
+          "ok": true
+        },
+        {
+          "check": "冷却后放行探测",
+          "evidence": "half_open",
+          "ok": true
+        },
+        {
+          "check": "探测成功后闭合",
+          "evidence": "closed",
+          "ok": true
+        },
+        {
+          "check": "超时预算可扣减",
+          "evidence": "TimeoutBudget",
+          "ok": true
+        },
+        {
+          "check": "SLO 计算 SLI 与错误预算",
+          "evidence": "SLO.evaluate",
+          "ok": true
+        },
+        {
+          "check": "SLO 有实测流量底数（非手工数字）",
+          "evidence": "experiments/loadtest_v1/result.json",
+          "ok": true
+        },
+        {
+          "check": "故障演练可一键重跑",
+          "evidence": "scripts/drill.py",
+          "ok": true
+        }
+      ],
+      "gaps": [],
+      "key": "resilience",
+      "max": 5,
+      "name": "韧性",
+      "score": 5.0,
+      "weight": 0.09
+    },
+    {
+      "checks": [
+        {
+          "check": "回环默认受信、外网默认不受信",
+          "evidence": "is_trusted",
+          "ok": true
+        },
+        {
+          "check": "支持 CIDR 信任网段",
+          "evidence": "is_trusted",
+          "ok": true
+        },
+        {
+          "check": "不可信对端的代理头被忽略",
+          "evidence": "resolve_proxy",
+          "ok": true
+        },
+        {
+          "check": "受信对端的 https 被识别",
+          "evidence": "resolve_proxy",
+          "ok": true
+        },
+        {
+          "check": "证书缺失时明确报错，不静默降级",
+          "evidence": "build_context",
+          "ok": true
+        },
+        {
+          "check": "真实 TLS 握手通过（不只是配置对象）",
+          "evidence": "TLS TLSv1.3 / TLS_AES_256_GCM_SHA384",
+          "ok": true
+        }
+      ],
+      "gaps": [],
+      "key": "transport",
+      "max": 5,
+      "name": "传输安全",
+      "score": 5.0,
+      "weight": 0.08
+    },
+    {
+      "checks": [
+        {
+          "check": "存在换行归一化（.gitattributes）",
+          "evidence": ".gitattributes",
+          "ok": true
+        },
+        {
+          "check": "CI 安装并可跑 demo/unittest",
+          "evidence": ".github/workflows/test.yml",
+          "ok": true
+        },
+        {
+          "check": "记录了干净 clone 的实测结果",
+          "evidence": "upgrade-report.md",
+          "ok": true
+        },
+        {
+          "check": "外部语料与沙箱被忽略",
+          "evidence": ".gitignore",
+          "ok": true
+        },
+        {
+          "check": "有字节级可复现性守门测试",
+          "evidence": "tests/test_reproducibility.py",
+          "ok": true
+        },
+        {
+          "check": "CI 每次推送都做干净 clone 复验",
+          "evidence": ".github/workflows/test.yml",
+          "ok": true
+        }
+      ],
+      "gaps": [],
+      "key": "reproducibility",
+      "max": 5,
+      "name": "可复现性",
+      "score": 5.0,
+      "weight": 0.05
+    },
+    {
+      "checks": [
+        {
+          "check": "语料正文不入库（.gitignore）",
+          "evidence": ".gitignore",
+          "ok": true
+        },
+        {
+          "check": "仓库有 LICENSE",
+          "evidence": "LICENSE",
+          "ok": true
+        },
+        {
+          "check": "随仓库分发的夹具标注了上游许可",
+          "evidence": "fixtures/external/README.md",
+          "ok": true
+        },
+        {
+          "check": "README 声明语料不外发及例外",
+          "evidence": "README.md",
+          "ok": true
+        },
+        {
+          "check": "审计保留期可配置",
+          "evidence": "TenantPolicy.data_retention_days",
+          "ok": true
+        }
+      ],
+      "gaps": [],
+      "key": "governance",
+      "max": 5,
+      "name": "数据治理",
+      "score": 5.0,
+      "weight": 0.05
+    }
+  ],
+  "disclaimer": "这是按可核对证据的**自评**，不是认证、不是 SLA、不代表可生产部署；独立审查明确不计入本分数。",
+  "external_review": {
+    "done": 6,
+    "not_done": 0,
+    "note": "独立审查口径；本 scorecard 的自评分数不计入其结论。",
+    "partial": 21,
+    "source": "docs/review-remediation/README.md",
+    "total": 27
+  },
+  "gaps": [
+    {
+      "dimension": "检测能力",
+      "gap": "申报的检测器变体达到判定线"
+    },
+    {
+      "dimension": "检测能力",
+      "gap": "检测器 v2 未过预注册判定线（AUC 下降）；需另立 v3 预注册"
+    },
+    {
+      "dimension": "多租户",
+      "gap": "数据库层行级隔离（非仅字符串守门）"
+    }
+  ],
+  "generated_at": "2026-11-23T14:14:01",
+  "total": 84.8,
+  "version": 2
+}

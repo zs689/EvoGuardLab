@@ -39,7 +39,7 @@ def _read(path, label_fn):
     return out
 
 
-def load_datasets():
+def load_datasets(extra_zh=False):
     """返回带 language/source 标签的样本：(text, y, language, source)。
 
     **上一版的切分 bug**：把三个源按固定顺序拼起来再按全局前 70% 切，
@@ -58,6 +58,12 @@ def load_datasets():
             os.path.join(DATA, "jailbreak_classification", "prompts.jsonl"),
             lambda r: 1 if r.get("label") == "jailbreak" else 0):
         rows.append((text, y, "en", "jailbreak_classification"))
+    if extra_zh:
+        # 拼音/变体对抗集：显式开关，默认关（历史复现不漂移）
+        for text, y in _read(
+                os.path.join(DATA, "chinese_adversarial", "cases.jsonl"),
+                lambda r: 1 if r.get("label") == "attack" else 0):
+            rows.append((text, y, "zh", "chinese_adversarial"))
     return rows
 
 
@@ -296,11 +302,13 @@ def main():
                     help="复用既有权重里的某些语言，形如 zh=<path>。"
                          "用于「英文重训、中文保留」这类分语言决策，"
                          "避免为了修一侧把另一侧指标打回去。")
+    ap.add_argument("--extra-zh", action="store_true",
+                    help="加载 chinese_adversarial 拼音对抗集（默认关）")
     ap.add_argument("--aug", type=int, default=2,
                     help="训练集增强倍数（0=关闭，仅作用训练侧）")
     a = ap.parse_args()
 
-    rows = load_datasets()
+    rows = load_datasets(extra_zh=a.extra_zh)
     parts = stratified_split(rows, train_frac=a.train_frac,
                              calib_frac=a.calib_frac, seed=a.seed)
     t0 = time.time()
@@ -334,6 +342,7 @@ def main():
                      m["threshold"], lang, m["idf"])
 
     rep = {
+        "extra_zh_included": a.extra_zh,
         "model": "per-language char n-gram(1-4) TF-IDF + semantic clusters + LR",
         "routing": "文本含 CJK >= 1 个字符 -> zh 模型，否则 en 模型",
         "thresholds": {lang: models[lang]["threshold"] for lang in models},
@@ -362,6 +371,7 @@ def main():
            # 会拿训练集当留出集（实测把 fpr 从 0.045 虚报成 0.46）。
            "split": {"train_frac": a.train_frac, "calib_frac": a.calib_frac,
                      "seed": a.seed},
+           "extra_zh_included": a.extra_zh,
            "reused_langs": reused,
            "models": {lang: {"vocab": m["vocab"],
                              "idf": [round(x, 6) for x in

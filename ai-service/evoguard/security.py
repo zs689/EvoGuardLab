@@ -194,6 +194,24 @@ def scan(text, where="text", only=None):
     t0 = time.perf_counter()
     clean, decoded, counts = strip_invisible(s)
     out = _scan_view(clean, where, only)
+    # HARD-中文短板：拼音/谐音/首字母注入。主 light_classifier 是汉字
+    # n-gram，拼音文本特征完全不同（混训会毁掉中文 holdout），所以单独
+    # 一层零依赖规则。只在未指定 only 时跑，避免破坏「只跑某检测器」契约。
+    if not only:
+        try:
+            import pinyin_guard as _PG
+            pr = _PG.scan(clean)
+            if pr["hit"]:
+                out.append({
+                    "code": "pinyin_injection", "severity": "error",
+                    "where": where, "match": clean[:120],
+                    "detail": "拼音/谐音/首字母形式的注入意图："
+                              + ",".join(pr["matched"][:4]),
+                    "false_positive": "拼音良性请求（翻译/谐音分析）有白名单；"
+                                      "仍可能误伤 creative writing",
+                })
+        except Exception:                                  # noqa: BLE001
+            pass
     if counts["tag"] and decoded != clean:
         seen = {f["code"] for f in out}
         for f in _scan_view(decoded, where, only):
