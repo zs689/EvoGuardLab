@@ -107,5 +107,38 @@ class TestInferAgentType(unittest.TestCase):
         self.assertEqual(LD._infer_agent_type([]), "unknown")
 
 
+class TestDecisionTableIntegrity(unittest.TestCase):
+    """两张表的**跨表一致性**：诊断出来了却取不到策略 = 那类故障永远救不回。
+
+    这个缺口真实存在过：4 个 `INV-PLAN-*` 映射到 `incorrect_planning`，但
+    `STRATEGY_BY_CAUSE` 里没有这个 key —— runtime 侧靠
+    `.get(cause, "human_takeover")` 兜住了行为，表上却看不见这个决定。
+    """
+
+    def test_every_invariant_cause_has_a_declared_strategy(self):
+        missing = [(inv, cause) for inv, cause in LD.INVARIANT_TO_CAUSE.items()
+                   if cause not in LD.STRATEGY_BY_CAUSE]
+        self.assertEqual(missing, [],
+                         "这些不变量诊断出来后没有显式策略：%s" % (missing,))
+
+    def test_strategy_names_are_from_known_set(self):
+        """策略名拼错会静默退化成 human_takeover，等于悄悄放弃自动恢复。"""
+        known = {"retry", "replay_checkpoint", "fallback_tool", "cross_verify",
+                 "reformat", "human_takeover"}
+        bad = [(c, s) for c, s in LD.STRATEGY_BY_CAUSE.items()
+               if s not in known]
+        self.assertEqual(bad, [], "未知策略名：%s" % (bad,))
+
+    def test_invariant_ids_follow_naming_convention(self):
+        bad = [i for i in LD.INVARIANT_TO_CAUSE if not i.startswith("INV-")]
+        self.assertEqual(bad, [])
+
+    def test_every_invariant_maps_to_a_known_cause(self):
+        causes = set(LD.STRATEGY_BY_CAUSE)
+        unknown = {i: c for i, c in LD.INVARIANT_TO_CAUSE.items()
+                   if c not in causes}
+        self.assertEqual(unknown, {})
+
+
 if __name__ == "__main__":
     unittest.main()

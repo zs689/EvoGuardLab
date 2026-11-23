@@ -11,7 +11,7 @@
         "integrity": "ok",
         "kill_rc": 0,
         "kill_stderr": "",
-        "kill_stdout": "�ɹ�: ����ֹ PID 33088 (���� PID 33396 �ӽ���)�Ľ��̡�",
+        "kill_stdout": "�ɹ�: ����ֹ PID 31956 (���� PID 23436 �ӽ���)�Ľ��̡�",
         "mode": "pool",
         "rows": 120
       },
@@ -24,7 +24,7 @@
         "integrity": "ok",
         "kill_rc": 0,
         "kill_stderr": "",
-        "kill_stdout": "�ɹ�: ����ֹ PID 13880 (���� PID 33396 �ӽ���)�Ľ��̡�",
+        "kill_stdout": "�ɹ�: ����ֹ PID 31376 (���� PID 23436 �ӽ���)�Ľ��̡�",
         "mode": "pool_wal",
         "rows": 120
       },
@@ -32,7 +32,7 @@
       "pass": true
     },
     {
-      "detail": "60s / 8 线程共 11960 次写：created 8→8，堆 0.146→0.168 MiB（增长 +0.022），错误 0",
+      "detail": "10s / 8 线程共 3149 次写：created 8→8，堆 0.162→0.170 MiB（增长 +0.008），错误 0",
       "evidence": {
         "errors": [],
         "final_pool": {
@@ -42,17 +42,17 @@
           "idle": 8,
           "size": 8
         },
-        "heap_first_mb": 0.146,
-        "heap_growth_mb": 0.022,
-        "heap_last_mb": 0.168,
-        "heap_peak_mb": 0.183,
+        "heap_first_mb": 0.162,
+        "heap_growth_mb": 0.008,
+        "heap_last_mb": 0.17,
+        "heap_peak_mb": 0.18,
         "heap_stable": true,
         "observer_excluded": true,
         "observer_note": "采样点写 JSONL 不驻留内存；tracemalloc 停止后才读回",
         "samples": [
           {
-            "db_bytes": 188952,
-            "heap_mb": 0.146,
+            "db_bytes": 283160,
+            "heap_mb": 0.162,
             "pool": {
               "closed": false,
               "created": 8,
@@ -60,12 +60,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 587,
+            "rows": 1594,
             "t_s": 5.0
           },
           {
-            "db_bytes": 225423,
-            "heap_mb": 0.109,
+            "db_bytes": 430760,
+            "heap_mb": 0.17,
             "pool": {
               "closed": false,
               "created": 8,
@@ -73,143 +73,13 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 1162,
+            "rows": 3141,
             "t_s": 10.0
-          },
-          {
-            "db_bytes": 299824,
-            "heap_mb": 0.079,
-            "pool": {
-              "closed": false,
-              "created": 8,
-              "discarded": 0,
-              "idle": 0,
-              "size": 8
-            },
-            "rows": 1782,
-            "t_s": 15.0
-          },
-          {
-            "db_bytes": 361417,
-            "heap_mb": 0.149,
-            "pool": {
-              "closed": false,
-              "created": 8,
-              "discarded": 0,
-              "idle": 0,
-              "size": 8
-            },
-            "rows": 2402,
-            "t_s": 20.0
-          },
-          {
-            "db_bytes": 406082,
-            "heap_mb": 0.154,
-            "pool": {
-              "closed": false,
-              "created": 8,
-              "discarded": 0,
-              "idle": 0,
-              "size": 8
-            },
-            "rows": 3031,
-            "t_s": 25.0
-          },
-          {
-            "db_bytes": 463571,
-            "heap_mb": 0.115,
-            "pool": {
-              "closed": false,
-              "created": 8,
-              "discarded": 0,
-              "idle": 0,
-              "size": 8
-            },
-            "rows": 3605,
-            "t_s": 30.0
-          },
-          {
-            "db_bytes": 594788,
-            "heap_mb": 0.086,
-            "pool": {
-              "closed": false,
-              "created": 8,
-              "discarded": 0,
-              "idle": 0,
-              "size": 8
-            },
-            "rows": 5041,
-            "t_s": 35.0
-          },
-          {
-            "db_bytes": 734733,
-            "heap_mb": 0.052,
-            "pool": {
-              "closed": false,
-              "created": 8,
-              "discarded": 0,
-              "idle": 0,
-              "size": 8
-            },
-            "rows": 6445,
-            "t_s": 40.0
-          },
-          {
-            "db_bytes": 870046,
-            "heap_mb": 0.147,
-            "pool": {
-              "closed": false,
-              "created": 8,
-              "discarded": 0,
-              "idle": 0,
-              "size": 8
-            },
-            "rows": 7818,
-            "t_s": 45.0
-          },
-          {
-            "db_bytes": 980247,
-            "heap_mb": 0.104,
-            "pool": {
-              "closed": false,
-              "created": 8,
-              "discarded": 0,
-              "idle": 0,
-              "size": 8
-            },
-            "rows": 9164,
-            "t_s": 50.0
-          },
-          {
-            "db_bytes": 1119656,
-            "heap_mb": 0.078,
-            "pool": {
-              "closed": false,
-              "created": 8,
-              "discarded": 0,
-              "idle": 0,
-              "size": 8
-            },
-            "rows": 10619,
-            "t_s": 55.0
-          },
-          {
-            "db_bytes": 1255507,
-            "heap_mb": 0.168,
-            "pool": {
-              "closed": false,
-              "created": 8,
-              "discarded": 0,
-              "idle": 0,
-              "size": 8
-            },
-            "rows": 11952,
-            "t_s": 60.0
           }
         ],
-        "seconds": 60,
+        "seconds": 10,
         "workers": 8,
-        "writes": 11960
+        "writes": 3149
       },
       "id": "soak",
       "pass": true
@@ -247,7 +117,7 @@
       "pass": true
     }
   ],
-  "generated_at": "2026-11-23T13:01:07",
+  "generated_at": "2026-11-23T17:04:53",
   "passed": true,
   "summary": {
     "fail": 0,

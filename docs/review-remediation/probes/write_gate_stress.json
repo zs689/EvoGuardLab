@@ -39,5 +39,7 @@
       "waiters": 0
     }
   ],
-  "version": 1
+  "version": 1,
+  "frozen": true,
+  "frozen_reason": "一次性真进程强杀探针（taskkill /F /T），需人工重建被测库布局，无自动重跑脚本；本轮 core.py 仅把 DDL 字符串搬到 core_schema.py，写门禁与连接管理逻辑未改，结论仍适用"
 }

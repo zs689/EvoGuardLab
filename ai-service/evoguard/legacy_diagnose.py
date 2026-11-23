@@ -295,6 +295,12 @@ STRATEGY_BY_CAUSE = {
     #   context_loss —— 状态本身错了，要从检查点重建上下文
     "context_loss": "replay_checkpoint",
     # TRAIL / MAST 补进来的五类
+    # 计划类故障：空计划/重复步骤/顺序颠倒。**不自动重规划** ——
+    # 自动改计划等于让系统自己决定做什么，风险高于收益，一律转人工。
+    # （runtime 侧用的是 .get(root_cause, "human_takeover")，行为一致；
+    #   这里显式列出，是为了让「诊断 -> 策略」链路在表上完整可见，
+    #   而不是靠默认值兜住一个没人注意的缺口。）
+    "incorrect_planning": "human_takeover",
     "format_violation": "reformat",
     "wrong_tool": "fallback_tool",
     "tool_hallucination": "cross_verify",

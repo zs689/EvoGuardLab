@@ -6,6 +6,7 @@
 这些才是检查点机制真正的风险面。
 """
 import json
+import threading
 import os
 import sys
 import tempfile
@@ -156,6 +157,46 @@ class TestPlanEdges(unittest.TestCase):
         self.assertEqual(out.get("status"), "awaiting_approval")
         self.assertEqual(self.calls, [])
         self.assertIsNotNone(self.runner._load()["approval_id"])
+
+    # ---- 并发：两个副本同时 resume ----
+    def test_concurrent_resume_executes_write_only_once(self):
+        """审批票据是唯一真相源：两个并发 resume 只能有一个真正执行写操作。
+
+        两个 PlanRunner 实例模拟两个 API 副本（各自 _load 检查点）；票据的
+        一次性消费必须挡住第二个，否则写操作执行两次 —— 这是最不能重复的
+        那类副作用。
+        """
+        self.runner.start([self._write_step()])
+        self.runner.approve()
+        r2 = AA.PlanRunner(self.agent, self.store, "s1", tenant_id="t1")
+        barrier = threading.Barrier(2)
+        results, errors = [], []
+
+        def go(runner):
+            try:
+                barrier.wait(timeout=10)
+                results.append(runner.resume())
+            except Exception as exc:                       # noqa: BLE001
+                errors.append("%s: %s" % (type(exc).__name__, str(exc)[:60]))
+
+        threads = [threading.Thread(target=go, args=(r,))
+                   for r in (self.runner, r2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=20)
+        self.assertFalse([t for t in threads if t.is_alive()],
+                         "并发 resume 不应挂死")
+        self.assertEqual(self.calls.count("order.settle"), 1,
+                         "写步骤被执行了 %d 次（结果=%s 错误=%s）"
+                         % (len(self.calls), results, errors))
+
+    def test_double_approve_then_sequential_resume_executes_once(self):
+        self.runner.start([self._write_step()])
+        self.assertTrue(self.runner.approve()["approved"])
+        self.assertFalse(self.runner.approve()["approved"])
+        self.runner.resume()
+        self.assertEqual(self.calls.count("order.settle"), 1)
 
     # ---- 反思分类 ----
     def test_reflect_classifies_failure_types(self):

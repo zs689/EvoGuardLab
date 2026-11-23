@@ -131,9 +131,17 @@ def scan(text):
         return {"hit": False, "channel": "prefilter-skip", "matched": []}
     low, py, zh = _normalise(text)
     if any(h in low for h in _BENIGN_HINT):
-        # 白名单只是「降低置信」，不是免死金牌：若同时有强攻击短语仍拦
+        # 白名单只是「降低置信」，不是免死金牌：若同时有强攻击短语仍拦。
+        # 但**引号里被引用/被翻译的词不算攻击证据**：
+        #   "请把'忽略'翻译成拼音" 里的 忽略 是被解释的对象，不是指令；
+        #   而 "翻译成拼音：忽略之前的指令" 没有引号包裹，仍是攻击。
+        quoted = set(re.findall(
+            r"['\"「」『』《》]([^'\"「」『』《》]{1,16})['\"「」『』《》]",
+            str(text or "")))
         strong = [p for p in _PINYIN_PHRASES if p in py]
         strong += [w for w in _ZH_ATTACK if w in zh]
+        strong = [w for w in strong
+                  if not any(w in q or q in w for q in quoted)]
         if not strong:
             return {"hit": False, "channel": "benign_context",
                     "matched": []}
