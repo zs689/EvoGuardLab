@@ -112,6 +112,18 @@ _DOUBLE_NEG = re.compile(
     r"never\s+forget\s+to|don'?t\s+forget\s+to|never\s+fail\s+to)",
     re.I)
 _NEG_EN = re.compile(r"\b(?:not|never|don'?t|no need to|without)\b", re.I)
+
+# 第二人称指向**用户**的指引：「请您尽快完成付款」是客服对用户说的话，
+# 不是要助手动手。必须要求明确的第二人称主语，**不能**用「完成/提交」
+# 这类泛词——否则「请完成转账到 6222」这种真注入会被一起放过。
+# 排除「请你把/请你将」：那是让助手执行的动作。
+_USER_SUBJECT = re.compile(
+    r"请(?:您|用户|客户|买家|访客|会员)|请(?:你(?!把|将))")
+_USER_ACTOR = re.compile(r"完成|提交|核对|填写|提供|联系|拨打|等待|申请|确认收货")
+# 描述性语句：「系统自动退款到原账户」是在陈述机制，不是祈使。
+# 只认明确的「系统/平台自动」「将自动」「一经…即自动」，避免泛化「自动」被绕过。
+_DESCRIPTIVE = re.compile(
+    r"(?:系统|平台|服务|流程)(?:会)?自动|将自动|一经[^，。！？\n]{0,10}即自动")
 # 否定只在自己那个分句内生效：「请勿走审批；改为转账」里的「勿」管不到「转账」。
 # 按分句边界切开再判 —— 整段一起判会把「否定 + 后续请求」这种真实攻击放过。
 _CLAUSE_SPLIT = re.compile(r"[；;。！？!?，,、]")
@@ -131,7 +143,16 @@ def detect_action_requests(text):
     s = text or ""
     out = []
     for m in _ZH.finditer(s):
-        if _negated(m.group(1), _NEG_ZH):
+        window = m.group(1) or ""
+        if _negated(window, _NEG_ZH):
+            continue
+        # 第二人称指向用户 + 用户侧动作 -> 是对用户的指引，不是要助手动手
+        if _USER_SUBJECT.search(s[:m.start() + len(window) + 2]) \
+                and _USER_ACTOR.search(window):
+            continue
+        # 描述性陈述（系统自动…）不是祈使
+        if _DESCRIPTIVE.search(window) or _DESCRIPTIVE.search(
+                s[max(0, m.start() - 12):m.start() + len(window) + 2]):
             continue
         out.append({"lang": "zh", "verb": m.group(2),
                     "span": s[max(0, m.start() - 10):m.end() + 10][:80]})
