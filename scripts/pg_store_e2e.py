@@ -11,6 +11,13 @@
 1. 两个独立 Store 实例（模拟两个 API 副本）共享同一套业务数据；
 2. 租户 A 写入的实验，租户 B 通过自己的 Store 查不到（RLS）；
 3. 普通角色连接（superuser 会绕过 RLS，得到假结论）。
+
+**PG 15+ 必须先授权**，否则第一张建表就报
+`permission denied for schema public`（实测踩到）：
+    CREATE ROLE evoguard_app LOGIN PASSWORD 'app';
+    GRANT ALL ON SCHEMA public TO evoguard_app;
+    ALTER DATABASE evoguard OWNER TO evoguard_app;
+注意不要给 SUPERUSER —— 超级用户绕过 RLS，第 2 项会得到假的"通过"。
 """
 import argparse
 import io

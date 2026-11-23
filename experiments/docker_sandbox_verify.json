@@ -1,0 +1,63 @@
+{
+  "image": "python:3.11-alpine",
+  "memory": "256m",
+  "cpus": "0.5",
+  "passed": true,
+  "checks": [
+    {
+      "id": "basic_run",
+      "desc": "容器内正常执行并取回 stdout",
+      "pass": true,
+      "detail": {
+        "returncode": 0,
+        "stdout": "45",
+        "error": null
+      }
+    },
+    {
+      "id": "network_isolated",
+      "desc": "容器内访问外网被阻断",
+      "pass": true,
+      "detail": {
+        "stdout": "NETWORK_BLOCKED URLError",
+        "error": null
+      }
+    },
+    {
+      "id": "host_fs_hidden",
+      "desc": "宿主项目目录在容器内不可见",
+      "pass": true,
+      "detail": {
+        "probe_path": "E:/agent/EvoGuardLab/ai-service",
+        "stdout": "HOST_HIDDEN"
+      }
+    },
+    {
+      "id": "timeout_killed",
+      "desc": "死循环在超时内被杀",
+      "pass": true,
+      "detail": {
+        "elapsed_s": 5.2,
+        "returncode": -1,
+        "error": ""
+      }
+    },
+    {
+      "id": "memory_capped",
+      "desc": "超限内存申请被 OOM 终止",
+      "pass": true,
+      "detail": {
+        "returncode": 137,
+        "error": ""
+      }
+    },
+    {
+      "id": "no_orphans",
+      "desc": "跑完后无残留容器",
+      "pass": true,
+      "detail": {
+        "containers": []
+      }
+    }
+  ]
+}
