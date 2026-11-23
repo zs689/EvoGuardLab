@@ -534,8 +534,14 @@ def collect_online_stats(store, skill, *, since=None):
         ok = sum(1 for r in rows if r["success"])
         unauthorized = 0
         if run_ids:
-            q = ("SELECT COUNT(*) AS n FROM security_effects WHERE executed=1 "
-                 "AND tool IS NOT NULL AND effect!='unchanged' "
+            # 越权 = 门禁**真的拒绝了**一次动作（deny/encode/wrap）。
+            # 旧实现用 `executed=1 AND tool IS NOT NULL AND effect!='unchanged'`，
+            # 于是审批通过后 ctx 写的 `decision=allow, effect=approval_consumed`
+            # 也被算成越权 —— 合法写越多越容易被误回滚。
+            # 同时不再限定 tool IS NOT NULL：输出侧编码/包装拦截没有工具名，
+            # 但那同样是越权信号。
+            q = ("SELECT COUNT(*) AS n FROM security_effects WHERE detected=1 "
+                 "AND decision IN ('deny','encode','wrap') "
                  "AND run_id IN (%s)" % ",".join("?" * len(run_ids)))
             unauthorized = int(c.execute(q, run_ids).fetchone()["n"])
         fp = 0
@@ -861,9 +867,15 @@ def _count_unauthorized(store, run_id):
             cols = {r[1] for r in c.execute("PRAGMA table_info(steps)")}
             if "kind" not in cols:
                 return 0
+            # ctx.py 真实生产路径里，安全拒绝统一写 kind="security" +
+            # status="error"（error_type 才是 approval_required / 具体
+            # 拒绝码）。旧实现只查 ('denied','rails_denied','loop_guard')，
+            # 这些 kind 在**生产轨迹里根本不会出现** —— 于是"越权立即检查"
+            # 永不触发，只有测试手工伪造的行能命中。两种格式都认。
             row = c.execute(
-                "SELECT COUNT(*) FROM steps WHERE run_id=? AND "
-                "kind IN ('denied','rails_denied','loop_guard')",
+                "SELECT COUNT(*) FROM steps WHERE run_id=? AND ("
+                "kind IN ('denied','rails_denied','loop_guard') OR "
+                "(kind='security' AND status='error'))",
                 (run_id,)).fetchone()
             return int(row[0] or 0) if row else 0
     except Exception:                                  # noqa: BLE001

@@ -63,10 +63,9 @@ MIN_GAIN_PP = 15.0
 MAX_NEG_TRANSFER = 0.05
 VALIDATION_PROTOCOL = "paired-v2"
 MIN_VALIDATION_TASKS = 3  # 工程证据下限，不是统计安全保证
-#: 统计门禁：n 题全对的单侧二项 p 值必须 < 0.05 才允许 PROMOTE。
-#: n=3 时 p=0.125（不显著）、n=5 时 p=0.031（显著）。库里的 70 REJECT 全
-#: gain_pp=0、7 PROMOTE 全 100%，3 题验证分不清「真有效」和「猜对」。
-MIN_STAT_POWER_TASKS = 5
+#: 统计功效只在评估结果里披露（chance_p_value / stat_note），**不是硬门禁**：
+#: n=3 全对 p=0.125 与随机猜测不可区分，但把它变成门禁会让已晋升的 7 个
+#: 技能全部失效，属验证协议变更，必须单独决策。
 
 # 评估有效期：数据集、prompt、模型或工具后端换过之后，旧一次 gain/neg
 # 已经不描述当前候选，不能拿它当今天的晋升证据。
@@ -409,9 +408,9 @@ def evaluate(store, skill, target_cases, guard_cases, run_case, *,
     # HARD-03-T1：v2 统计显著门禁。v1_legacy 保持旧工程信号判定不变。
     if protocol not in (EVAL_PROTOCOL_V1, EVAL_PROTOCOL_V2):
         raise ValueError("未知晋升评估协议：%r（可选 v2/v1_legacy）" % protocol)
-    chance_p = _chance_p(
+    p_value = chance_p(
         (gain_pp or 0) / 100.0 * t_n if gain_pp is not None else 0, t_n)
-    stat_sig = bool(chance_p is not None and chance_p < MAX_CHANCE_P
+    stat_sig = bool(p_value is not None and p_value < MAX_CHANCE_P
                     and t_n >= MIN_PAIRED_V2)
     if protocol == EVAL_PROTOCOL_V2 and verdict == "PROMOTE":
         if t_n < MIN_PAIRED_V2:
@@ -421,7 +420,7 @@ def evaluate(store, skill, target_cases, guard_cases, run_case, *,
         elif not stat_sig:
             verdict = "REJECT"
             reasons.append("统计不显著：chance p=%.4f >= %.2f"
-                           % (chance_p or 1.0, MAX_CHANCE_P))
+                           % (p_value or 1.0, MAX_CHANCE_P))
 
     # 评估绑定的是「这一份候选正文」和「这一组验证题」。晋升时重新指纹比对，
     # 正文被改、验证题被换或配对明细被篡改都会让旧评估失效。
@@ -447,13 +446,13 @@ def evaluate(store, skill, target_cases, guard_cases, run_case, *,
                              "min_validation_tasks": MIN_VALIDATION_TASKS},
               "pairs": pairs,
               # 统计功效披露：gain_pp/target_n 换算成命中数后算「纯运气」概率
-              "chance_p_value": chance_p,
+              "chance_p_value": p_value,
               "stat_significant": stat_sig,
               "eval_protocol": protocol,
               "stat_note": (
                   "target_n=%d 时全对仅 p=%.3f，不达 0.05；此判定应视为"
-                  "工程信号而非统计显著" % (t_n, _chance_p(t_n, t_n) or 0)
-                  if (_chance_p(t_n, t_n) or 0) >= 0.05 else "统计显著")}
+                  "工程信号而非统计显著" % (t_n, chance_p(t_n, t_n) or 0)
+                  if (chance_p(t_n, t_n) or 0) >= 0.05 else "统计显著")}
     with store.conn() as c:
         c.execute("INSERT INTO skill_evaluations(id,skill_id,target_n,before_rate,after_rate,"
                   "gain_pp,guard_n,neg_transfer_rate,verdict,created_at,protocol_version,"
@@ -674,7 +673,7 @@ def promotion_failure_text(audit):
     return "\n".join(lines)
 
 
-def _chance_p(hits, n, p0=0.5):
+def chance_p(hits, n, p0=0.5):
     """二项单侧检验：n 题里命中 hits 次，纯凭运气的概率（H0: p=p0）。
 
     必须暴露它：MIN_VALIDATION_TASKS=3 时「3/3 全对」的 p 值是 0.125，远未

@@ -101,3 +101,61 @@
 - 技能晋升 3 题验证 p=0.125 不显著 —— 已输出 `chance_p_value`/`stat_note`
   披露，**没有**擅自把门禁改硬（会让 7 个 active 全失效，属协议变更）；
 - Docker daemon 关着时 gate 的 no-orphans 会 SKIP，绝不伪造通过。
+
+## 七、独立审计推翻了第六节的自评（务必先读这节）
+
+第六节的"全部 90+"是**我的自评，不是独立验证**。两个不看自评文档的审计
+agent 从代码里找出 11 个"测试全绿但生产功能为零/指标算错"的问题。结论：
+**那张分数表虚高了**。以下是复核后的真实情况。
+
+### P0：已被实际证实失效
+
+1. **自进化「越权立即检查」永不触发**：`_count_unauthorized()` 查
+   `kind IN ('denied','rails_denied','loop_guard')`，而 ctx.py 生产路径写的
+   是 `kind='security', status='error'`；测试手工伪造了生产不产生的行。
+2. **裸启动 light guard 死配置**：`_LIGHT_GUARD_ON` 在 app_core import 时
+   冻结，`apply_entry_defaults()` 在 main() 里才执行——轻量注入拦截从未生效。
+3. **退化监控误判合法写**：`effect!='unchanged'` 把审批通过的
+   `decision=allow, effect=approval_consumed` 当成越权 → 合法写越多越容易被
+   误回滚。
+4. **评测假数**：`FPR=0.0/pass_rate=1.0` 把判官 undecided/unavailable 算成
+   放行；rule-only 产物的 `L2_semantic=136` 来自另一判官的混合缓存；2108 行
+   只有 62 条唯一文本却按 34× 重复计数；`partition_verified: True` 是硬编码；
+   阈值校准的 `high=0.4` 被权重阈值 0.39 钳死却按 0.4 报告。
+
+### 已真修（不是加注释）
+
+- 越权统计两种轨迹格式都认，并用**生产格式**（`kind=security,status=error`）
+  加了回归测试；
+- 路由在**调用时**读 env 开关（把 apply 提前到 import 前会污染测试环境，
+  已验证并回退）；
+- unauthorized 改为 `detected=1 AND decision IN (deny,encode,wrap)`，
+  审批通过不再算越权；
+- 评测按**唯一文本**计数、缓存冲突暴露、自证字段由计算得出、utility 只把
+  真放行算通过并单列 undecided；
+- **干净重跑**（新缓存、0 冲突）确认：InjecAgent ASR=0.0（62 唯一文本），
+  良性 FPR=0.0 但**只有 17 条良性样本**——此前那个数字虽偶然成立，证据链是脏的；
+- 被污染的 `pub_bench_layered.json` 已用干净结果覆盖，`pub_bench_orthogonal.json`
+  显式标注来源告警；
+- 另外补上：Ctx 真正维护并传入 `taint_state`（此前污点防护在生产上完全没接线）、
+  状态机 `RECOVERING→CANCELLED`、删两个死常量、统计函数导出可测。
+
+### 复核后的评分（比第六节低，如实下调）
+
+| 域 | 第六节自评 | 审计后 | 说明 |
+|---|---|---|---|
+| sandbox | 93 | **91** | Docker 6/6 真实验证，但 daemon 关时会 SKIP |
+| pg_store | 92 | **91** | 真 PG RLS 验过，仍依赖手工起容器 |
+| runtime+ctx+diagnose | 92 | **91** | 共享状态已统一；无新增发现 |
+| gateway / core | 91 | **91** | 未见新问题 |
+| execution | 91 | **89** | 污点此前未接线，现已接，但需更多端到端 |
+| openai_proxy | 90 | **90** | 流式门禁已修 |
+| approval / autonomous | 90 | **89** | 未见新问题，保守下调 |
+| 自进化 | 91 | **88** | 两个 P0 刚修；晋升 p=0.125 仍未解决 |
+| security | 91 | **88** | light guard 刚修；中文贴线 fpr 仍在 |
+| 评测脚本 | 90 | **87** | 七个口径问题刚修，可信度要重新积累 |
+| plan_runner / agent_watch | 90 | **89** | 未见新问题，保守下调 |
+
+**结论：目前不是"全部 90+"**。约 8 个域在 88–89，2 个 91。
+1800 条测试全绿、gate 35/35 只说明接线和证据修好了，不等于分数达标。
+下一次继续从 87 的评测脚本开始，按"实测可复核"补，不再自评加分。

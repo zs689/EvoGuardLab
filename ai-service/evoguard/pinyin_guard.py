@@ -108,7 +108,8 @@ def _normalise(text):
     zh = re.sub(r"[^一-鿿]", "", s)
     for k, v in _HOMOPHONE.items():
         zh = zh.replace(k, v)
-    zh = zh.replace("忽 略", "忽略").replace("略之", "略之")
+    # zh 是去除所有非汉字后的串，"忽 略" 这类带空格写法永远匹配不到；
+    # 该变形在 scan() 的 prefilter 之前已用 regex 剥掉空白，不需在这里兜。
     return low, py, zh
 
 

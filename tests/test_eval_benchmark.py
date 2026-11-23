@@ -239,7 +239,12 @@ class TestBenchmarkASRHonesty(unittest.TestCase):
         rows = ([{"text": "同一条攻击指令", "label": 1}] * 4 +
                 [{"text": "另一条指令", "label": 1}])
         r = P._eval_set("dup", rows, judge=None)
-        self.assertEqual(r["n"], 5)
+        # 指标分母必须是**唯一文本数**（2），不能按 5 行算 —— 否则同一句
+        # 重复 4 次会把 ASR / 置信区间放大。原始行数单独披露在 n_rows。
+        self.assertEqual(r["n"], 2)
+        self.assertEqual(r["n_rows"], 5)
+        self.assertAlmostEqual(r["duplicate_ratio"], 0.6)
+        self.assertEqual(r["self_checks"]["counted_unit"], "unique_text")
         self.assertEqual(r["n_unique"], 2)
         self.assertAlmostEqual(r["duplicate_ratio"], 0.6, places=4)
 

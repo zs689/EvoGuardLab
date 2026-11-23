@@ -62,5 +62,6 @@
     "provenance": "public (InjecAgent user_instruction, same-source benign)",
     "warning": null
   },
-  "version": 1
+  "version": 1,
+  "provenance_warning": "本产物的 L2_semantic=136 来自混合缓存（rule-only 与 l2 两次实验共用键），不是本次判官的真实结论；可信版本见 pub_bench_layered.json（干净重跑：L2_semantic=4，按 62 条唯一文本计）"
 }

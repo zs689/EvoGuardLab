@@ -87,6 +87,9 @@ class Ctx:
         self.exec_config_export = execution.export(self.exec_config)
         # 本轮用户目标：意图门禁的判据。没有就别猜 —— 受控档会转复核。
         self.user_goal = (exp.get("user_goal") or "").strip()
+        # FINAL-01-T2 污点追踪：此前 execution.preflight 支持 taint_state，
+        # 但 Ctx 从不维护也不传 —— 整条信息流防护在生产上从未生效。
+        self.taint_state = {"user_goal": self.user_goal}
         self.calls = []            # 每次调用的前置判断记录（含 call_id）
 
     # ---- 内部 ----
@@ -391,7 +394,8 @@ class Ctx:
         cid = execution.call_id(self.run_id, seq, tool, args)
         pre = execution.preflight(
             self.exec_config, agent_type=self.exp.get("agent_type"),
-            tool=tool, args=args, user_goal=self.user_goal, cid=cid)
+            tool=tool, args=args, user_goal=self.user_goal, cid=cid,
+            taint_state=self.taint_state)
         self.calls.append(pre)
         security.record(
             self.store, self.run_id, "exec_preflight:%s" % tool,
@@ -590,6 +594,13 @@ class Ctx:
         # ---- 安全层：工具输出扫描 ----
         # 轨迹里仍存原始输出（评测要看真值），发现单独记账；
         # enforce 下才把可疑内容包成不可信数据再交给 Agent。
+        # 只读工具的输出是不可信数据源；把其中的账号/金额/URL 累积进
+        # 污点状态，后续写/外发工具的 preflight 才能拦"污染参数流入副作用"。
+        try:
+            import taint as _taint
+            _taint.record_tool_output(self.taint_state, out)
+        except Exception:                                # noqa: BLE001
+            pass            # 污点是增强层，异常不影响主流程
         out_sec = security.guard_tool_output(tool, out)
         if out_sec["findings"]:
             security.record(self.store, self.run_id, "tool_output:%s" % tool, out_sec)

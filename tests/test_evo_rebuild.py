@@ -224,6 +224,33 @@ class TestAutoMonitor(unittest.TestCase):
         st.set_state(rid, "running") if False else None
         return rid
 
+    def test_unauthorized_in_production_step_format_triggers(self):
+        """用 ctx.py **真实写入**的轨迹格式验证越权立即检查。
+
+        此前测试只手工造 kind='denied'/status='blocked'，而生产路径写的是
+        kind='security'/status='error'/error_type='approval_required'。
+        统计函数只认前者 -> 生产上这条路径一次都没触发过。
+        """
+        import core as C
+        st = self._setup(after_rate=0.5)
+        try:
+            C.AUTO_MONITOR_LAST.clear()
+            rid = "r-prod-deny"
+            self._add_run(st, rid)
+            with st.conn() as c:
+                c.execute(
+                    "INSERT INTO steps(id,run_id,seq,logical,kind,name,status,"
+                    "error_type) VALUES(?,?,?,?,?,?,?,?)",
+                    (rid + "-s0", rid, 0, 0, "security", "shell.exec",
+                     "error", "approval_required"))
+            st.finish_run(rid, 1, "ok", "ok", 1, 1)
+            last = dict(C.AUTO_MONITOR_LAST)
+            self.assertTrue(last.get("auto"),
+                            "生产的 security 轨迹没触发立即监控：%s" % last)
+            self.assertGreaterEqual(int(last.get("unauthorized") or 0), 1)
+        finally:
+            st.close()
+
     def test_window_triggers_rollback_without_api_call(self):
         """连续 5 次失败运行后自动回滚，无需人工调 /api/skills/monitor。"""
         import core as C

@@ -1,84 +1,78 @@
 {
-  "attribution": {
-    "evidence": [
-      "experiments/judge_attribution.json",
-      "experiments/judge_attribution_paraphrased.json"
-    ],
-    "original_injecagent": {
-      "detail": "原集规则已全覆盖；模型接口真跑通但无独立增量（不把规则功劳记成模型功劳）",
-      "model_only_hits": 0,
-      "rule_allow_candidates": 0
-    },
-    "paraphrased_attacks": {
-      "detail": "改写措辞的 5 条劫持攻击规则全放行，模型 5/5 识别，证明正交判官的泛化价值",
-      "model_denied": 5,
-      "model_only_hits": 5,
-      "rule_allow_candidates": 5
-    }
-  },
-  "judge": "deepseek/deepseek-chat",
-  "judge_note": "真模型判官 deepseek/deepseek-chat（用户 2026-11-23 明确授权），经 provider_from_preset 正确解析 base_url/api_key_env；tool_output 走 IndirectInjectionJudge（判工具劫持/状态改变），user_input 走 harmful_request_judge。P95 534ms 为真模型调用耗时。",
+  "version": 1,
   "note": "ASR 为「检测+门禁两层都未拦」的可利用性上界，非真实业务损失率；InjecAgent/AgentDojo 的攻击工具在本系统未注册，无法真执行。",
+  "judge": "deepseek/deepseek-chat",
   "sets": {
-    "agentdojo_slice": {
+    "injecagent_public": {
+      "provenance": "public (InjecAgent, full)",
+      "n": 62,
+      "blocked_by": {
+        "L1_light": 56,
+        "L1_high_stakes": 2,
+        "L2_semantic": 4,
+        "L2_unavailable": 0,
+        "L2_undecided": 0,
+        "tool_gate": 0,
+        "missed": 0
+      },
       "asr": 0.0,
       "asr_detector_only": 0.0,
       "asr_with_registered_tools": 0.0,
+      "p95_ms": 2.321,
+      "n_rows": 2108,
+      "n_unique": 62,
+      "duplicate_ratio": 0.9706,
+      "self_checks": {
+        "partition_verified": true,
+        "counted_unit": "unique_text",
+        "unique_share": 0.0294,
+        "l2_coverage": 1.0,
+        "undecided_share": 0.0,
+        "degraded_share": 0.0,
+        "cache_conflicts": 0,
+        "warning": "原始 2108 行仅 62 条唯一文本（重复 97.1%），指标按去重计"
+      }
+    },
+    "agentdojo_slice": {
+      "provenance": "public (AgentDojo templates, goal-only)",
+      "n": 12,
       "blocked_by": {
-        "L1_high_stakes": 20,
-        "L1_light": 100,
+        "L1_light": 10,
+        "L1_high_stakes": 2,
         "L2_semantic": 0,
         "L2_unavailable": 0,
         "L2_undecided": 0,
-        "missed": 0,
-        "tool_gate": 0
+        "tool_gate": 0,
+        "missed": 0
       },
-      "duplicate_ratio": 0.9,
-      "n": 120,
-      "n_unique": 12,
-      "p95_ms": 0.344,
-      "provenance": "public (AgentDojo templates, goal-only)",
-      "self_checks": {
-        "degraded_share": 0.0,
-        "l2_coverage": null,
-        "partition_verified": true,
-        "unique_share": 0.1,
-        "warning": null
-      }
-    },
-    "injecagent_public": {
       "asr": 0.0,
       "asr_detector_only": 0.0,
       "asr_with_registered_tools": 0.0,
-      "blocked_by": {
-        "L1_high_stakes": 68,
-        "L1_light": 1904,
-        "L2_semantic": 136,
-        "L2_unavailable": 0,
-        "L2_undecided": 0,
-        "missed": 0,
-        "tool_gate": 0
-      },
-      "duplicate_ratio": 0.9706,
-      "n": 2108,
-      "n_unique": 62,
-      "p95_ms": 534.223,
-      "provenance": "public (InjecAgent, full)",
+      "p95_ms": 2.312,
+      "n_rows": 120,
+      "n_unique": 12,
+      "duplicate_ratio": 0.9,
       "self_checks": {
-        "degraded_share": 0.0,
-        "l2_coverage": 1.0,
         "partition_verified": true,
-        "unique_share": 0.0294,
-        "warning": null
+        "counted_unit": "unique_text",
+        "unique_share": 0.1,
+        "l2_coverage": null,
+        "undecided_share": 0.0,
+        "degraded_share": 0.0,
+        "cache_conflicts": 0,
+        "warning": "原始 120 行仅 12 条唯一文本（重复 90.0%），指标按去重计"
       }
     }
   },
   "utility_under_attack": {
-    "benign_n": 2108,
-    "false_positive_rate": 0.0,
+    "benign_n": 17,
     "pass_rate": 1.0,
+    "false_positive_rate": 0.0,
+    "decided_pass": 17,
+    "decided_n": 17,
+    "blocked": 0,
+    "undecided": 0,
     "provenance": "public (InjecAgent user_instruction, same-source benign)",
     "warning": null
-  },
-  "version": 1
+  }
 }

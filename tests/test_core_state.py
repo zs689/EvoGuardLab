@@ -68,3 +68,19 @@ class TestErrors(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestChanceP(unittest.TestCase):
+    """统计功效披露值必须是算出来的，不能硬编码 0.125。"""
+
+    def test_three_of_three(self):
+        import skills as SK
+        self.assertAlmostEqual(SK.chance_p(3, 3), 0.125, places=4)
+
+    def test_five_of_five(self):
+        import skills as SK
+        self.assertAlmostEqual(SK.chance_p(5, 5), 0.0312, places=4)
+
+    def test_zero_hits(self):
+        import skills as SK
+        self.assertAlmostEqual(SK.chance_p(0, 10), 1.0, places=4)

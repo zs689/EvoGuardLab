@@ -8,6 +8,22 @@ import app_core as _app_core
 globals().update({k: v for k, v in vars(_app_core).items()
                   if not k.startswith('__')})
 
+def _flag(name, default=False):
+    """运行时读开关：app_core 的模块级快照在 apply_entry_defaults 之前就冻结了。"""
+    v = (os.environ.get(name) or "").strip().lower()
+    if not v:
+        return default
+    return v in ("1", "true", "on")
+
+
+def _light_guard_on():
+    return _flag("EVOGUARD_LIGHT_GUARD")
+
+
+def _harmful_judge_on():
+    return _flag("EVOGUARD_HARMFUL_JUDGE")
+
+
 def h_openai_chat(self):
     """PROD-02-T1：OpenAI-compatible 透明安全代理。
 
@@ -23,7 +39,7 @@ def h_openai_chat(self):
         if body.get("stream") is True:
             return self._send_stream(_op, body)
         code, resp, audit = _op.proxy(
-            body, use_semantic=_HARMFUL_JUDGE_ON,
+            body, use_semantic=_harmful_judge_on(),
             agent_type=str(body.get("evoguard_agent") or "react"))
     except ValueError as exc:
         return self._err("E_NOT_READY", str(exc), 503)
@@ -54,11 +70,11 @@ def h_react_run(self):
                             "anonymous", "goal_required")
     # INT-04 后续：直接越狱/有害请求语义层（**默认关**，显式开启才用）。
     # 判官不可用 -> 503 转人工，绝不静默放行；判有害 -> 400 拒绝。
-    if _LIGHT_GUARD_ON:
+    if _light_guard_on():
         try:
             import light_classifier as _LC
             lg = _LC.guard_input_light(goal,
-                                       judge=None if _HARMFUL_JUDGE_ON
+                                       judge=None if _harmful_judge_on()
                                        else (lambda t: {"harmful": False,
                                                         "persona_jailbreak": False}))
             if lg["decision"] == "block":
@@ -71,7 +87,7 @@ def h_react_run(self):
             return self._reject(503, self._rid, "POST", "/api/react/run",
                                 "anonymous",
                                 "light_guard_error:" + type(exc).__name__)
-    if _HARMFUL_JUDGE_ON:
+    if _harmful_judge_on():
         try:
             import harmful_request_judge as _HRJ
             sem = _HRJ.guard_input_semantic(goal)
@@ -351,7 +367,7 @@ def _send_stream(self, _op, body):
     """
     try:
         code, lines, audit = _op.proxy_stream(
-            body, use_semantic=_HARMFUL_JUDGE_ON,
+            body, use_semantic=_harmful_judge_on(),
             agent_type=str(body.get("evoguard_agent") or "react"))
     except ValueError as exc:
         return self._err("E_NOT_READY", str(exc), 503)
