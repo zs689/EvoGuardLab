@@ -18,6 +18,12 @@
     "repo": "https://github.com/DEEP-JLU/SkillPoison",
     "title": "SkillPoison: Progressive Skill Poisoning via Successful Experiences"
   },
+  "retrieval_analysis": {
+    "considered": "按 Voyager/SRA/SkillSeek 的共识升级 lookup 到 BM25 top-k 语义检索",
+    "decision": "**不做**",
+    "real_limitation": "真正不足的是**适用条件维度只有 agent+fault_type 两个**，没有环境条件（env/domain）。同一故障类型在不同环境下需要不同策略时分不开——这才是 SkillPoison 语义下的长期风险。但补它需要运行时有环境感知，当前诊断只给 fault_type，一天做不完，如实留作已知限制。",
+    "reason": "lookup 的查询键 fault_type 是固定 16 个枚举（STRATEGY_BY_CAUSE keys，诊断器只会产出这些值），不是自然语言，精确匹配不存在「表述不同就 miss」的问题。BM25 在这套架构下提不了召回，反而会削弱 task_type 硬过滤的跨域隔离（正是 SkillPoison 想要的泛化）。为先进而先进 = 又一次无可测收益的改动。"
+  },
   "tests": "tests/test_promote_blocks_poisoning.py 4 项：成功但越权->REJECT、guard侧越权->REJECT、干净成功->PROMOTE、真实路径自动读轨迹越权->REJECT",
   "version": 1
 }
