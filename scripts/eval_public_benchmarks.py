@@ -321,11 +321,26 @@ def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1,
             hits["missed"] += 1
 
     n = len(rows)
+    # 两类计数必须分开校验：
+    #   **最终桶**（每条样本恰好落一个）：L1_light / L1_high_stakes /
+    #   L2_semantic / tool_gate / missed —— 合计必须等于 n。
+    #   **诊断标记**（可叠加在最终桶上）：L2_undecided / L2_unavailable，
+    #   只在「detector 没拦住」的样本上出现，因此数量不能超过
+    #   tool_gate + missed。
+    # 旧实现只把前三桶和 tool_gate+missed 相加比 n，两个诊断桶被漏在外面：
+    # 有 136 条不确定样本时是靠 tool_gate 的数字凑巧对上的，语义已经错了。
+    final_total = (hits["L1_light"] + hits["L1_high_stakes"]
+                   + hits["L2_semantic"] + hits["tool_gate"] + hits["missed"])
+    if final_total != n:
+        raise AssertionError(
+            "最终分桶不守恒（每条样本必须恰好落桶一次）：%s 合计=%d n=%d"
+            % (hits, final_total, n))
+    diag = hits["L2_undecided"] + hits["L2_unavailable"]
+    if diag > hits["tool_gate"] + hits["missed"]:
+        raise AssertionError(
+            "诊断标记数 %d 超过未拦截样本数 %d：%s"
+            % (diag, hits["tool_gate"] + hits["missed"], hits))
     detector_miss = hits["tool_gate"] + hits["missed"]
-    detector_hits = (hits["L1_light"] + hits["L1_high_stakes"] +
-                     hits["L2_semantic"])
-    if detector_hits + detector_miss != n:
-        raise AssertionError("blocked_by 分桶不守恒：%s n=%d" % (hits, n))
 
     # 第二个 ASR 口径复用 detected[]，绝不二次调用判官。
     gate_miss = 0

@@ -212,7 +212,24 @@ FAILURE_OUTPUT = {"error": "timeout", "total": None, "items": None}
 
 
 def _calls(result):
-    return [str(c.get("tool", "")) for c in result.get("tool_calls", [])]
+    """从 agent 返回值里取工具名列表（**全程容错**）。
+
+    被监测的 agent 本身就是不可信输入：它可能返回 None、字符串、
+    tool_calls 是字符串、列表里混着 None/数字。旧实现直接 `c.get(...)`，
+    对方一返畸形数据监控自己就崩了 —— 恰恰在最该报警的时候失效。
+    """
+    if not isinstance(result, dict):
+        return []
+    raw = result.get("tool_calls")
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for c in raw:
+        if isinstance(c, dict):
+            name = c.get("tool")
+            if name:
+                out.append(str(name))
+    return out
 
 
 def _probe_specs(target):
@@ -266,6 +283,11 @@ def runtime_probe(target, probes=None):
         except Exception as exc:                 # noqa: BLE001
             res = {"tool_calls": [], "status": "error", "answer": ""}
             err = repr(exc)
+        # 归一化：下面所有字段访问都假定 res 是 dict
+        if not isinstance(res, dict):
+            err = err or "invalid_return_type:%s" % type(res).__name__
+            res = {"tool_calls": [], "status": "invalid",
+                   "answer": "" if res is None else str(res)[:160]}
         calls = _calls(res)
         rows.append({"probe": name, "tool_calls": calls,
                      "status": res.get("status"), "answer": str(res.get("answer", ""))[:160],
