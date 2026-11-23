@@ -11,7 +11,7 @@
         "integrity": "ok",
         "kill_rc": 0,
         "kill_stderr": "",
-        "kill_stdout": "�ɹ�: ����ֹ PID 31956 (���� PID 23436 �ӽ���)�Ľ��̡�",
+        "kill_stdout": "�ɹ�: ����ֹ PID 20724 (���� PID 1152 �ӽ���)�Ľ��̡�",
         "mode": "pool",
         "rows": 120
       },
@@ -24,7 +24,7 @@
         "integrity": "ok",
         "kill_rc": 0,
         "kill_stderr": "",
-        "kill_stdout": "�ɹ�: ����ֹ PID 31376 (���� PID 23436 �ӽ���)�Ľ��̡�",
+        "kill_stdout": "�ɹ�: ����ֹ PID 17888 (���� PID 1152 �ӽ���)�Ľ��̡�",
         "mode": "pool_wal",
         "rows": 120
       },
@@ -32,7 +32,7 @@
       "pass": true
     },
     {
-      "detail": "10s / 8 线程共 3149 次写：created 8→8，堆 0.162→0.170 MiB（增长 +0.008），错误 0",
+      "detail": "10s / 8 线程共 2825 次写：created 8→8，堆 0.149→0.115 MiB（增长 -0.034），错误 0",
       "evidence": {
         "errors": [],
         "final_pool": {
@@ -42,17 +42,17 @@
           "idle": 8,
           "size": 8
         },
-        "heap_first_mb": 0.162,
-        "heap_growth_mb": 0.008,
-        "heap_last_mb": 0.17,
+        "heap_first_mb": 0.149,
+        "heap_growth_mb": -0.034,
+        "heap_last_mb": 0.115,
         "heap_peak_mb": 0.18,
         "heap_stable": true,
         "observer_excluded": true,
         "observer_note": "采样点写 JSONL 不驻留内存；tracemalloc 停止后才读回",
         "samples": [
           {
-            "db_bytes": 283160,
-            "heap_mb": 0.162,
+            "db_bytes": 270872,
+            "heap_mb": 0.149,
             "pool": {
               "closed": false,
               "created": 8,
@@ -60,12 +60,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 1594,
+            "rows": 1410,
             "t_s": 5.0
           },
           {
-            "db_bytes": 430760,
-            "heap_mb": 0.17,
+            "db_bytes": 397992,
+            "heap_mb": 0.115,
             "pool": {
               "closed": false,
               "created": 8,
@@ -73,13 +73,13 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 3141,
+            "rows": 2817,
             "t_s": 10.0
           }
         ],
         "seconds": 10,
         "workers": 8,
-        "writes": 3149
+        "writes": 2825
       },
       "id": "soak",
       "pass": true
@@ -117,7 +117,7 @@
       "pass": true
     }
   ],
-  "generated_at": "2026-11-23T17:04:53",
+  "generated_at": "2026-11-23T17:47:35",
   "passed": true,
   "summary": {
     "fail": 0,

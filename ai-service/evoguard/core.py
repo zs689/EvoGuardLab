@@ -18,46 +18,9 @@ import weakref
 
 DB_PATH = os.environ.get("AGENTLAB_DB", "")
 
-# ---------------- 错误码 ----------------
-ERR = {
-    "E_BAD_REQUEST": "请求参数不合法",
-    "E_NOT_FOUND": "资源不存在",
-    "E_INVALID_STATE": "当前状态不允许该操作",
-    "E_BUDGET_EXCEEDED": "超出预算（步数/重试/Token）",
-    "E_FAULT_INJECT": "故障注入失败",
-    "E_APPROVAL_REQUIRED": "该操作需要审批",
-    "E_INTERNAL": "内部错误",
-}
-
-
-class ApiError(Exception):
-    def __init__(self, code, message="", http=400):
-        self.code = code
-        self.message = message or ERR.get(code, code)
-        self.http = http
-        super().__init__("%s: %s" % (code, self.message))
-
-
-# ---------------- 状态机 ----------------
-CREATED, READY, RUNNING = "CREATED", "READY", "RUNNING"
-PAUSED, FAILED, RECOVERING = "PAUSED", "FAILED", "RECOVERING"
-SUCCEEDED, CANCELLED = "SUCCEEDED", "CANCELLED"
-
-STATES = [CREATED, READY, RUNNING, PAUSED, FAILED, RECOVERING, SUCCEEDED, CANCELLED]
-
-TRANSITIONS = {
-    CREATED: {READY, CANCELLED},
-    READY: {RUNNING, CANCELLED},
-    RUNNING: {SUCCEEDED, FAILED, PAUSED, CANCELLED},
-    PAUSED: {RUNNING, CANCELLED},
-    RECOVERING: {SUCCEEDED, FAILED, PAUSED},
-    FAILED: {RECOVERING, CANCELLED},
-    SUCCEEDED: set(),
-    CANCELLED: set(),
-}
-
-TERMINAL = {SUCCEEDED, CANCELLED}
-
+from core_state import (ERR, ApiError, CREATED, READY, RUNNING, PAUSED,
+                        FAILED, RECOVERING, SUCCEEDED, CANCELLED, STATES,
+                        TRANSITIONS, TERMINAL)
 
 # ---------------- 工具函数 ----------------
 def new_id(prefix):
