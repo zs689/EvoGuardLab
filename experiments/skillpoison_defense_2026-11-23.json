@@ -1,0 +1,23 @@
+{
+  "fix": {
+    "auto_wiring": "run_case 未显式上报时，用 run_id 自动查 steps 表（认 kind=security+status=error 与 denied/rails_denied/loop_guard 两种格式），避免门禁成为死代码",
+    "backward_compat": "旧 run_case 返回 bool 不受影响（unauthorized 默认 0）",
+    "what": "把越权检查前移到晋升门禁：evaluate 累计 candidate 侧 unauthorized，>0 一律 REJECT"
+  },
+  "generated_at": "2026-11-23T23:1x",
+  "honest_note": "这挡的是「任务成功但执行越权」这一类；SkillPoison 更隐蔽的变体（完全无越权痕迹、纯靠泛化造成误用）仍需依赖 guard_cases 的覆盖面，而 guard_cases 由调用方提供——这是仍然存在的攻击面，未解决。",
+  "our_gap_found": {
+    "before": "skills.evaluate()（晋升验证）只看 pass 率，不查执行期越权；越权检查只在 monitor_and_rollback（上线后）",
+    "risk": "技能让任务通过就晋升，哪怕过程中触发越权 -> 有害行为被固化成持久技能",
+    "verified_isolation": "lookup 用 task_type+fault_type 精确匹配，跨域串用已实测为 None（这层没问题）"
+  },
+  "paper": {
+    "arxiv": "2610.07645",
+    "core": "用**验证通过的成功经验**毒化技能库：剥离适用条件限制，让技能提取器过度泛化，任务成功的同时在被误用时产生有害行为；95.71% ASR，且每条经验都通过验证与词法检查",
+    "date": "2026-10-06",
+    "repo": "https://github.com/DEEP-JLU/SkillPoison",
+    "title": "SkillPoison: Progressive Skill Poisoning via Successful Experiences"
+  },
+  "tests": "tests/test_promote_blocks_poisoning.py 4 项：成功但越权->REJECT、guard侧越权->REJECT、干净成功->PROMOTE、真实路径自动读轨迹越权->REJECT",
+  "version": 1
+}
