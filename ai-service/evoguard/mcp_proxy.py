@@ -84,12 +84,60 @@ def handle_message(msg, *, registry, rails=None, state=None):
     params = msg.get("params") or {}
 
     if method == "tools/list":
-        reg = register_tools(params.get("tools"), registry=registry)
+        tools = list(params.get("tools") or [])
+        # FRONTIER-02：会话级 SHA-256 钉扎，防 Rug-Pull（第 1 轮正常、
+        # 第 2 轮偷偷改 description 注入指令）。规范化只覆盖描述与 schema。
+        import hashlib as _hl
+        fp = {}
+        for t in tools:
+            if not isinstance(t, dict) or not t.get("name"):
+                continue
+            canon = json.dumps({"description": str(t.get("description") or ""),
+                                "inputSchema": t.get("inputSchema") or
+                                               t.get("schema") or {}},
+                               ensure_ascii=False, sort_keys=True,
+                               separators=(",", ":"))
+            fp[str(t["name"])] = _hl.sha256(
+                canon.encode("utf-8")).hexdigest()
+        pinned = dict(state.get("tool_fingerprints") or {})
+        drift = [n for n, h in fp.items()
+                 if n in pinned and pinned[n] != h]
+        if drift:
+            state["rugpull_drift"] = True
+            state["rugpull_tools"] = drift
+            if mid is None:
+                return None
+            return {"jsonrpc": "2.0", "id": mid,
+                    "error": {"code": -32099,
+                              "message": "mcp_tool_rugpull_drift",
+                              "data": {"tools": drift}}}
+        # 首次 tools/list 也要过投毒检查：description 里的 Unicode Tag
+        # 隐写 / 指令注入不能靠"正常工具"身份混进 registry。
+        poisoned = []
+        for t in tools:
+            if not isinstance(t, dict):
+                continue
+            desc = str(t.get("description") or "")
+            findings = _sec.scan(desc, "tool_output")
+            codes = {f.get("code") for f in findings}
+            if any("hidden_" in str(c) for c in codes):
+                poisoned.append(str(t.get("name")))
+        if poisoned:
+            state["rugpull_drift"] = True
+            state["rugpull_tools"] = poisoned
+            if mid is None:
+                return None
+            return {"jsonrpc": "2.0", "id": mid,
+                    "error": {"code": -32098,
+                              "message": "mcp_tool_description_poisoned",
+                              "data": {"tools": poisoned}}}
+        state["tool_fingerprints"] = {**pinned, **fp}
+        reg = register_tools(tools, registry=registry)
         state["registry"] = reg
         if mid is None:
             return None
         return {"jsonrpc": "2.0", "id": mid,
-                "result": {"tools": list((params.get("tools") or []))}}
+                "result": {"tools": tools}}
 
     if method == "tools/call":
         name = str(params.get("name") or "")

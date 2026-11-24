@@ -15,6 +15,7 @@
 Windows 机器上也能跑出同一批数字 —— 这是可复现主张的一部分，不是偷懒。
 """
 import argparse
+import base64
 import json
 import os
 import subprocess
@@ -301,6 +302,26 @@ def cmd_config(_):
     return 0
 
 
+def cmd_verify_receipt(a):
+    """离线验签一条 Action Receipt：未签名/篡改都必须非零退出。"""
+    import receipt as _rc
+    try:
+        raw = a.file_or_token
+        if os.path.isfile(raw):
+            with open(raw, encoding="utf-8") as f:
+                r = json.load(f)
+        else:
+            pad = "=" * (-len(raw) % 4)
+            r = json.loads(base64.urlsafe_b64decode(raw + pad).decode("utf-8"))
+    except Exception as exc:                                # noqa: BLE001
+        print("无法解析回执：%s" % exc)
+        return 2
+    v = _rc.verify(r, key=a.key or None)
+    print("status=%s valid=%s reason=%s"
+          % (v["status"], v["valid"], v["reason"]))
+    return 0 if v["valid"] else 1
+
+
 def cmd_scorecard(a):
     """分数是「下一轮先补哪」的排序依据，不是认证。--min 用于回归守门：
     这一轮比上一轮低了就非零退出，避免在没有任何人注意的情况下退步。
@@ -394,6 +415,12 @@ def main(argv=None):
 
     p = sub.add_parser("config", help="打印生效的安全配置")
     p.set_defaults(func=cmd_config)
+
+    p = sub.add_parser("verify-receipt",
+                       help="离线验证 Action Receipt（签名/未签名/篡改）")
+    p.add_argument("file_or_token", help="回执 JSON 文件或 base64url token")
+    p.add_argument("--key", default="", help="验签密钥（默认读环境变量）")
+    p.set_defaults(func=cmd_verify_receipt)
 
     p = sub.add_parser("scorecard",
                        help="企业就绪度自评（打分 + 缺口清单）[checkout-only]")
