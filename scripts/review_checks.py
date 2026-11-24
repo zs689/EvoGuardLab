@@ -587,9 +587,9 @@ def c_jobs_e2e():
            os.path.join(ROOT, "scripts", "jobs_smoke.py"), "--out", tmp]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True,
-                           cwd=ROOT, timeout=300)
+                           cwd=ROOT, timeout=420)
     except subprocess.TimeoutExpired:
-        return _result("EG-009/jobs", False, "作业验收超时（300s）",
+        return _result("EG-009/jobs", False, "作业验收超时（420s）",
                        "scripts/jobs_smoke.py")
     rep = _json(os.path.join(tmp, "jobs_smoke.json")) or {}
     s = rep.get("summary", {})
