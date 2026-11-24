@@ -90,6 +90,15 @@ class Ctx:
         # FINAL-01-T2 污点追踪：此前 execution.preflight 支持 taint_state，
         # 但 Ctx 从不维护也不传 —— 整条信息流防护在生产上从未生效。
         self.taint_state = {"user_goal": self.user_goal}
+        # FRONTIER-01 参数来源血缘：与 taint 正交（taint 追秘密外流，
+        # provenance 追外部不可信值流入高敏参数）。此前 preflight 有这个
+        # 参数但**没有任何调用方传** —— 门禁写了却从未生效。
+        try:
+            import provenance as _prov
+            self.provenance = _prov.ProvenanceTracker()
+            self.provenance.record_user_goal(self.user_goal)
+        except Exception:                                # noqa: BLE001
+            self.provenance = None
         self.calls = []            # 每次调用的前置判断记录（含 call_id）
 
     # ---- 内部 ----
@@ -395,7 +404,7 @@ class Ctx:
         pre = execution.preflight(
             self.exec_config, agent_type=self.exp.get("agent_type"),
             tool=tool, args=args, user_goal=self.user_goal, cid=cid,
-            taint_state=self.taint_state)
+            taint_state=self.taint_state, provenance=self.provenance)
         self.calls.append(pre)
         security.record(
             self.store, self.run_id, "exec_preflight:%s" % tool,
@@ -601,6 +610,11 @@ class Ctx:
             _taint.record_tool_output(self.taint_state, out)
         except Exception:                                # noqa: BLE001
             pass            # 污点是增强层，异常不影响主流程
+        try:
+            if self.provenance is not None:
+                self.provenance.record_tool_output(tool, out)
+        except Exception:                                # noqa: BLE001
+            pass
         out_sec = security.guard_tool_output(tool, out)
         if out_sec["findings"]:
             security.record(self.store, self.run_id, "tool_output:%s" % tool, out_sec)

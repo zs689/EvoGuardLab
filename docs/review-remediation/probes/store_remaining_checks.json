@@ -11,7 +11,7 @@
         "integrity": "ok",
         "kill_rc": 0,
         "kill_stderr": "",
-        "kill_stdout": "�ɹ�: ����ֹ PID 20724 (���� PID 1152 �ӽ���)�Ľ��̡�",
+        "kill_stdout": "�ɹ�: ����ֹ PID 18380 (���� PID 7840 �ӽ���)�Ľ��̡�",
         "mode": "pool",
         "rows": 120
       },
@@ -24,7 +24,7 @@
         "integrity": "ok",
         "kill_rc": 0,
         "kill_stderr": "",
-        "kill_stdout": "�ɹ�: ����ֹ PID 17888 (���� PID 1152 �ӽ���)�Ľ��̡�",
+        "kill_stdout": "�ɹ�: ����ֹ PID 25748 (���� PID 7840 �ӽ���)�Ľ��̡�",
         "mode": "pool_wal",
         "rows": 120
       },
@@ -32,7 +32,7 @@
       "pass": true
     },
     {
-      "detail": "10s / 8 线程共 2825 次写：created 8→8，堆 0.149→0.115 MiB（增长 -0.034），错误 0",
+      "detail": "20s / 8 线程共 5491 次写：created 8→8，堆 0.155→0.160 MiB（增长 +0.005），错误 0",
       "evidence": {
         "errors": [],
         "final_pool": {
@@ -42,17 +42,17 @@
           "idle": 8,
           "size": 8
         },
-        "heap_first_mb": 0.149,
-        "heap_growth_mb": -0.034,
-        "heap_last_mb": 0.115,
-        "heap_peak_mb": 0.18,
+        "heap_first_mb": 0.155,
+        "heap_growth_mb": 0.005,
+        "heap_last_mb": 0.16,
+        "heap_peak_mb": 0.183,
         "heap_stable": true,
         "observer_excluded": true,
         "observer_note": "采样点写 JSONL 不驻留内存；tracemalloc 停止后才读回",
         "samples": [
           {
-            "db_bytes": 270872,
-            "heap_mb": 0.149,
+            "db_bytes": 253952,
+            "heap_mb": 0.155,
             "pool": {
               "closed": false,
               "created": 8,
@@ -60,12 +60,12 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 1410,
+            "rows": 1436,
             "t_s": 5.0
           },
           {
             "db_bytes": 397992,
-            "heap_mb": 0.115,
+            "heap_mb": 0.106,
             "pool": {
               "closed": false,
               "created": 8,
@@ -73,13 +73,39 @@
               "idle": 0,
               "size": 8
             },
-            "rows": 2817,
+            "rows": 2752,
             "t_s": 10.0
+          },
+          {
+            "db_bytes": 529209,
+            "heap_mb": 0.074,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 4169,
+            "t_s": 15.0
+          },
+          {
+            "db_bytes": 648138,
+            "heap_mb": 0.16,
+            "pool": {
+              "closed": false,
+              "created": 8,
+              "discarded": 0,
+              "idle": 0,
+              "size": 8
+            },
+            "rows": 5483,
+            "t_s": 20.0
           }
         ],
-        "seconds": 10,
+        "seconds": 20,
         "workers": 8,
-        "writes": 2825
+        "writes": 5491
       },
       "id": "soak",
       "pass": true
@@ -117,7 +143,7 @@
       "pass": true
     }
   ],
-  "generated_at": "2026-11-23T17:47:35",
+  "generated_at": "2026-11-24T19:21:34",
   "passed": true,
   "summary": {
     "fail": 0,

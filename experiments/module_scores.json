@@ -1,0 +1,395 @@
+{
+  "average": 94.6,
+  "domains": [
+    {
+      "domain": "approval",
+      "score": 83.0,
+      "detail": {
+        "A_tests": {
+          "tests": 269,
+          "files": 23,
+          "kloc": 0.55,
+          "density": 269.0,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [],
+          "note": "无专属产物",
+          "score": 8.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "plan_runner",
+      "score": 83.0,
+      "detail": {
+        "A_tests": {
+          "tests": 188,
+          "files": 17,
+          "kloc": 0.39,
+          "density": 188.0,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [],
+          "note": "无专属产物",
+          "score": 8.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "autonomous",
+      "score": 83.0,
+      "detail": {
+        "A_tests": {
+          "tests": 328,
+          "files": 31,
+          "kloc": 1.24,
+          "density": 265.6,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [],
+          "note": "无专属产物",
+          "score": 8.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "openai_proxy",
+      "score": 83.0,
+      "detail": {
+        "A_tests": {
+          "tests": 214,
+          "files": 18,
+          "kloc": 0.5,
+          "density": 214.0,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [],
+          "note": "无专属产物",
+          "score": 8.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "evaluation",
+      "score": 92.5,
+      "detail": {
+        "A_tests": {
+          "tests": 53,
+          "files": 7,
+          "kloc": 1.51,
+          "density": 35.0,
+          "score": 17.5
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [
+            [
+              "pub_bench_layered.json",
+              "fresh"
+            ]
+          ],
+          "score": 25.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "core",
+      "score": 100.0,
+      "detail": {
+        "A_tests": {
+          "tests": 521,
+          "files": 45,
+          "kloc": 0.98,
+          "density": 521.0,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [
+            [
+              "probes/write_gate_stress.json",
+              "frozen"
+            ]
+          ],
+          "score": 25.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "execution",
+      "score": 100.0,
+      "detail": {
+        "A_tests": {
+          "tests": 346,
+          "files": 29,
+          "kloc": 1.08,
+          "density": 319.5,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [
+            [
+              "probes/store_remaining_checks.json",
+              "fresh"
+            ]
+          ],
+          "score": 25.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "runtime",
+      "score": 100.0,
+      "detail": {
+        "A_tests": {
+          "tests": 475,
+          "files": 34,
+          "kloc": 1.45,
+          "density": 327.1,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [
+            [
+              "probes/write_gate_stress.json",
+              "frozen"
+            ]
+          ],
+          "score": 25.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "security",
+      "score": 100.0,
+      "detail": {
+        "A_tests": {
+          "tests": 711,
+          "files": 49,
+          "kloc": 2.25,
+          "density": 316.1,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [
+            [
+              "pub_jailbreak_layered.json",
+              "fresh"
+            ]
+          ],
+          "score": 25.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "evolution",
+      "score": 100.0,
+      "detail": {
+        "A_tests": {
+          "tests": 547,
+          "files": 43,
+          "kloc": 3.16,
+          "density": 173.0,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [
+            [
+              "tool_synthesis_e2e.json",
+              "fresh"
+            ]
+          ],
+          "score": 25.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "sandbox",
+      "score": 100.0,
+      "detail": {
+        "A_tests": {
+          "tests": 298,
+          "files": 28,
+          "kloc": 1.26,
+          "density": 237.3,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [
+            [
+              "docker_sandbox_verify.json",
+              "fresh"
+            ]
+          ],
+          "score": 25.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "gateway",
+      "score": 100.0,
+      "detail": {
+        "A_tests": {
+          "tests": 274,
+          "files": 25,
+          "kloc": 0.84,
+          "density": 274.0,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [
+            [
+              "cross_model/judge_probe.json",
+              "fresh"
+            ]
+          ],
+          "score": 25.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "agent_watch",
+      "score": 100.0,
+      "detail": {
+        "A_tests": {
+          "tests": 222,
+          "files": 19,
+          "kloc": 0.89,
+          "density": 222.0,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [
+            [
+              "probes/agent_watch_verification.json",
+              "fresh"
+            ]
+          ],
+          "score": 25.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    },
+    {
+      "domain": "pg_store",
+      "score": 100.0,
+      "detail": {
+        "A_tests": {
+          "tests": 245,
+          "files": 22,
+          "kloc": 0.61,
+          "density": 245.0,
+          "score": 25.0
+        },
+        "B_wiring": {
+          "unwired": [],
+          "score": 25.0
+        },
+        "C_anchor": {
+          "items": [
+            [
+              "probes/pg_store_e2e.json",
+              "fresh"
+            ]
+          ],
+          "score": 25.0
+        },
+        "D_static": {
+          "score": 25.0
+        }
+      }
+    }
+  ]
+}

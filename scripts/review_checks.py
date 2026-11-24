@@ -915,7 +915,8 @@ def c_eval_self_checks():
     """
     need = {
         "experiments/pub_jailbreak_layered.json": ("dedup_verified",
-                                                   "train_overlap_excluded"),
+                                                   "train_overlap_excluded",
+                                                   "threshold_effective"),
         "experiments/pub_bench_layered.json": ("partition_verified",),
     }
     missing = []

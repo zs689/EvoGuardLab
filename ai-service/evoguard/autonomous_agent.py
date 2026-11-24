@@ -104,6 +104,14 @@ class ReActAgent:
                             "taint_sources": {"urls": [], "emails": [],
                                               "accounts": [], "amounts": [],
                                               "paths": []}}
+        # FRONTIER-01：参数来源账本（与 taint 正交）。preflight 有该参数但
+        # 没有调用方传 —— 不接上等于门禁不存在。
+        try:
+            import provenance as _prov
+            self.provenance = _prov.ProvenanceTracker()
+            self.provenance.record_user_goal(goal)
+        except Exception:                                # noqa: BLE001
+            self.provenance = None
         # 预授权写工具的审批 id（由 harness 预先建单批准）。preflight 在
         # executor 之前执行，所以必须在 preflight 前注入，不能只靠 executor。
         self.approval_id = approval_id
@@ -136,6 +144,7 @@ class ReActAgent:
             self.cfg, agent_type=self.agent_type, tool=tool, args=args,
             user_goal=self.goal, contracts=contracts,
             taint_state=getattr(self, "taint_state", None),
+            provenance=getattr(self, "provenance", None),
             cid=_exec.call_id("react", seq, tool, args),
             rails=self.rails or None)
         if not out.get("stop"):
@@ -408,6 +417,8 @@ class ReActAgent:
                           if hasattr(self.registry, "scope_of") else "")
                 if not blocked_result and str(_scope) in ("read_only", "READ_ONLY"):
                     _taint.record_tool_output(self.taint_state, out)
+                    if getattr(self, "provenance", None) is not None:
+                        self.provenance.record_tool_output(tool, out)
             except Exception:                              # noqa: BLE001
                 pass
             messages.append({"role": "user", "content": json.dumps(

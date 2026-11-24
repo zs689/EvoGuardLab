@@ -241,7 +241,8 @@ def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1,
 
     # NEXT-02-T2：按 text 哈希去重。同一条 attacker_instruction 在 2108 条里
     # 大量重复，串行逐个打 API 是 >30min 的主因。
-    cache = _load_cache(cache_path)
+    cache = {k: v for k, v in _load_cache(cache_path).items()
+             if v.get("channel") == channel}
     uniq = {}
     for r in rows:
         text = (r.get("text") or r.get("attacker_instruction")
@@ -288,6 +289,11 @@ def _eval_set(name, rows, *, judge, limit=0, cache_path=None, workers=1,
         sink = open(cache_path, "a", encoding="utf-8") if cache_path else None
 
         def _persist(rec):
+            # 缓存键只有 sha256(text)，不含通道/判官身份。历史上 rule-only 与
+            # l2 两轮评测共用同一个缓存文件，导致产物里的分桶来自另一判官。
+            # 把来源写进记录，读取时按通道校验（旧记录无 channel -> 不命中）。
+            rec["channel"] = channel
+            rec["judge"] = type(judge).__name__ if judge is not None else "none"
             cache[rec["key"]] = rec
             if sink:
                 sink.write(json.dumps(rec, ensure_ascii=False) + "\n")

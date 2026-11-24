@@ -18,31 +18,39 @@
       "benign": 331
     }
   },
-  "n": 200,
-  "n_unique": 200,
+  "n": 363,
+  "n_unique": 363,
   "duplicate_ratio": 0.0,
   "threshold_calibration": {
     "high": 0.4,
     "selected_on": "calib (未参与训练，非 holdout)",
     "calib_recall": 0.9641,
     "calib_fpr": 0.0479,
-    "target_fpr": 0.05
+    "target_fpr": 0.05,
+    "changed_decisions_vs_default": 0,
+    "threshold_effective": false,
+    "default_threshold_metrics": {
+      "recall": 0.9509,
+      "fpr": 0.04
+    },
+    "note": "校准未改变任何判定：判定由权重内置阈值主导，high 只在 norm<1 时才可能生效"
   },
   "self_checks": {
     "dedup_verified": true,
     "train_overlap_excluded": true,
     "threshold_source": "calib (未参与训练，非 holdout)",
+    "threshold_effective": false,
     "scored_layers": [
       "L1_only",
       "L1_plus_light"
     ],
-    "warning": null
+    "warning": "阈值校准未产生增量（changed=0）：报告的 recall/fpr 由权重内置阈值决定，不是 calib 选出的 high"
   },
   "diagnosis": {
     "calib_default_threshold": {
       "recall": 0.9641,
       "fpr": 0.0479,
-      "p95_ms": 5.407,
+      "p95_ms": 5.687,
       "confusion": {
         "tp": 188,
         "fn": 7,
@@ -50,7 +58,7 @@
         "tn": 378
       }
     },
-    "finding": "达标：L1+light 在留出集上 recall=0.93 / fpr=0.02",
+    "finding": "达标：L1+light 在留出集上 recall=0.95 / fpr=0.04",
     "root_causes_fixed": [
       "训练/推理特征函数不一致（推理侧多加 pinyin_tokens）",
       "拼音短码子串误匹配（sc/rg 命中 score/description）",
@@ -59,26 +67,26 @@
     ]
   },
   "L1_only": {
-    "recall": 0.01,
+    "recall": 0.2393,
     "fpr": 0.0,
-    "p95_ms": 0.63,
+    "p95_ms": 1.612,
     "confusion": {
-      "tp": 1,
-      "fn": 99,
+      "tp": 39,
+      "fn": 124,
       "fp": 0,
-      "tn": 100
+      "tn": 200
     }
   },
   "L1_plus_light": {
-    "recall": 0.93,
-    "fpr": 0.02,
-    "p95_ms": 6.594,
+    "recall": 0.9509,
+    "fpr": 0.04,
+    "p95_ms": 6.206,
     "confusion": {
-      "tp": 93,
-      "fn": 7,
-      "fp": 2,
-      "tn": 98
+      "tp": 155,
+      "fn": 8,
+      "fp": 8,
+      "tn": 192
     }
   },
-  "delta_recall": 0.92
+  "delta_recall": 0.7116
 }

@@ -7,7 +7,7 @@
     "tenant_b_cannot_read_tenant_a": true
   },
   "detail": {
-    "experiment_id": "exp_597340ae438b",
+    "experiment_id": "exp_f836a01e243a",
     "runs_seen": 1,
     "tenant_b_error": "ApiError"
   },

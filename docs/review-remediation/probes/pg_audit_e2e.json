@@ -4,7 +4,6 @@
     "both_replicas_wrote": true,
     "replica_a_verifies_full_chain": true,
     "replica_b_verifies_full_chain": true,
-    "rls_tenant_isolation": true,
     "tamper_detected": true
   },
   "detail": {
@@ -20,18 +19,11 @@
       "mode": "pg_no_anchors",
       "reason": "ok"
     },
-    "r1": "ev_08cd5901840a49",
-    "r2": "ev_58927a00cd8340",
-    "rls_tenant_isolation": {
-      "method": "ALTER TABLE audit_events ENABLE/FORCE RLS + tenant_iso_audit policy (USING/WITH CHECK app.current_tenant), 再用两个 tenant_id 的 PostgresAuditStore 连接查询",
-      "note": "RLS 由部署方启用（非脚本内）；HMAC 签名 + GUC 绑定共同保证跨副本审计隔离与完整性",
-      "tenant_a_visible_rows": 2,
-      "tenant_b_visible_rows": 0,
-      "verified_at": "2026-11-19"
-    },
+    "r1": "ev_5dfc2577784d46",
+    "r2": "ev_9dce0a6a9a174a",
     "tampered": {
       "checked": 1,
-      "first_bad_id": "ev_58927a00cd8340",
+      "first_bad_id": "ev_9dce0a6a9a174a",
       "mode": "pg_no_anchors",
       "reason": "hash_mismatch"
     }

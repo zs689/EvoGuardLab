@@ -88,6 +88,36 @@ class TestCacheIntegrity(unittest.TestCase):
         self.assertEqual(EB._load_cache(p)[k]["layer"], "L1_light")
 
 
+class TestChannelIsolation(unittest.TestCase):
+    """缓存必须按通道隔离：攻击走 tool_output、良性走 user_input。
+
+    历史上两轮评测共用一个缓存文件，键只取文本哈希，于是 rule-only 产物
+    里的分桶来自另一个判官的结论。记录里带 channel 后，跨通道一律不命中。
+    """
+
+    def _write(self, recs):
+        fd, p = tempfile.mkstemp(suffix=".jsonl")
+        os.close(fd)
+        self.addCleanup(os.remove, p)
+        with open(p, "w", encoding="utf-8") as f:
+            for r in recs:
+                f.write(json.dumps(r) + "\n")
+        return p
+
+    def test_record_without_channel_is_kept_but_not_reused(self):
+        """_load_cache 本身保留记录（职责单一）；按通道过滤在 _eval_set 里做。"""
+        p = self._write([{"key": _key("x"), "blocked": True,
+                          "layer": "L1_light"}])
+        self.assertIn(_key("x"), EB._load_cache(p))
+
+    def test_channel_is_recorded_on_write(self):
+        p = self._write([{"key": _key("x"), "blocked": True,
+                          "layer": "L1_light", "channel": "tool_output",
+                          "judge": "none"}])
+        got = EB._load_cache(p)[_key("x")]
+        self.assertEqual(got["channel"], "tool_output")
+
+
 class TestDetectLayered(unittest.TestCase):
     def test_benign_user_input_is_not_blocked(self):
         """user_input 是可信主指令，不该跑 tool_output 专用的动作职责规则。"""

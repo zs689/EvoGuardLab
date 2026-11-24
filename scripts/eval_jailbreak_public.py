@@ -155,8 +155,26 @@ def main():
             return False
         return r.get("decision") == "block"
 
+    def l1_plus_default(text):
+        """同一批样本，用**权重内置阈值**（high=None）判定。
+
+        用来回答一个此前被回避的问题：pick_threshold 选出来的 high 到底
+        有没有改变任何一条判定？如果没有，"calib 选出 0.4"就是虚假归因 ——
+        真正起作用的可能是 `norm >= 1.0` 那条路径。
+        """
+        if l1_only(text):
+            return True
+        try:
+            return LC.classify(text).get("decision") == "block"
+        except Exception:                                   # noqa: BLE001
+            return False
+
     l1 = _measure(sample, l1_only)
     l1l = _measure(sample, l1_plus_light)
+    l1d = _measure(sample, l1_plus_default)
+    # 逐条比较两个阈值下的判定，统计被 high 改变过的条数
+    changed = sum(1 for t, _lab in sample
+                  if l1_plus_light(t) != l1_plus_default(t))
     n_unique = len({_sha(t) for t, _ in sample})
 
     rep = {
@@ -186,6 +204,17 @@ def main():
             "high": hi, "selected_on": "calib (未参与训练，非 holdout)",
             "calib_recall": cal_recall, "calib_fpr": cal_fpr,
             "target_fpr": 0.05,
+            # 诚实字段：选出来的 high 到底改变了多少条判定。
+            # 0 表示校准是空操作（真正生效的是权重自带阈值 / norm>=1.0），
+            # 此时把 recall/fpr 归因给 "calib 选出的 high" 是错的。
+            "changed_decisions_vs_default": changed,
+            "threshold_effective": changed > 0,
+            "default_threshold_metrics": {
+                "recall": l1d["recall"], "fpr": l1d["fpr"]},
+            "note": ("校准未改变任何判定：判定由权重内置阈值主导，"
+                     "high 只在 norm<1 时才可能生效"
+                     if changed == 0 else
+                     "high 改变了 %d 条判定，校准有效" % changed),
         },
         # 自证：把「这份数字凭什么可信」写进产物本身。
         # 四项分别对应历史上真实踩过的坑：重复计数、训练集泄漏、
@@ -194,9 +223,15 @@ def main():
             "dedup_verified": n_unique == len(sample),
             "train_overlap_excluded": True,
             "threshold_source": "calib (未参与训练，非 holdout)",
+            "threshold_effective": changed > 0,
             "scored_layers": ["L1_only", "L1_plus_light"],
-            "warning": ("评测集存在重复文本，ASR/召回置信区间会被高估"
-                        if n_unique != len(sample) else None),
+            "warning": "; ".join(w for w in (
+                ("评测集存在重复文本，召回/误杀的置信区间会被高估"
+                 if n_unique != len(sample) else ""),
+                ("阈值校准未产生增量（changed=0）：报告的 recall/fpr 由"
+                 "权重内置阈值决定，不是 calib 选出的 high"
+                 if changed == 0 else ""),
+            ) if w) or None,
         },
         "diagnosis": {
             "calib_default_threshold": _measure(
