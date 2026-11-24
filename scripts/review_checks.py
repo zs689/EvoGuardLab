@@ -977,22 +977,40 @@ def evidence_git_sha(pairs, *, current_sha=None):
 # 检查工具本身也会坏：精确字符串匹配、hasattr 用错对象、except→True 都是
 # 本项目实测踩过的坑。--self-test 用「已知坏样本」证明每项检查真的会红，
 # 而不是改完就宣布全绿。
-def _temp_repo():
-    """复制一份最小仓库到临时目录，供变异测试注入坏样本。"""
+# 自检只需检查依据文件，不复制 39M 的 experiments 存档。
+# 每个样本声明自己额外需要的文件（都是小 JSON）。
+_SELFTEST_BASE = (
+    "scripts", "ai-service", "docs", ".github", "frontend", "deploy",
+    "Dockerfile", ".dockerignore", "pyproject.toml", ".env.example",
+    ".gitattributes", "CONTRIBUTING.md", "SECURITY.md", "README.md",
+)
+
+
+def _temp_repo(extra=()):
+    """按需复制最小仓库到临时目录（不再整仓 39M 复制）。"""
     tmp = tempfile.mkdtemp(prefix="gate-selftest-")
-    shutil.copytree(ROOT, tmp, dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns(
-                        ".git", "__pycache__", "*.pyc", "*.pyo"))
+    ign = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "*.pyo")
+    for rel in _SELFTEST_BASE:
+        src = os.path.join(ROOT, rel)
+        if os.path.isdir(src):
+            shutil.copytree(src, os.path.join(tmp, rel),
+                            dirs_exist_ok=True, ignore=ign)
+        elif os.path.isfile(src):
+            shutil.copy2(src, os.path.join(tmp, rel))
+    for rel in extra:
+        src, dst = os.path.join(ROOT, rel), os.path.join(tmp, rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(src, dst)
     return tmp
 
 
-def _break_file(root, rel, old, new):
+def _break_file(root, rel, old, new, count=1):
     p = os.path.join(root, rel)
     t = io.open(p, encoding="utf-8").read()
     if old not in t:
         raise AssertionError("自检样本失效：%s 里找不到 %r" % (rel, old[:40]))
     with io.open(p, "w", encoding="utf-8", newline="\n") as f:
-        f.write(t.replace(old, new, 1))
+        f.write(t.replace(old, new, count))
 
 
 def _break_ci_gate(root):
@@ -1036,13 +1054,64 @@ def _break_eval_selfcheck(root):
         f.write("\n")
 
 
-#: (检查函数名, 注入了什么坏, 破坏函数)
+def _break_all(root, rels, old, new):
+    """把多个文件里所有 old 替换掉（合并源码判据要改对全部来源）。"""
+    for rel in rels:
+        p = os.path.join(root, rel)
+        if not os.path.isfile(p):
+            continue
+        t = io.open(p, encoding="utf-8").read()
+        if old not in t:
+            continue
+        with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+            f.write(t.replace(old, new))
+
+
+def _break_dockerfile_copy(root):
+    p = os.path.join(root, "Dockerfile")
+    with io.open(p, "a", encoding="utf-8", newline="\n") as f:
+        f.write("\nCOPY . /app\n")   # 真正的一行整仓 COPY（不是注释）
+
+
+def _break_metric_consistency(root):
+    _break_file(root, "deploy/alerts.yml", "evoguard_", "evoguard_nonexistent_metric_", 1)
+
+
+def _break_db_path(root):
+    # 判据是 AGENTLAB_DB or EVOGUARD_DB，两个都要去掉才算坏样本
+    for key in ("AGENTLAB_DB", "EVOGUARD_DB"):
+        _break_all(root, ("ai-service/api/app.py", "ai-service/api/app_core.py",
+                          "ai-service/api/routes_enterprise.py"),
+                   key, "DBCFG_ERASED")
+
+
+def _break_frontend_session(root):
+    _break_file(root, "frontend/index.html", "sessionStorage", "localStorage", count=99)
+
+
+def _break_page_limit(root):
+    # 判据是 min( or MAX_ or clamp，三个都要去掉
+    _break_all(root, ("ai-service/api/app.py", "ai-service/api/routes_agent.py",
+                      "ai-service/api/routes_enterprise.py"), "min(", "LIMIT_CAP(")
+    _break_all(root, ("ai-service/api/app.py", "ai-service/api/routes_agent.py",
+                      "ai-service/api/routes_enterprise.py"), "MAX_", "LIMITCAP_")
+    _break_all(root, ("ai-service/api/app.py", "ai-service/api/routes_agent.py",
+                      "ai-service/api/routes_enterprise.py"), "clamp", "LIMITCLAMP")
+
+
+#: (检查函数名, 注入了什么坏, 破坏函数, 额外需要的小文件)
 SELF_TESTS = (
-    ("c_gate_in_ci", "CI 里去掉 --gate 调用", _break_ci_gate),
-    ("c_static_names", "注入未定义名的 Python 文件", _break_static_names),
-    ("c_ci_references", "把 CI 引用产物标成 passed=false", _break_ci_references),
-    ("c_remaining_checks", "抹掉 soak 证据条目", _break_remaining),
-    ("c_eval_self_checks", "抹掉 self_checks.dedup_verified", _break_eval_selfcheck),
+    ("c_gate_in_ci", "CI 里去掉 --gate 调用", _break_ci_gate, ()),
+    ("c_static_names", "注入未定义名的 Python 文件", _break_static_names, ()),
+    ("c_ci_references", "把 CI 引用产物标成 passed=false", _break_ci_references, ()),
+    ("c_remaining_checks", "抹掉 soak 证据条目", _break_remaining, ()),
+    ("c_eval_self_checks", "抹掉 self_checks.dedup_verified", _break_eval_selfcheck,
+     ("experiments/pub_jailbreak_layered.json", "experiments/pub_bench_layered.json")),
+    ("c_dockerfile_copy", "制造整仓 COPY . /app", _break_dockerfile_copy, ()),
+    ("c_metric_consistency", "告警引用不存在的指标", _break_metric_consistency, ()),
+    ("c_db_path_env", "去掉 DB 路径环境变量", _break_db_path, ()),
+    ("c_frontend_session", "把 sessionStorage 换成 localStorage", _break_frontend_session, ()),
+    ("c_page_limit", "去掉分页上限 min()", _break_page_limit, ()),
 )
 
 
@@ -1051,11 +1120,13 @@ def cmd_self_test():
     by_name = {fn.__name__: (cid, fn) for cid, fn in CHECKS}
     original_root = ROOT
     out = []
-    for name, desc, corrupt in SELF_TESTS:
+    for entry in SELF_TESTS:
+        name, desc, corrupt = entry[:3]
+        extra = entry[3] if len(entry) > 3 else ()
         if name not in by_name:
             out.append((name, False, "检查不存在"))
             continue
-        tmp = _temp_repo()
+        tmp = _temp_repo(extra)
         try:
             corrupt(tmp)
             globals()["ROOT"] = tmp
@@ -1071,11 +1142,21 @@ def cmd_self_test():
         finally:
             globals()["ROOT"] = original_root
             shutil.rmtree(tmp, ignore_errors=True)
-    print("== 检查自检 %d/%d 抓到已知坏样本 ==" % (
-        sum(1 for _, ok, _ in out if ok), len(out)))
+    n_ok = sum(1 for _, ok, _ in out if ok)
+    covered = {entry[0] for entry in SELF_TESTS}
+    all_checks = {fn.__name__ for _, fn in CHECKS}
+    uncovered = sorted(all_checks - covered)
+    print("== 检查自检 %d/%d 抓到已知坏样本 ==" % (n_ok, len(out)))
+    print("   覆盖率：%d/%d 个检查有坏样本自检（%d 个未覆盖）" % (
+        len(covered & all_checks), len(all_checks), len(uncovered)))
+    if uncovered:
+        print("   未覆盖：" + ", ".join(uncovered))
+        print("   （live_capability 类需真实环境，不强求变异样本；"
+              "静态检查建议逐步补齐）")
     for name, ok, detail in out:
         print("%-5s %-22s %s" % ("PASS" if ok else "FAIL", name, detail))
-    return 0 if all(ok for _, ok, _ in out) else 1
+    # 只有「样本失效/假绿」才失败；未覆盖是可见的债务，不冒充全绿即可。
+    return 0 if n_ok == len(out) else 1
 
 
 def main():

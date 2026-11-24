@@ -34,7 +34,9 @@ class TestGateSelfTest(unittest.TestCase):
     def test_real_self_tests_pass(self):
         rc, out = _run_self_test(RC.SELF_TESTS)
         self.assertEqual(rc, 0, out)
-        self.assertIn("5/5", out)
+        self.assertIn("%d/%d" % (len(RC.SELF_TESTS), len(RC.SELF_TESTS)), out)
+        self.assertIn("覆盖率", out)
+        self.assertIn("未覆盖", out)
 
 
 if __name__ == "__main__":
