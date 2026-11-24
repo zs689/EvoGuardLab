@@ -41,3 +41,6 @@ python scripts/check_docker_context.py         # 构建上下文
 - [ ] 干净 clone 再跑一次（不要拿 editable 安装冒充制品测试）
 - [ ] `git status` 干净，没有本地数据库/语料/凭据被带进去
 - [ ] 文档数字与实际命令输出一致
+- [ ] 知道 `evoguard demo` 会**重写** `experiments/defense_demo_v2/demo.json`（重新生成证据，
+      属正常）；只是想看结果不想改仓库时，跑完 `git checkout -- experiments/` 或用
+      `--out` 指到临时目录
