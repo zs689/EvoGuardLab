@@ -110,7 +110,8 @@ def _record(result, decision, reason, checks):
 
 def preflight(cfg, *, agent_type, tool, args, user_goal=None, cid=None,
               contracts=None, policy=None, intent_fn=None,
-              contract_fn=None, taint_state=None, rails=None):
+              contract_fn=None, taint_state=None, rails=None,
+              provenance=None):
     """调用前的全部判断。返回 dict；`stop` 为真表示**不许执行工具**。
 
     导入与调用都做成可注入的：测试里可以把任意一层替成恒定 deny，
@@ -241,6 +242,23 @@ def preflight(cfg, *, agent_type, tool, args, user_goal=None, cid=None,
                              % (hit["field"], hit["value"]), checks)
         except ImportError:
             pass
+
+    # ---- FRONTIER-01) 参数级来源血缘：关闭全部文本检测器仍生效 ----
+    # 与 taint 正交：taint 追"秘密外流"，provenance 追"外部不可信值流入高敏参数"。
+    if provenance is not None:
+        try:
+            d = provenance.check_call(tool, args)
+            checks.append({"checker": "provenance", "status": d["decision"]})
+            out["provenance"] = d
+            if d["decision"] in ("deny", "require_approval") and \
+                    cfg["mode"] == CONTROLLED:
+                return _stop(out, d["decision"],
+                             "provenance_%s：%s 参数 %s 来源 %s"
+                             % (d["decision"], tool, d.get("field"),
+                                d.get("source")), checks)
+        except Exception as exc:                            # noqa: BLE001
+            checks.append({"checker": "provenance",
+                           "status": "error:" + type(exc).__name__})
     return out
 
 

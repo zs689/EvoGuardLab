@@ -1,0 +1,10 @@
+{
+  "attacks": 3,
+  "benign": 3,
+  "benign_approval_rate": 0.0,
+  "benign_auto_pass_rate": 1.0,
+  "note": "文本检测器全部关闭；只靠来源血缘+值域。小样本，仅作机制自检，不作泛化能力声明",
+  "schema_version": "provenance-structural-v1",
+  "structural_asr": 0.0,
+  "text_detectors_enabled": false
+}
