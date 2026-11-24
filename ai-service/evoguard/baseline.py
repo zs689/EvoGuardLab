@@ -15,6 +15,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -284,11 +285,30 @@ def _discover(run_dir, root):
     return sorted(files, key=lambda x: x["path"])
 
 
-def effective_security_config(env=None):
-    """本次运行的**生效**安全配置。启动时打印/导出，不靠人猜环境变量。"""
+#: 名字像凭据的键一律脱敏。用户把 `evoguard config` 输出贴到 issue 里
+#: 是极常见的操作——当前 SECURITY_SWITCHES 里只有 0/1 开关和模型名，
+#: 但一旦有人加了 *_API_KEY，原样输出就会把密钥打出去。
+_SENSITIVE_NAME = re.compile(r"(?i)(?:key|token|secret|password|passwd|credential)")
+
+
+def _mask_value(key, value):
+    if value is None:
+        return "<unset>"
+    if _SENSITIVE_NAME.search(str(key)):
+        # 连长度都不给：长度本身也是信息（可配合字典攻击缩小范围）
+        return "<redacted>"
+    return value
+
+
+def effective_security_config(env=None, extra=()):
+    """本次运行的**生效**安全配置。启动时打印/导出，不靠人猜环境变量。
+
+    凭据类键（名字含 key/token/secret/password/credential）输出 <redacted>，
+    绝不打印真实值。
+    """
     env = os.environ if env is None else env
-    return {k: (env.get(k) if env.get(k) is not None else "<unset>")
-            for k in SECURITY_SWITCHES}
+    keys = tuple(SECURITY_SWITCHES) + tuple(extra)
+    return {k: _mask_value(k, env.get(k)) for k in keys}
 
 
 def _fingerprint(files, libraries, cfg_hash):
