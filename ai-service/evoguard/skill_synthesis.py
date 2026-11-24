@@ -109,6 +109,15 @@ def synthesize(store, steps, *, task_type="newdomain",
     structured = _extract_structured(diag, steps, repair_steps, cause,
                                      env_spec=env_spec)
     skill.update(structured)
+    # 适用条件补环境维度：技能依赖哪些 env_invariant 域，就只在那些域下生效。
+    # 没有 env_invariant 的技能不加限制（通用策略），避免误伤。
+    _envs = sorted({str(x.get("domain")) for x in
+                    (skill.get("env_invariants") or [])
+                    if isinstance(x, dict) and x.get("domain")})
+    if _envs:
+        _aw = dict(skill.get("applies_when") or {})
+        _aw["env_domains"] = _envs
+        skill["applies_when"] = _aw
     # 候选只能声明只读工具：写/外发工具必须走审批，不能由技能声明。
     skill["allowed_tools"] = list(NEW_DOMAIN_TOOLS[:3])
     pol = policy or {"allowed_tools": list(NEW_DOMAIN_TOOLS),

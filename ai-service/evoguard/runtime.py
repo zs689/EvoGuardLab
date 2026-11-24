@@ -86,7 +86,20 @@ def plan_recovery(store, agent_type, root_cause, mode, scope="single",
     try:
         import skills
         sk_store = STORE_BY_MODE.get(mode) or store
-        sk = skills.lookup(sk_store, agent_type, root_cause, mode, scope=scope)
+        # 环境维度：从本次轨迹推断当前生效的 env 域，作为技能适用条件之一。
+        # 取不到就不传（None = 不过滤），保持老行为。
+        _active = None
+        if run_id:
+            try:
+                import skill_synthesis as _ss
+                _invs = _ss.extract_env_invariants(store.list_steps(run_id))
+                _doms = {str(x.get("domain")) for x in _invs
+                         if isinstance(x, dict) and x.get("domain")}
+                _active = _doms or None
+            except Exception:                              # noqa: BLE001
+                _active = None
+        sk = skills.lookup(sk_store, agent_type, root_cause, mode,
+                           scope=scope, active_domains=_active)
     except Exception:
         sk = None
 

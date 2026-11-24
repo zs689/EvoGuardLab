@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS skills(
   decision_params TEXT, disabled_at REAL,
   rolled_back_from_version INTEGER, rolled_back_at REAL,
   error_signature TEXT, diagnostic_steps TEXT,
-  fix_pattern TEXT, verification_check TEXT);
+  fix_pattern TEXT, verification_check TEXT,
+  schema_version TEXT, applies_when TEXT, required_evidence TEXT,
+  stop_when TEXT, fallback TEXT);
 
 CREATE TABLE IF NOT EXISTS skill_versions(
   id TEXT PRIMARY KEY, skill_id TEXT, version INTEGER, snapshot TEXT, created_at REAL);
@@ -128,7 +130,15 @@ def ensure_schema(store):
                            ("decision_params", "TEXT"),
                            ("disabled_at", "REAL"),
                            ("rolled_back_from_version", "INTEGER"),
-                           ("rolled_back_at", "REAL")):
+                           ("rolled_back_at", "REAL"),
+                           # 适用条件此前根本没落库（applies_when/schema_version
+                           # 只在内存对象里，save 直接丢弃）——「条件维度不足」
+                           # 的根因不是设计不够，是数据没存下来。
+                           ("schema_version", "TEXT"),
+                           ("applies_when", "TEXT"),
+                           ("required_evidence", "TEXT"),
+                           ("stop_when", "TEXT"),
+                           ("fallback", "TEXT")):
             if name not in cols:
                 c.execute("ALTER TABLE skills ADD COLUMN %s %s" % (name, decl))
         cols = [r[1] for r in c.execute("PRAGMA table_info(skill_evaluations)")]
@@ -197,8 +207,9 @@ def save(store, skill):
     with store.conn() as c:
         c.execute("INSERT INTO skills(id,name,task_type,fault_type,strategy,required_tools,"
                   "safety,status,version,created_at,scope,decision_params,"
-                  "error_signature,diagnostic_steps,fix_pattern,verification_check) "
-                  "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  "error_signature,diagnostic_steps,fix_pattern,verification_check,"
+                  "schema_version,applies_when,required_evidence,stop_when,fallback) "
+                  "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                   (skill["id"], skill["name"], skill["task_type"], skill["fault_type"],
                    strategy, _db_value(skill["required_tools"]),
                    _db_value(skill["safety"]), skill["status"], skill["version"],
@@ -207,7 +218,12 @@ def save(store, skill):
                    skill.get("error_signature"),
                    _db_value(skill.get("diagnostic_steps")),
                    skill.get("fix_pattern"),
-                   skill.get("verification_check")))
+                   skill.get("verification_check"),
+                   skill.get("schema_version"),
+                   _db_value(skill.get("applies_when")),
+                   _db_value(skill.get("required_evidence")),
+                   _db_value(skill.get("stop_when")),
+                   _db_value(skill.get("fallback"))))
         c.execute("INSERT INTO skill_versions(id,skill_id,version,snapshot,created_at) "
                   "VALUES(?,?,?,?,?)",
                   ("skv_" + uuid.uuid4().hex[:8], skill["id"], skill["version"],
@@ -216,7 +232,25 @@ def save(store, skill):
     return skill
 
 
-def lookup(store, agent_type, fault_type, mode, scope=SINGLE):
+def _as_obj(v):
+    """JSON 列可能是字符串也可能已是 dict，统一成 dict/None。"""
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, str) and v.strip():
+        o = core.loads(v)          # core.loads 容错，坏 JSON 返回 None
+        return o if isinstance(o, dict) else None
+    return None
+
+
+def lookup(store, agent_type, fault_type, mode, scope=SINGLE,
+           active_domains=None):
+    """恢复期查技能。这是 A/B/C/D 四组差异的关键开关。
+
+    active_domains：当前轨迹里出现证据的环境域集合（如 {"currency"}）。
+    给了就按技能的 applies_when.env_domains 过滤——同一故障类型在不同
+    环境下的修复策略不能串用（把「金额单位=分」的修法套到「时区格式」
+    上就是错的）。没给（None）则保持旧行为，不额外过滤。
+    """
     """恢复期查技能。这是 A/B/C/D 四组差异的关键开关。
 
     D：只认 active 技能，且必须 **agent + 故障类型都匹配**（严格）
@@ -235,7 +269,10 @@ def lookup(store, agent_type, fault_type, mode, scope=SINGLE):
     get_recovery 里踩过（毫秒并列取到链中间的失败步），这里用同样的兜底。
     """
     ensure_schema(store)
-    ORDER = ("ORDER BY (scope=?) DESC, version DESC, created_at DESC, rowid DESC LIMIT 1")
+    # 取多条再过滤（环境维度可能要跳过前几条）。上限 50 足够，
+    # 同一 (task_type, fault_type) 下不会有那么多活跃技能。
+    ORDER = ("ORDER BY (scope=?) DESC, version DESC, created_at DESC, rowid DESC "
+             "LIMIT 50")
     if mode == "D":
         sql = ("SELECT * FROM skills WHERE status=? AND task_type=? AND fault_type=? "
                + ORDER)
@@ -245,9 +282,20 @@ def lookup(store, agent_type, fault_type, mode, scope=SINGLE):
         args = (CANDIDATE, ACTIVE, agent_type, scope)
     else:
         return None
+    want = None if active_domains is None else {str(d) for d in active_domains}
     with store.conn() as c:
-        r = c.execute(sql, args).fetchone()
-    return dict(r) if r else None
+        rows = c.execute(sql, args).fetchall()
+    for r in rows:
+        d = dict(r)
+        aw = _as_obj(d.get("applies_when"))
+        d["applies_when"] = aw
+        if want is None:
+            return d
+        envs = {str(x) for x in ((aw or {}).get("env_domains") or [])}
+        # 没声明环境维度 = 通用技能，不受过滤影响（向后兼容）
+        if not envs or (envs & want):
+            return d
+    return None
 
 
 def _task_key(case):

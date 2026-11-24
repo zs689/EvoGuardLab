@@ -1,0 +1,21 @@
+{
+  "e2e_verified": {
+    "applies_when.env_domains": "['unit']",
+    "env_invariants": "['unit']",
+    "lookup(active=timezone)": "None（不串用）",
+    "lookup(active=unit)": "命中",
+    "trace": "unit mismatch: expected cents got yuan"
+  },
+  "evidence_before": "save 后 lookup 返回的 dict 里 'applies_when' not in r（实测 False）",
+  "fix": {
+    "lookup": "新增 active_domains 参数：按 applies_when.env_domains 过滤；未声明环境维度的技能不过滤（向后兼容）；不传 active_domains 保持旧行为",
+    "runtime": "plan_recovery 从本次轨迹 extract_env_invariants 推断当前域集合，传 active_domains",
+    "save": "写入上述列；_snapshot 快照本来就带全字段，版本回滚不受影响",
+    "schema": "skills 表新增 5 列（schema_version/applies_when/required_evidence/stop_when/fallback），ensure_schema 幂等 ALTER 兼容老库",
+    "synthesize": "从 env_invariants 聚合 domain 写入 applies_when.env_domains"
+  },
+  "generated_at": "2026-11-24T11:4x",
+  "honest_note": "当前域集合是从轨迹里的 env_invariant 证据推出来的，没有独立的环境指纹；如果轨迹里没有任何 env 证据，active_domains=None，此时不过滤——这是有意的保守选择（宁可多用一次通用技能，也不要因为环境信息缺失把可用技能全禁掉），但也意味着「无证据时不设防」。",
+  "root_cause_found": "技能的适用条件此前**根本没落库**：skills 表没有 applies_when / schema_version / required_evidence / stop_when / fallback 列，save() 直接把 synthesize() 构造的 conditions 丢弃。所以「适用条件维度不足」不是设计不够，是数据没存下来 —— 又一处「测试绿但功能为零」。",
+  "version": 1
+}
