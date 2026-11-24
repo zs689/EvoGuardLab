@@ -139,7 +139,7 @@ python scripts/review_checks.py --gate --out docs/review-remediation/after  # �
 
 | ID | 状态 | 做了什么 | 证据 | 没做 / 边界 |
 |---|---|---|---|---|
-| **EG-024** 未来开源采用 | 🟡 | 中英首页补五分钟离线 demo 与「看什么」；`CONTRIBUTING.md` / `SECURITY.md` / `CHANGELOG.md`；README 去掉写死的 814 计数，改成「以命令输出为准」；新增文档链接 | README.md / README.zh.md 顶部 | 未由**未参与开发的人**从干净环境实测五分钟跑通；CITATION、issue 模板、路线图未做 |
+| **EG-024** 未来开源采用 | 🟡 | 中英首页补五分钟离线 demo 与「看什么」；`CONTRIBUTING.md` / `SECURITY.md` / `CHANGELOG.md`；README 去掉写死的 814 计数，改成「以命令输出为准」；新增文档链接；**README.zh.md 瘦身 66KB → 16.9KB**（2026-11-24，历史实测拆到 `docs/experiment-history-2026-11.md`）；英文版补 FRONTIER-01/02/03 能力段 | README.md / README.zh.md 顶部 | 未由**未参与开发的人**从干净环境实测五分钟跑通；CITATION、issue 模板、路线图未做 |
 | **EG-025** API 与集成生态 | 🟡 | `docs/api-contract-v1.json`：16 条路由 + 静态路由、请求/响应、13 个稳定错误码、分页、审计、六字段冻结契约、已知缺口；`tests/test_api_contract.py` 8 项防漂移 | 契约测试 8/8 | 最小 Python SDK、成功/失败/限流/轮询/审计查询的**集成示例**、跨版本兼容测试**未做** |
 | **EG-027** 模型缓存与资源治理 | 🟡 | `SemanticGuard` 缓存改有界 LRU（默认 4096）+ TTL（3600s）+ 可选 `scope` 作用域隔离；**临时失败 (`unavailable`) 不再入缓存**，下游恢复后真的重试；加载历史 jsonl 时丢弃旧的 unavailable 行；默认缓存键保持不变以免弄脏离线复现证据 | `tests/test_semantic_cache.py` 7/7；`review_checks` 未单列（由 unittest 覆盖） | 同键并发合并、按模型版本命名缓存键、模型请求批处理与峰值内存压测**未做**；`security.py` 的进程内单例仍共享，未接线 `scope` 参数 |
 
