@@ -28,3 +28,8 @@ _sandbox/
 .cache/
 *.onnx
 *.safetensors
+
+# 运行期日志：是产物不是源码，公开仓库不收（结构化证据另存 JSON）
+*.log
+# 历史存档里的测试日志仍保留（可追溯性）
+!experiments/archive/**

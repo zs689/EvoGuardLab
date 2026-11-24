@@ -1,3 +1,0 @@
-chinese: 规则漏18 模型救回16 合并召回0.941 | 良性误报0/151
-chinese_jailbreak: 规则漏17 模型救回16 合并召回0.968 | 良性误报0/31
-产物：experiments/zh_jailbreak_judge_probe.json
