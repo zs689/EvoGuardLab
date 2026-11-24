@@ -166,7 +166,7 @@ Scope-layer evidence (read-only tool asked to act): recall **0.839** with
 "no injection exists"** — the AgentDojo slice is 120 template goals, and the
 public-set ASR is detector-only (no local LLM judge in the default stack).
 
-| Regression suite | tests | **1471 tests, green** (corpus-dependent cases skip on a clean clone) | `python -m unittest discover -s tests`; gate: `python scripts/review_checks.py --gate` prints `hygiene` and `live_capability` separately |
+| Regression suite | tests | **test count from `evoguard test`, green** (skip reasons printed; 0 unexplained skip in gate) | `python -m unittest discover -s tests`; gate: `python scripts/review_checks.py --gate` prints `hygiene` and `live_capability` separately |
 
 The Chinese indirect-injection set is **built by this repo**, not a public corpus — no public
 Chinese indirect-injection corpus exists. It is 10 carriers × 12 techniques, all distinct.

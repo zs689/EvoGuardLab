@@ -19,6 +19,7 @@ import json
 import glob
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -972,12 +973,125 @@ def evidence_git_sha(pairs, *, current_sha=None):
     return {"fresh": not stale, "stale": stale}
 
 
+# ---------------------------------------------------------- 检查自检 ----
+# 检查工具本身也会坏：精确字符串匹配、hasattr 用错对象、except→True 都是
+# 本项目实测踩过的坑。--self-test 用「已知坏样本」证明每项检查真的会红，
+# 而不是改完就宣布全绿。
+def _temp_repo():
+    """复制一份最小仓库到临时目录，供变异测试注入坏样本。"""
+    tmp = tempfile.mkdtemp(prefix="gate-selftest-")
+    shutil.copytree(ROOT, tmp, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns(
+                        ".git", "__pycache__", "*.pyc", "*.pyo"))
+    return tmp
+
+
+def _break_file(root, rel, old, new):
+    p = os.path.join(root, rel)
+    t = io.open(p, encoding="utf-8").read()
+    if old not in t:
+        raise AssertionError("自检样本失效：%s 里找不到 %r" % (rel, old[:40]))
+    with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+        f.write(t.replace(old, new, 1))
+
+
+def _break_ci_gate(root):
+    _break_file(root, ".github/workflows/test.yml",
+                "review_checks.py --gate", "review_checks.py --NO-gate")
+
+
+def _break_static_names(root):
+    """注入一个真正的未定义名，pyflakes 必须抓到。"""
+    p = os.path.join(root, "ai-service", "evoguard", "zzz_selftest_undefined.py")
+    with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+        f.write("def f():\n    return totally_undefined_name\n")
+
+
+def _break_ci_references(root):
+    p = os.path.join(root, "docs", "review-remediation", "probes",
+                     "ci_references.json")
+    d = json.load(open(p, encoding="utf-8"))
+    d["passed"] = False
+    with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(d, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+def _break_remaining(root):
+    p = os.path.join(root, "docs", "review-remediation", "probes",
+                     "store_remaining_checks.json")
+    d = json.load(open(p, encoding="utf-8"))
+    d["checks"] = [c for c in d.get("checks", []) if c.get("id") != "soak"]
+    with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(d, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+def _break_eval_selfcheck(root):
+    p = os.path.join(root, "experiments", "pub_jailbreak_layered.json")
+    d = json.load(open(p, encoding="utf-8"))
+    (d.get("self_checks") or {}).pop("dedup_verified", None)
+    with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(d, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+#: (检查函数名, 注入了什么坏, 破坏函数)
+SELF_TESTS = (
+    ("c_gate_in_ci", "CI 里去掉 --gate 调用", _break_ci_gate),
+    ("c_static_names", "注入未定义名的 Python 文件", _break_static_names),
+    ("c_ci_references", "把 CI 引用产物标成 passed=false", _break_ci_references),
+    ("c_remaining_checks", "抹掉 soak 证据条目", _break_remaining),
+    ("c_eval_self_checks", "抹掉 self_checks.dedup_verified", _break_eval_selfcheck),
+)
+
+
+def cmd_self_test():
+    """对已知坏样本跑每个检查：必须 fail，否则这项检查是假绿。"""
+    by_name = {fn.__name__: (cid, fn) for cid, fn in CHECKS}
+    original_root = ROOT
+    out = []
+    for name, desc, corrupt in SELF_TESTS:
+        if name not in by_name:
+            out.append((name, False, "检查不存在"))
+            continue
+        tmp = _temp_repo()
+        try:
+            corrupt(tmp)
+            globals()["ROOT"] = tmp
+            try:
+                r = by_name[name][1]()
+            except Exception as exc:                      # noqa: BLE001
+                out.append((name, False, "检查异常：%r" % exc))
+                continue
+            ok = r.get("status") == "fail"
+            out.append((name, ok,
+                        ("抓到了" if ok else "假绿：坏样本仍判 %s" % r.get("status"))
+                        + " ← " + desc))
+        finally:
+            globals()["ROOT"] = original_root
+            shutil.rmtree(tmp, ignore_errors=True)
+    print("== 检查自检 %d/%d 抓到已知坏样本 ==" % (
+        sum(1 for _, ok, _ in out if ok), len(out)))
+    for name, ok, detail in out:
+        print("%-5s %-22s %s" % ("PASS" if ok else "FAIL", name, detail))
+    return 0 if all(ok for _, ok, _ in out) else 1
+
+
 def main():
     ap = argparse.ArgumentParser(description="独立审查整改的同一检查入口")
     ap.add_argument("--out", default="", help="输出目录（写 review_checks.json）")
     ap.add_argument("--only", default="", help="只跑某个 finding 前缀")
-    ap.add_argument("--gate", action="store_true", help="任一 fail 就非零退出")
+    ap.add_argument("--self-test", action="store_true",
+                    help="用已知坏样本自检检查本身（假绿检测）")
+    ap.add_argument("--gate", action="store_true",
+                    help="任一 fail 就非零退出；skip 也视为失败（防静默少查）")
+    ap.add_argument("--allow-skip", action="store_true",
+                    help="显式允许检查跳过；用了就必须说明为什么（会写进报告）")
     a = ap.parse_args()
+
+    if a.self_test:
+        return cmd_self_test()
 
     results = []
     t0 = time.time()
@@ -996,6 +1110,7 @@ def main():
 
     n_pass = sum(1 for r in results if r["status"] == "pass")
     n_fail = sum(1 for r in results if r["status"] == "fail")
+    n_skip = sum(1 for r in results if r["status"] == "skip")
     report = {
         "version": 1,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -1004,7 +1119,9 @@ def main():
             text=True).stdout.strip() if _exists(".git/HEAD") else "unknown",
         "seconds": round(time.time() - t0, 2),
         "summary": {"total": len(results), "pass": n_pass, "fail": n_fail,
-                    "skip": len(results) - n_pass - n_fail},
+                    "skip": n_skip, "skip_allowed": bool(a.allow_skip),
+                    "skip_reason": ("显式 --allow-skip（理由应写进 CI 步骤注释）"
+                                    if a.allow_skip and n_skip else None)},
         "checks": results,
         "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
     }
@@ -1015,13 +1132,18 @@ def main():
             json.dump(report, f, ensure_ascii=False, indent=2, sort_keys=True)
             f.write("\n")
         print("[√] %s（%d pass / %d fail）" % (p, n_pass, n_fail))
-    print("== %d/%d pass, %d fail ==" % (n_pass, len(results), n_fail))
+    print("== %d/%d pass, %d fail, %d skip%s ==" % (
+        n_pass, len(results), n_fail, n_skip,
+        "" if n_skip == 0 or a.allow_skip else "  ← skip 未获显式允许，gate 视为失败"))
     kinds = check_kinds()
     for kind in ("hygiene", "live_capability"):
         group = [r for r in results if r.get("gate_kind") == kind]
         gp = sum(1 for r in group if r["status"] == "pass")
         print("   %-16s %d/%d pass" % (kind, gp, len(group)))
-    return 1 if (a.gate and n_fail) else 0
+    # 关键：skip 不等于通过。以前只看 n_fail，CI 少查一项仍退出 0，
+    # 「34/35」和「35/35」都显示全绿——这就是静默少查的根源。
+    # 现在必须显式 --allow-skip 才放行，且理由会写进报告。
+    return 1 if (a.gate and (n_fail or (n_skip and not a.allow_skip))) else 0
 
 
 if __name__ == "__main__":

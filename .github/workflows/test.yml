@@ -42,6 +42,9 @@ jobs:
         run: evoguard eval
       - name: Enterprise scorecard (informational, not a release gate)
         run: evoguard scorecard --out scorecard.md
+      # 先证明检查工具本身会红，再看检查结果。否则 35/35 可能是假绿。
+      - name: Check-tool self-test (known-bad samples must fail)
+        run: python scripts/review_checks.py --self-test
       - name: Objective per-finding gates
         run: python scripts/review_checks.py --gate --out gate_artifacts
       - name: Docker build-context gate (static)

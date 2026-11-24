@@ -18,6 +18,7 @@
 ## 改代码前先做什么
 
 ```bash
+python scripts/review_checks.py --self-test    # 先用已知坏样本证明检查会红
 python scripts/review_checks.py --gate          # 逐项客观门槛（EG-023）
 python -m unittest discover -s tests -q        # 全量回归
 python scripts/check_docker_context.py         # 构建上下文
@@ -36,7 +37,8 @@ python scripts/check_docker_context.py         # 构建上下文
 
 ## 提交检查清单
 
-- [ ] `python scripts/review_checks.py --gate` 全绿
+- [ ] `python scripts/review_checks.py --self-test` 全过（检查工具没退化）
+- [ ] `python scripts/review_checks.py --gate` 全绿，且 **0 skip**（skip 默认算失败）
 - [ ] `python -m unittest discover -s tests -q` 全绿，并把总数/skip 记进报告
 - [ ] 干净 clone 再跑一次（不要拿 editable 安装冒充制品测试）
 - [ ] `git status` 干净，没有本地数据库/语料/凭据被带进去

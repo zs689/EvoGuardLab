@@ -1,6 +1,6 @@
 {
   "cipher": "TLS_AES_256_GCM_SHA384",
-  "generated_at": "2026-11-24T14:04:32",
+  "generated_at": "2026-11-24T14:39:16",
   "handshake": true,
   "note": "本文件由 tests/test_tls_handshake.py 在真实握手成功后写出。scorecard 读的是它，不是测试文件是否存在。",
   "openssl": "openssl.EXE",
