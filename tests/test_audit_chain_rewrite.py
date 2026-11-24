@@ -85,3 +85,26 @@ class TestChainRewrite(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestVerifyDisclosesHmacScope(unittest.TestCase):
+    """verify 必须说清「这次校验到底验没验签名」。
+
+    否则无 key 时返回 ok=True + unhashed=0，调用方会以为「全部校验通过」，
+    实际签名层根本没跑 —— 这正是 SkillPoison 那类「验证通过但没验该验的」。
+    """
+
+    def test_without_key_says_hmac_disabled(self):
+        st = _make(with_key=False)
+        ok, det = st.verify()
+        self.assertTrue(ok)
+        self.assertIs(det.get("hmac_enabled"), False, det)
+        self.assertEqual(det.get("hmac_checked"), 0, det)
+
+    def test_with_key_reports_hmac_checked(self):
+        st = _make(with_key=True, n=4)
+        ok, det = st.verify()
+        self.assertTrue(ok)
+        self.assertIs(det.get("hmac_enabled"), True, det)
+        self.assertEqual(det.get("hmac_checked"), det.get("checked"), det)
+        self.assertGreater(det.get("hmac_checked"), 0)

@@ -259,6 +259,7 @@ class AuditStore(AuditSink):
         `unhashed`（旧行）。
         """
         checked = unhashed = archived = 0
+        hmac_checked = 0
         prev_hash = ""
         # EG-008：流式分批，大表校验的峰值内存不随总行数线性增长。
         # 以前一次性 fetchall()，几百万行会直接把内存吃满。
@@ -295,6 +296,8 @@ class AuditStore(AuditSink):
                                 "reason": "prev_mismatch",
                                 "first_bad_id": rid, "checked": checked,
                                 "unhashed": unhashed,
+                                "hmac_enabled": bool(self.hmac_key),
+                                "hmac_checked": hmac_checked,
                                 "archived_gaps": archived}
                         archived += 1
                     # 用行里存的 prev 重算：正常时等于链尾，归档缺口时是锚点。
@@ -305,6 +308,8 @@ class AuditStore(AuditSink):
                         return False, {
                             "reason": "hash_mismatch", "first_bad_id": rid,
                             "checked": checked, "unhashed": unhashed,
+                            "hmac_enabled": bool(self.hmac_key),
+                            "hmac_checked": hmac_checked,
                             "archived_gaps": archived}
                     # FIX-ENT-T2：启用密钥后，逐行校验 HMAC。持 DB 写权者
                     # 可以重算 prev_hash/row_hash 让哈希链自洽，但没有密钥
@@ -316,11 +321,18 @@ class AuditStore(AuditSink):
                             return False, {
                                 "reason": "hmac_mismatch", "first_bad_id": rid,
                                 "checked": checked, "unhashed": unhashed,
+                                "hmac_enabled": True,
+                                "hmac_checked": hmac_checked,
                                 "archived_gaps": archived}
+                        hmac_checked += 1
                     prev_hash = stored_hash
                     checked += 1
         result = {"reason": "ok", "first_bad_id": None,
                   "checked": checked, "unhashed": unhashed,
+                  # 明确披露签名层是否真的参与：无 key 时 ok=True 只代表
+                  # 「hash 链自洽」，不代表不可伪造（整链重写能骗过）。
+                  "hmac_enabled": bool(self.hmac_key),
+                  "hmac_checked": hmac_checked,
                   "archived_gaps": archived, "tail_hash": prev_hash}
         # FINAL-04-T2：库外锚点交叉核对（异地不可抵赖）
         if external_anchor is not None:
