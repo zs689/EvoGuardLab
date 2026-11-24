@@ -14,6 +14,7 @@ live_capability 组与独立复验报告。
     python -m enterprise.scorecard            # 人类可读
     python -m enterprise.scorecard --json     # 机器可读
 """
+import re
 import argparse
 import json
 import os
@@ -507,7 +508,10 @@ def probe_reproducibility(root):
     gi = _read(_p(root, ".gitignore"))
     checks = [
         ("eol=lf" in ga, "存在换行归一化（.gitattributes）", ".gitattributes"),
-        ("pip install -e ." in ci and "unittest discover" in ci,
+        # 别用精确子串：`pip install -e ".[dev]"` 同样是可复现安装，
+        # 之前写死 "pip install -e ." 会把它误判成没安装（改 dev 依赖时踩过）。
+        (bool(re.search(r"pip install -e[\s]+[\"']?\.(\[[^\]]+\])?[\"']?",
+                        ci)) and "unittest discover" in ci,
          "CI 安装并可跑 demo/unittest", ".github/workflows/test.yml"),
         ("clean clone" in report or "干净 clone" in report,
          "记录了干净 clone 的实测结果", "upgrade-report.md"),
