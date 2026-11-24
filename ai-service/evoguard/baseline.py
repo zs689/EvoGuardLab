@@ -305,6 +305,45 @@ def _mask_value(key, value):
     return value
 
 
+#: 「当前配置下还缺什么」——只列真正影响安全的关键项，并说明后果。
+#: 目的：让人跑一次 `evoguard config` 就看到风险，而不是读文档才知道
+#: 某个开关是干什么的。措辞区分「库层默认」与「服务入口默认」，不夸大。
+_GAP_RULES = (
+    ("EVOGUARD_AUDIT_HMAC_KEY", "unset",
+     "审计链只有 hash 链：持库写权者可整链重写而 verify 仍通过（已实测，"
+     "见 tests/test_audit_chain_rewrite.py）",
+     "设置为足够随机的密钥；已写入的行需要迁移重签才有签名"),
+    ("AGENTLAB_SECURITY_INTENT", "not_on",
+     "不校验工具调用是否偏离用户目标（意图对齐层关闭；库层默认关，"
+     "服务/CLI 入口已默认开）",
+     "AGENTLAB_SECURITY_INTENT=1，并保证本地模型可用"),
+    ("AGENTLAB_SECURITY_WRAP", "not_on",
+     "不可信工具返回不做内容包裹（只检测不隔离；库层默认关）",
+     "AGENTLAB_SECURITY_WRAP=1 且处于 enforce"),
+    ("AGENTLAB_SECURITY_SEMANTIC", "not_on",
+     "语义层不参与判定，只有正则/规则（对改写型注入覆盖更低）",
+     "AGENTLAB_SECURITY_SEMANTIC=1，约 1s/条"),
+)
+
+_ON = ("1", "true", "on", "yes")
+
+
+def describe_gaps(env=None):
+    """返回 [{key, impact, hint}]：当前环境里缺失的关键安全配置。
+
+    只读键名与「是否配置」，**不输出任何值**，避免把密钥带进日志/issue。
+    """
+    env = os.environ if env is None else env
+    out = []
+    for key, kind, impact, hint in _GAP_RULES:
+        val = str(env.get(key) or "").strip()
+        if kind == "unset" and not val:
+            out.append({"key": key, "impact": impact, "hint": hint})
+        elif kind == "not_on" and val.lower() not in _ON:
+            out.append({"key": key, "impact": impact, "hint": hint})
+    return out
+
+
 def effective_security_config(env=None, extra=()):
     """本次运行的**生效**安全配置。启动时打印/导出，不靠人猜环境变量。
 

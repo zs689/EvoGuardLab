@@ -294,6 +294,9 @@ def cmd_config(_):
             has_approval_backend=False),
     }
     cfg["exec"] = execution.export(cfg["exec"])
+    # 主动说出「当前配置下还缺什么」：只给键名、后果与建议，不含任何值。
+    # 让人跑一次 config 就看到风险，而不是读文档才知道某个开关干什么。
+    cfg["gaps"] = baseline.describe_gaps()
     print(json.dumps(cfg, ensure_ascii=False, indent=2))
     return 0
 
