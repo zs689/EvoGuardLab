@@ -45,6 +45,19 @@
   但没有字段级脱敏，详见 `docs/data-governance.md` §五。
 - **同步 `/api/run` 仍在兼容期**，8 并发 P95 约 3.5 s；持久作业改善的是
   提交响应，不是实验本身变快。
+- **审计链在未配置 HMAC 时，整链可被重写伪造**：只改一行会被 `verify()` 抓到
+  （hash 链自洽性），但持库写权者若把所有行的 `prev_hash/row_hash` 一起重算，
+  `verify()` 仍返回 `ok=True`。已实测复现见 `tests/test_audit_chain_rewrite.py`。
+  对策是设 `EVOGUARD_AUDIT_HMAC_KEY`；`verify()` 现在会用 `hmac_enabled` /
+  `hmac_checked` 明确告诉你这次到底验没验签名（`ok=True` 且 `hmac_enabled=False`
+  表示「链自洽但不可信」）。`evoguard config` 的 `gaps` 也会提示未配置。
+- **中文越狱的能力边界是量化的，不是「已解决」**：一级正则（含按手法写的
+  `zh_jailbreak_*`）在中文越狱集上**检出约 0.44、硬拦约 0.12**（34 条）；
+  接上模型判官（`zh_jailbreak_judge`，默认关、约 0.5 s/条）后合并检出 0.94。
+  别把「规则层开着」理解成「中文越狱已覆盖」。
+- **技能的适用条件在轨迹无 env 证据时不设防**：`lookup()` 只在轨迹能推出
+  环境域（`applies_when.env_domains`）时按域过滤；推不出就退回通用匹配。
+  这是有意的保守（不因信息缺失禁掉可用技能），但意味着「无证据不设防」。
 - 检测器 v2 **未过预注册判定线**（AUC 下降 0.032 > 允许 0.01），负结果照记；
   v3 只完成预注册、实验未跑，见 `docs/semantic-injection-v3-plan.md`。
 
