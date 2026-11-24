@@ -22,8 +22,11 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-# 只有想接本地模型做语义判定时才需要（Ollama 自带 HTTP 接口，仍然不用装包）
-dev = []
+# 运行时依赖保持 []；这里只放**开发/CI 用的静态检查工具**。
+# pyflakes 必须列进来：gate 的 EG-024/static-names 在没有 pyflakes 时会
+# 静默 skip（不计 pass），CI 就会少查一项而无人在意——而这一项抓过 3 处
+# 「只在冷路径触发」的未定义名（含流式请求带攻击输入返回 500）。
+dev = ["pyflakes>=3.0"]
 
 [project.scripts]
 evoguard = "evoguard_cli:main"
