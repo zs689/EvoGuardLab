@@ -20,8 +20,8 @@ DATA = os.path.join(ROOT, "data", "external",
 
 class TestPinyinGuard(unittest.TestCase):
     def setUp(self):
-        self.rows = [json.loads(l) for l in open(DATA, encoding="utf-8")
-                     if l.strip()]
+        with open(DATA, encoding="utf-8") as f:
+            self.rows = [json.loads(l) for l in f if l.strip()]
 
     def test_pinyin_attacks_detected(self):
         attacks = [r for r in self.rows if r["label"] == "attack"]
@@ -81,7 +81,9 @@ class TestRealCorpusRegression(unittest.TestCase):
         benign = set()
         for p in glob.glob(os.path.join(
                 ROOT, "data", "external", "chinese*", "cases.jsonl")):
-            for line in open(p, encoding="utf-8"):
+            with open(p, encoding="utf-8") as fh:
+                lines = list(fh)
+            for line in lines:
                 if not line.strip():
                     continue
                 r = json.loads(line)

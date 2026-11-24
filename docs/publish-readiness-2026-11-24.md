@@ -65,3 +65,39 @@
   ]
 }
 ```
+
+## 干净环境验证（2026-11-24 12:xx）
+
+在**临时 venv**（Python 3.13，全新，无缓存）里从零验证：
+
+```bash
+python -m venv <tmp>            # 干净环境
+pip install -e .                 # 成功（零运行时依赖；build 依赖 setuptools>=68 自动取）
+evoguard demo                    # off 0/6 -> enforce 6/6，退出码 0
+evoguard config                  # 输出 <unset>，不泄露密钥值
+evoguard test                    # 1831 tests, OK (skipped=5)
+python scripts/review_checks.py --gate   # 35/35 pass
+```
+
+结论：README 里的 quickstart **在干净环境可跑通**。
+
+### 跳过的 6 项（主仓库环境计数；都是环境依赖，非功能缺失）
+
+| 测试 | 跳过原因 |
+|---|---|
+| `test_symlink_escape_rejected`（2 处） | Windows 非开发者模式无法创建符号链接（WinError 1314） |
+| `test_prefix_sibling_not_confused` | 同上，环境不允许创建符号链接 |
+| `TestRealPostgresIdempotency` | 本机未运行 evoguard-pg 容器 |
+| `test_missing_driver_raises_actionable_error` | 本机已装 pg8000，无法构造「缺驱动」场景 |
+| `test_missing_binary_is_readable_error` | POSIX 命令均存在，无法构造「缺命令」场景 |
+
+**因此**：符号链接逃逸防护与真 PG 幂等性**在本次环境未实测**，代码与单测在，
+但未在真符号链接 / 真 PG 上跑过 —— 干净的 CI（Linux + Postgres service）应能覆盖，
+这是发布后第一件该补的事。
+
+## 已知会触发 GitHub 提示的两处（均为假数据，可接受）
+
+- `tests/fixtures/agent_secret.json`：故意的「泄漏假 key 的 agent」测试夹具
+- `tests/test_openai_proxy.py` 里的截断 PEM（不可解析）
+
+如希望扫描面板全绿，可把这两处改成运行时拼接字符串；不改也不影响功能。

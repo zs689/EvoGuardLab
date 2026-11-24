@@ -574,7 +574,9 @@
       "codes": [
         "action_on_read_only_tool",
         "injection_override",
-        "rails_injection_override"
+        "pinyin_injection",
+        "rails_injection_override",
+        "rails_pinyin_injection"
       ],
       "decision": "report",
       "action": "reported",
@@ -1004,7 +1006,9 @@
       "codes": [
         "action_on_read_only_tool",
         "injection_override",
-        "rails_injection_override"
+        "pinyin_injection",
+        "rails_injection_override",
+        "rails_pinyin_injection"
       ],
       "decision": "deny",
       "action": "blocked",
@@ -1461,7 +1465,9 @@
       "codes": [
         "action_on_read_only_tool",
         "injection_override",
-        "rails_injection_override"
+        "pinyin_injection",
+        "rails_injection_override",
+        "rails_pinyin_injection"
       ],
       "decision": "wrap",
       "action": "blocked",

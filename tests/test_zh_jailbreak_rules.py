@@ -19,7 +19,8 @@ import eval_chinese_real as E                             # noqa: E402
 
 def _load(name):
     p = os.path.join(ROOT, "data", "external", name, "cases.jsonl")
-    return [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()]
+    with open(p, encoding="utf-8") as f:
+        return [json.loads(l) for l in f if l.strip()]
 
 
 class TestZhJailbreak(unittest.TestCase):
