@@ -215,20 +215,30 @@ def _run_tests_child(source, func_name, tests):
     return True
 
 
-_CHILD_TEMPLATE = """# -*- coding: utf-8 -*-
-import json, sys, os
-_here = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _here)
-import tool_synthesis as _ts
-payload = json.loads(sys.stdin.read())
-try:
-    _ts._run_tests_child(payload['source'], payload['func'],
-                         payload['tests'])
-    print(json.dumps({'ok': True}))
-except BaseException as exc:
-    print(json.dumps({'ok': False, 'error':
-                      type(exc).__name__ + ': ' + str(exc)[:300]}))
-"""
+#: 子进程 bootstrap（OSS-02：不再写 _synth_child.py 到包目录）。
+#: 用 `python -I -c BOOTSTRAP`：-I 隔离用户 site-packages 与 PYTHONPATH，
+#: 只把**包目录本身**加进 sys.path 以 import 纯校验函数；零临时文件，
+#: 非 editable 安装 / 只读 site-packages 下也能跑。
+#: OSS-02：模块化的静态子进程入口（见 _synth_child.py）。
+#: bootstrap 只做 sys.path 注入 + import；-I 隔离用户 site-packages/PYTHONPATH。
+#: 绝不在运行期写包目录。
+_CHILD_BOOTSTRAP = (
+    "import sys;sys.path.insert(0,HACK_HERE);"
+    "import _synth_child;_synth_child.main()"
+)
+
+
+def build_child_env():
+    """OSS-02：子进程最小环境白名单——彻底剥离宿主机密钥/token。
+
+    合成工具即便用合法 import 间接读到 os.environ，也拿不到任何凭据。
+    Windows 必需 SYSTEMROOT/WINDIR，否则 python 子进程无法启动。
+    """
+    keep = ("PATH", "SYSTEMROOT", "TEMP", "TMP", "WINDIR")
+    env = {k: v for k, v in os.environ.items() if k in keep}
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTHONUTF8"] = "1"
+    return env
 
 
 def run_tests(source, func_name, tests, timeout_s=5):
@@ -253,17 +263,17 @@ def run_tests(source, func_name, tests, timeout_s=5):
         except ToolSynthesisError as exc:
             raise ToolSynthesisError("第 %d 条测试：%s" % (i, exc)) from exc
     here = os.path.dirname(os.path.abspath(__file__))
-    worker = os.path.join(here, "_synth_child.py")
-    if not os.path.isfile(worker):
-        with open(worker, "w", encoding="utf-8", newline="\n") as f:
-            f.write(_CHILD_TEMPLATE)
     payload = _json.dumps({"source": source, "func": func_name,
                            "tests": tests}, ensure_ascii=False)
+    # OSS-02：清洗子进程环境——只留最小必需变量，彻底剥离宿主机 API key /
+    # token / EVOGUARD_* 配置。合成工具即便绕过 AST 检查读 os.environ，
+    # 也拿不到任何凭据。Windows 必需 SYSTEMROOT，否则子进程起不来。
+    child_env = build_child_env()
     try:
-        proc = _sp.Popen([_sys.executable, worker], cwd=here,
+        proc = _sp.Popen([_sys.executable, "-I", "-c",
+                          _CHILD_BOOTSTRAP.replace("HACK_HERE", repr(here))], cwd=here,
                          stdin=_sp.PIPE, stdout=_sp.PIPE,
-                         stderr=_sp.PIPE, text=True,
-                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+                         stderr=_sp.PIPE, text=True, env=child_env)
     except OSError as exc:
         raise ToolSynthesisError("无法启动隔离子进程：%s" % exc) from exc
     try:
@@ -281,7 +291,9 @@ def run_tests(source, func_name, tests, timeout_s=5):
     try:
         rep = _json.loads((out or "").strip().splitlines()[-1])
     except (ValueError, IndexError) as exc:
-        raise ToolSynthesisError("隔离子进程无有效输出") from exc
+        raise ToolSynthesisError(
+            "隔离子进程无有效输出(rc=%s, stderr=%s)"
+            % (proc.returncode, (_err or "")[-300:])) from exc
     if not rep.get("ok"):
         raise ToolSynthesisError("沙箱测试失败：" + str(rep.get("error")))
     return True

@@ -177,3 +177,50 @@ class TestToolSynthesis(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOSS02ReadOnlyAndEnv(unittest.TestCase):
+    """OSS-02：非 editable / 只读包目录不崩，子进程拿不到宿主机密钥。"""
+
+    def test_no_write_to_package_dir(self):
+        import builtins
+        import os as _os
+        here = _os.path.dirname(_os.path.abspath(TS.__file__))
+        before = set(_os.listdir(here))
+        real_open = builtins.open
+
+        def guard(p, *a, **k):
+            mode = str(a[0] if a else k.get("mode", "r"))
+            if (isinstance(p, str) and "w" in mode
+                    and _os.path.dirname(_os.path.abspath(p)) == here):
+                raise PermissionError("package dir is read-only (test)")
+            return real_open(p, *a, **k)
+
+        builtins.open = guard
+        try:
+            self.assertTrue(TS.run_tests(
+                "def f(x):\n    return x + 1\n", "f",
+                [{"call": "f(1)", "expect": 2},
+                 {"call": "f(2)", "expect": 3},
+                 {"call": "f(0)", "expect": 1}]))
+        finally:
+            builtins.open = real_open
+        self.assertEqual(set(_os.listdir(here)) - before, set(),
+                         "run_tests 不应在包目录创建任何文件")
+
+    def test_child_env_has_no_host_secrets(self):
+        old = os.environ.get("DEEPSEEK_API_KEY")
+        os.environ["DEEPSEEK_API_KEY"] = "host-secret-should-not-leak"
+        os.environ["OPENAI_API_KEY"] = "host-openai-key"
+        try:
+            env = TS.build_child_env()
+        finally:
+            if old is None:
+                os.environ.pop("DEEPSEEK_API_KEY", None)
+            else:
+                os.environ["DEEPSEEK_API_KEY"] = old
+            os.environ.pop("OPENAI_API_KEY", None)
+        for k in ("DEEPSEEK_API_KEY", "OPENAI_API_KEY", "AGENTLAB_API_TOKEN",
+                  "EVOGUARD_AUDIT_HMAC_KEY"):
+            self.assertNotIn(k, env, "子进程环境不应带 %s" % k)
+        self.assertEqual(env.get("PYTHONUTF8"), "1")
