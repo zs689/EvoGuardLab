@@ -302,7 +302,7 @@ python scripts/eval_chinese_real.py               # experiments/chinese_corpus_v
 evoguard config                                   # 本次生效配置
 ```
 
-评审原始证据（反例脚本与 JSON）在 `E:\agent\_review_work_20261111\`，
+评审原始证据（反例脚本与 JSON）在 `<workspace>\_review_work_20261111\`，
 不在仓库里 —— 它含临时路径，不属于项目产物。
 
 ---

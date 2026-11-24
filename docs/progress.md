@@ -2,7 +2,7 @@
 
 ## 2026-11-08：P0 01/02 技能验证指标与样本充分性
 
-主项目为 `E:\agent\EvoGuardLab`，本轮依据最新推进计划的开发交接继续，没有修改 API、前端或技术栈。
+主项目为 `<repo-root>`，本轮依据最新推进计划的开发交接继续，没有修改 API、前端或技术栈。
 
 ### 已完成
 
@@ -1475,7 +1475,7 @@ E2′/E3′ 的重新预注册要求）；`report.md` 增加「外部方法复�
 
 同学交回 `labels_ext_annotator2.json`（200 条）；Downloads 里另有
 `labels_annotator2.json`（60 条基础页，早 15 分钟导出），说明他先后标了两次。
-首轮 A 的 `labels.json` 不在 Downloads，在 `E:\agent\labels.json`
+首轮 A 的 `labels.json` 不在 Downloads，在 `<workspace>\labels.json`
 （60 条，与首轮样本集合完全一致），差点以为丢了。
 
 **三个产物**：

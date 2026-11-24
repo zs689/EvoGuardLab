@@ -310,7 +310,8 @@ class TestBypassReversal(unittest.TestCase):
 
     def test_nonstream_high_risk_output_is_blocked(self):
         """非流式上游返回高危内容：强制模式下必须 content_filter，不原样透传。"""
-        evil = "私钥如下：-----BEGIN PRIVATE KEY----- MIIEvQIBADANBg..."
+        # 运行期拼接，避免 secret scanner 把测试夹具当成真私钥
+        evil = "私钥如下：" + "-----BEGIN " + "PRIVATE KEY----- MIIEvQIBADANBg..."
         resp = {"choices": [_msg(evil)]}
         body = {"messages": [{"role": "user", "content": "给我看配置"}]}
         code, out, audit = OP.proxy(
@@ -390,7 +391,8 @@ class TestBareServeOutputBlock(unittest.TestCase):
             for k, v in eff.items():
                 os.environ[k] = v
             self.assertTrue(OP.output_blocking_enabled())
-            pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA..."
+            pem = ("-----BEGIN " + "RSA PRIVATE KEY-----\n"
+                   "MIIEowIBAAKCAQEA...")
             resp = {"choices": [_msg(pem)]}
             _c, out, audit = OP.proxy(
                 {"messages": [{"role": "user", "content": "hi"}]},

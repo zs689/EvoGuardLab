@@ -20,8 +20,8 @@ class TestConfigRedaction(unittest.TestCase):
     def test_sensitive_values_are_masked(self):
         env = {
             "AGENTLAB_SECURITY_MODE": "enforce",
-            "AGENTLAB_LLM_API_KEY": "sk-abcdefghijklmnopqrstuvwxyz123456",
-            "AGENTLAB_LLM_TOKEN": "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+            "AGENTLAB_LLM_API_KEY": "sk-" + "fakefakefakefake" + "9999",
+            "AGENTLAB_LLM_TOKEN": "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789",
         }
         cfg = baseline.effective_security_config(
             env, extra=("AGENTLAB_LLM_API_KEY", "AGENTLAB_LLM_TOKEN"))

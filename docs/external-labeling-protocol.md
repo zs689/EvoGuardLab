@@ -69,7 +69,7 @@
 ## 七、复核命令
 
 ```bash
-cd E:\agent\EvoGuardLab
+cd <repo-root>
 python scripts/eval_permission.py
 python scripts/build_external_label_registry.py
 python -m unittest tests.test_permission_and_ci -q

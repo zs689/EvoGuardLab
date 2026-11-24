@@ -37,7 +37,7 @@
 
 1. 按 `Win` 键 → 输入 `Docker Desktop` → 回车。
    或者直接双击：
-   `C:\Users\zs\AppData\Local\Programs\DockerDesktop\Docker Desktop.exe`
+   `<user-home>\AppData\Local\Programs\DockerDesktop\Docker Desktop.exe`
 2. **普通启动即可**，不用「以管理员身份运行」。
 3. 可能弹出的窗口，按下面处理：
    - UAC 用户账户控制 → 点「是」

@@ -117,6 +117,6 @@ manifest 需登记威胁模型版本、攻击集与正常集内容指纹、独�
 ## 六、复核命令
 
 ```bash
-cd E:\agent\EvoGuardLab
+cd <repo-root>
 python -m unittest tests.test_conditional_skill -q
 ```

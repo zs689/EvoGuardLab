@@ -91,7 +91,7 @@ python -m evoguard_inspect.cli \
 ## 三、复核命令
 
 ```bash
-cd E:\agent\EvoGuardLab
+cd <repo-root>
 python -m unittest tests.test_assurance -q
 python -m unittest tests.test_permission_and_ci -q
 python -m evoguard_inspect.cli --help | grep policy   # 在 ai-service 目录下

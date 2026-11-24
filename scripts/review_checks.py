@@ -83,6 +83,45 @@ def c_dockerignore():
                    "scripts/check_docker_context.py（标记文件模拟；镜像层未实测）")
 
 
+def c_no_personal_paths():
+    """OSS-03：git 跟踪的文件里不能出现本机个人绝对路径。"""
+    import re as _re
+    pat = _re.compile(r"(?:[Cc]:\\Users\\zs|[eE]:\\agent|[Ff]:\\Anaconda3)")
+    hits = []
+    if os.path.isdir(os.path.join(ROOT, ".git")):
+        files = subprocess.run(["git", "ls-files"], cwd=ROOT,
+                               capture_output=True, text=True).stdout.split("\n")
+    else:
+        # 自检的临时仓库没有 .git；退化为 walk（只扫文本文件，不看大产物）
+        files = []
+        for dp, _dn, fn in os.walk(ROOT):
+            for name in fn:
+                rel = os.path.relpath(os.path.join(dp, name), ROOT)
+                if rel.endswith((".pyc", ".pyo")):
+                    continue
+                files.append(rel)
+    for rel in files:
+        if not rel:
+            continue
+        p = os.path.join(ROOT, rel)
+        if not os.path.isfile(p):
+            continue
+        try:
+            with io.open(p, encoding="utf-8", errors="ignore") as fh:
+                t = fh.read()
+        except OSError:
+            continue
+        n = len(pat.findall(t))
+        if n:
+            hits.append((rel, n))
+    ok = not hits
+    return _result("OSS-03/personal-paths", ok,
+                   "git 跟踪文件中 0 处本机个人路径" if ok else
+                   "发现 %d 个文件含个人路径：%s"
+                   % (len(hits), hits[:5]),
+                   "git ls-files + 正则扫描")
+
+
 def c_dockerfile_copy():
     txt = _read("Dockerfile")
     whole = re.search(r"^\s*COPY\s+\.\s+/", txt, re.M)
@@ -888,6 +927,7 @@ def c_eval_self_checks():
 CHECKS = [
     ("EG-003", c_dockerignore),
     ("EG-003", c_dockerfile_copy),
+    ("OSS-03", c_no_personal_paths),
     ("EG-007", c_retention_chain),
     ("EG-015", c_sli_definition),
     ("EG-005", c_body_limit),
@@ -1067,6 +1107,13 @@ def _break_all(root, rels, old, new):
             f.write(t.replace(old, new))
 
 
+def _break_personal_path(root):
+    b = chr(92)
+    p = os.path.join(root, "README.md")
+    with io.open(p, "a", encoding="utf-8", newline="\n") as f:
+        f.write("\nleak: C:" + b + "Users" + b + "zs" + b + "secret\n")
+
+
 def _break_dockerfile_copy(root):
     p = os.path.join(root, "Dockerfile")
     with io.open(p, "a", encoding="utf-8", newline="\n") as f:
@@ -1107,6 +1154,7 @@ SELF_TESTS = (
     ("c_remaining_checks", "抹掉 soak 证据条目", _break_remaining, ()),
     ("c_eval_self_checks", "抹掉 self_checks.dedup_verified", _break_eval_selfcheck,
      ("experiments/pub_jailbreak_layered.json", "experiments/pub_bench_layered.json")),
+    ("c_no_personal_paths", "注入 C:////Users////zs 路径", _break_personal_path, ()),
     ("c_dockerfile_copy", "制造整仓 COPY . /app", _break_dockerfile_copy, ()),
     ("c_metric_consistency", "告警引用不存在的指标", _break_metric_consistency, ()),
     ("c_db_path_env", "去掉 DB 路径环境变量", _break_db_path, ()),

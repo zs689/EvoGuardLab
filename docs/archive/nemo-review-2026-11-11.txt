@@ -37,7 +37,7 @@ meta-llama/PurpleLlama
 保留已下载参考
 Guardrails AI 的仓库 pushed_at 较新，但主分支最新提交较旧。本次使用具体分支提交时间判断更新条件，避免把其他分支活动误认为主代码更新。统计来自 2026-11-11 的 GitHub API 核验，后续会变化。
 [Heading2] 下载位置与版本
-E:\agent\learn\NeMo-Guardrails
+<workspace>\learn\NeMo-Guardrails
 分支 develop；提交 490837aa7a133c6b78bde09dd873c4729b68cc33；提交时间 2026-11-10 16:52:58 UTC。SOURCE_MANIFEST.json 记录文件路径、大小与上游 Git blob SHA；下载时逐文件校验 UTF-8 字节和 blob 哈希，并解析 Python 语法。
 共 710 个选定文本文件，源码字节数 4,606,296。包含 Python 核心、工具安全与 Agent 防护文档、相关示例及部分测试；保留许可证。省略 Git 历史、模型权重、二进制分词器压缩包、网站资源、Rust 可选组件和无关集成测试。
 [Heading2] 如何使用这份源码
@@ -209,14 +209,14 @@ P2 API 与可选 NeMo 适配器
 先完成 P0，再考虑扩大检测器、引入大模型权重、微调或更换技术栈。当前主要问题是确定性执行控制与评测口径；增加更大的模型无法修复审批竞态、别名冲突或未调用的门禁。NeMo 的模型检查器通过可选适配器逐步接入，先用替身验证配置与调用，再决定真实模型成本。
 [Heading1] 11 交给开发 AI 的实施说明
 下面内容可作为下一轮开发起点。
-请基于 E:\agent\EvoGuardLab 的当前工作区继续开发。先阅读现有变更与本报告，保留 security.py、action_scope.py、评测脚本和测试中的未提交工作。本轮按执行入口、输入契约、审批一致性的顺序推进，完成一项再验证一项。
+请基于 <repo-root> 的当前工作区继续开发。先阅读现有变更与本报告，保留 security.py、action_scope.py、评测脚本和测试中的未提交工作。本轮按执行入口、输入契约、审批一致性的顺序推进，完成一项再验证一项。
 第一步检查 runtime.Ctx.call 的真实路径，统一调用结构契约、意图检查与审批。新增显式的历史实验配置和受控执行配置，真实写操作没有审批后端时必须拒绝启动。受控配置中 deny、review、模型异常和未满足必要前提的行为必须可测试，不能只写日志。
 第二步定义每个工具的严格参数模型。归一化后的同一对象用于授权、审批和执行；拒绝 amount 与 total 等冲突别名及未知字段。按字段语义计算稳定摘要，保留整数精度，金额按业务精度处理。审批 ID 需要由状态机验证，不接受仅靠非空字符串的批准声明。
 第三步补审批的候选版本、工具 schema、完整策略和幂等键绑定。消费状态用条件更新或短事务保证原子性；并发时只能有一个消费者成功。保留现有检查点、过期、拒绝、重启恢复与幂等落账能力，分别验证审批成功和业务成功。
 第四步修语义输入覆盖、中文语料形状与实验统计。为参数尾部、合法文档祈使句和模型不可用增加反例。检测指标按统一 case 统计，另保留话术宏平均。当前重复使用的测试集保留作回归，新建家族隔离的盲测。扩展 manifest 覆盖安全代码与有效配置，更新生成器及新报告。
 [Heading2] 本地验证命令
 在 PowerShell 的项目目录执行：$env:PYTHONUTF8='1'；$env:PYTHONIOENCODING='utf-8'；python -X utf8 -m unittest discover -s tests -q。将命令分行执行，记录实际测试数、failure、error 与耗时。当前基线是 684 项中 1 项失败；新增测试后总数可以增加。
-本轮受控反例脚本位于 E:\agent\_review_work_20261111\review_repro.py，证据为同目录 review_evidence.json。脚本使用临时数据库、模型替身和工具替身；修复后应把相应用例迁入正式测试并将预期从“暴露缺陷”改成“阻止缺陷”。不要为了让复现脚本输出不变而保留缺陷。
+本轮受控反例脚本位于 <workspace>\_review_work_20261111\review_repro.py，证据为同目录 review_evidence.json。脚本使用临时数据库、模型替身和工具替身；修复后应把相应用例迁入正式测试并将预期从“暴露缺陷”改成“阻止缺陷”。不要为了让复现脚本输出不变而保留缺陷。
 [Heading2] 交付说明应写什么
 列出修改入口、生效条件、拒绝与正常调用的行为证据、测试结果和剩余限制。不要把未运行的模型评测写成通过，不要修改冻结历史报告的结果，也不要把语料问题通过删除困难样本掩盖。
 [Heading1] 12 验收清单与完成标准
@@ -251,8 +251,8 @@ P0 行为测试通过、正常任务可完成、全量回归无未解释失败�
 本报告是审查与实施方案；项目代码尚未按建议修改。所列缺陷有代码或受控反例支持，部署扩展项属于未来开放使用前的建议，不代表当前已发生外部攻击。
 [Heading1] 13 证据与参考索引
 [Heading2] 本次本地证据
-项目根目录 E:\agent\EvoGuardLab；HEAD 42767a5；本轮评审包含工作区未提交修改。security.py 与 tests/test_reproducibility.py 为已跟踪修改；新增 action_scope.py、action_scope_v1/v2 与 chinese_real_v1 实验、三个导入评测脚本及两份测试文件。完整状态以本轮 git status 记录为准。
-全量测试日志：E:\agent\_review_work_20261111\unittest_utf8.log。结果 684 tests / 37.330s / FAILED failures=1。初次未强制 UTF-8 的 Windows 运行还产生子进程解码错误；本报告采用修正编码后的运行，不将编码环境问题重复列为项目缺陷。
+项目根目录 <repo-root>；HEAD 42767a5；本轮评审包含工作区未提交修改。security.py 与 tests/test_reproducibility.py 为已跟踪修改；新增 action_scope.py、action_scope_v1/v2 与 chinese_real_v1 实验、三个导入评测脚本及两份测试文件。完整状态以本轮 git status 记录为准。
+全量测试日志：<workspace>\_review_work_20261111\unittest_utf8.log。结果 684 tests / 37.330s / FAILED failures=1。初次未强制 UTF-8 的 Windows 运行还产生子进程解码错误；本报告采用修正编码后的运行，不将编码环境问题重复列为项目缺陷。
 受控反例：review_repro.py 与 review_evidence.json。证据包含审批跨版本消费、并发双消费、金额字段冲突、摘要等价、执行层未调用门禁和意图尾部截断；另记录当前安全源文件 SHA-256。并发反例使用屏障安排竞争窗口，证明状态迁移缺乏原子条件，不是已发生重复支付的证据。
 源码定位：runtime.py Ctx.call 第 375 行；approval.py canonical 第 78 行、ApprovalGate 第 123 行、require 消费更新约第 217 行及 consume 更新约第 277 行；tool_contract.py _find 第 89 行、authorize 第 167 行；security.py guard_tool_intent 第 806 行。行号对应本轮快照，后续修改会移动。
 [Heading2] 官方上游资料

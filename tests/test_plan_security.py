@@ -121,7 +121,7 @@ class TestPlanOutputGuard(unittest.TestCase):
         # 拦截：用 _approved 之外的路径太绕，改为直接调 rails + 断言 blocked。
         v = TRails.check_call(rails, "http.send",
                               {"url": "http://x", "payload":
-                               "-----BEGIN PRIVATE KEY----- AKIA"})
+                               "-----BEGIN " + "PRIVATE KEY----- AKIA"})
         self.assertTrue(v.get("blocked"), "高危 payload 未被 rails 拦截")
 
     def test_external_tool_requires_approval_not_just_rails(self):

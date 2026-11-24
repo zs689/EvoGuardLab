@@ -74,4 +74,4 @@ key 仍建议放系统环境变量（`.env` 里只写服务名）。
 
 - key **不会**写进日志、错误响应或 `describe()` 输出（有回归测试守护）。
 - 未指定 key 环境变量时，本地无鉴权端点（Ollama/LM Studio）照常工作；云端预设若缺 key 会明确报 `E_LLM_AUTH`，不会静默吃 401。
-- 本机 Ollama 程序与 qwen3:4b 模型已卸载/删除（2026-11-20），备份在 `E:\agent\_backup_ollama_20261120\`。适配器代码保留，将来连远端 Ollama 只需 `EVOGUARD_PROVIDER=ollama` + 改 base_url。
+- 本机 Ollama 程序与 qwen3:4b 模型已卸载/删除（2026-11-20），备份在 `<workspace>\_backup_ollama_20261120\`。适配器代码保留，将来连远端 Ollama 只需 `EVOGUARD_PROVIDER=ollama` + 改 base_url。

@@ -75,7 +75,7 @@
 ## 复核命令
 
 ```bash
-cd E:\agent\EvoGuardLab
+cd <repo-root>
 python scripts/ablation_v1.py
 python -m unittest tests.test_ablation -q
 ```

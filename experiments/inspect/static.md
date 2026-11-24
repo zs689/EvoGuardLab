@@ -6,8 +6,8 @@
 
 | Agent | 来源 | 类型 | 工具数 | prompt 字数 | 置信度 |
 |---|---|---|---|---|---|
-| billing-agent-bad | `E:\agent\EvoGuardLab\tests\fixtures\agent_bad.json` | json | 5 | 40 | **high** |
-| billing-agent-good | `E:\agent\EvoGuardLab\tests\fixtures\agent_good.json` | json | 2 | 103 | **high** |
+| billing-agent-bad | `<repo-root>\tests\fixtures\agent_bad.json` | json | 5 | 40 | **high** |
+| billing-agent-good | `<repo-root>\tests\fixtures\agent_good.json` | json | 2 | 103 | **high** |
 
 > **confidence=low 表示定义是从源码里猜出来的** —— prompt 边界和工具清单都可能不全，
 > 这类结论只能当线索，不能当事实。

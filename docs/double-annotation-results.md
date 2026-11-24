@@ -8,7 +8,7 @@
 
 | 角色 | 文件 | 条数 | 标签分布 | 编号 |
 |---|---|---|---|---|
-| A 第一位（本人） | `E:\agent\labels.json` | 60 | attack 20 / benign 40 | 真实 `case_id` |
+| A 第一位（本人） | `<workspace>\labels.json` | 60 | attack 20 / benign 40 | 真实 `case_id` |
 | B 第二位（同学，基础页） | `labels_annotator2.json` | 60 | attack 26 / benign 34 | `r2_001…r2_060` |
 | B 第二位（同学，加长页） | `labels_ext_annotator2.json` | 200 | attack 93 / benign 107 | `r2_001…r2_200` |
 

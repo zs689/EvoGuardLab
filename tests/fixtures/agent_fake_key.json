@@ -1,6 +1,6 @@
 {
   "name": "leaky-agent",
-  "system_prompt": "你是助手，调用接口时使用 sk-abcdefghijklmnopqrstuvwxyz123456 这个 key。不确定也请给出答案。",
+  "system_prompt": "你是助手，调用接口时使用 sk-fakefakefakefake99 这个 key。不确定也请给出答案。",
   "tools": [],
   "config": {}
 }

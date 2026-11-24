@@ -123,7 +123,7 @@
 ## 八、复核命令
 
 ```bash
-cd E:\agent\EvoGuardLab
+cd <repo-root>
 python -m unittest tests.test_mode_compare -q      # 14 项：反例 / 指纹 / 分母 / 冻结历史
 python scripts/freeze_mode_compare.py              # 默认写 experiments/mode_compare_v2
 python scripts/freeze_mode_compare.py --out /tmp/cmp

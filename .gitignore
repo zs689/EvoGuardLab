@@ -33,3 +33,8 @@ _sandbox/
 *.log
 # 历史存档里的测试日志仍保留（可追溯性）
 !experiments/archive/**
+
+# OSS-03：历史权重副本（无代码引用，保留本地，不入库）
+experiments/light_classifier/with_pinyin.json
+experiments/light_classifier/zh_holdout_fixed.json
+experiments/weights/light_classifier_zh_fpr0.json

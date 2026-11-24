@@ -20,7 +20,7 @@ def redact(text):
         reps.append(p.replace("\\", "\\\\"))
     for p in reps:
         text = text.replace(p, "<HOME>" if p.startswith(home) else "<TMP>")
-    # 用户目录名（如 C:\Users\zs）单独兜底
+    # 用户目录名（如 <user-home>）单独兜底
     if user and len(user) > 2:
         text = re.sub(r"(Users[\\\\/])" + re.escape(user) + r"\b",
                       r"\1<USER>", text)

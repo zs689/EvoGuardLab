@@ -61,7 +61,7 @@
 ## 复核命令
 
 ```bash
-cd E:\agent\EvoGuardLab
+cd <repo-root>
 python scripts/tool_contract_demo.py
 python -m unittest tests.test_tool_contract -q
 ```

@@ -105,7 +105,7 @@ pending 与 approved；**恢复只还原状态，不自动继续写操作**。
 ## 七、复核命令
 
 ```bash
-cd E:\agent\EvoGuardLab
+cd <repo-root>
 python -m unittest tests.test_approval -q
 python scripts/real_settlement_demo.py
 ```
