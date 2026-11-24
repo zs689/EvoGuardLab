@@ -67,7 +67,7 @@ class TestGoodDefinition(unittest.TestCase):
 
 class TestSecretAndPrompt(unittest.TestCase):
     def test_secret_in_prompt(self):
-        issues = SR.check(defn("agent_secret.json"))
+        issues = SR.check(defn("agent_fake_key.json"))
         ids = {i["rule_id"] for i in issues}
         self.assertIn("prompt_secret_leak", ids)
 

@@ -37,14 +37,14 @@
       },
       {
         "pattern": "sk-…",
-        "where": "tests/fixtures/agent_secret.json",
+        "where": "tests/fixtures/agent_fake_key.json",
         "verdict": "故意的测试夹具：模拟泄漏假 key 的 agent，key=abcdefghijklmnopqrstuvwxyz123456"
       }
     ]
   },
   "history_check": {
     "sensitive_files_ever_added": [
-      "tests/fixtures/agent_secret.json（假）"
+      "tests/fixtures/agent_fake_key.json（假）"
     ],
     "real_credentials_found": false
   },
@@ -55,7 +55,7 @@
   ],
   "open_questions_for_owner": [
     "docs/review-remediation/ 与 *_progress.md 含内部审计过程（27 项发现、自我下调分数）。公开与否是产品决策，我未改动。",
-    "tests/fixtures/agent_secret.json 文件名可能触发 GitHub secret scanning 提示（内容为假），如介意可改名。",
+    "已改名为 tests/fixtures/agent_fake_key.json（原名含 secret 字样，易触发扫描提示；内容一直是假的）。",
     "test_openai_proxy.py 的截断 PEM 可能触发提示（不可解析），如介意可改成字符串拼接。"
   ],
   "recommend_before_publish": [
@@ -97,7 +97,7 @@ python scripts/review_checks.py --gate   # 35/35 pass
 
 ## 已知会触发 GitHub 提示的两处（均为假数据，可接受）
 
-- `tests/fixtures/agent_secret.json`：故意的「泄漏假 key 的 agent」测试夹具
+- `tests/fixtures/agent_fake_key.json`：故意的「泄漏假 key 的 agent」测试夹具
 - `tests/test_openai_proxy.py` 里的截断 PEM（不可解析）
 
 如希望扫描面板全绿，可把这两处改成运行时拼接字符串；不改也不影响功能。
