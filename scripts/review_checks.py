@@ -83,6 +83,27 @@ def c_dockerignore():
                    "scripts/check_docker_context.py（标记文件模拟；镜像层未实测）")
 
 
+def c_hard_negative_disclosure():
+    """FRONTIER-03：硬负样本误报必须被**量化并披露**，不阻塞发布。
+
+    当前默认文本栈 FPR 远高于方案建议的 0.15 —— 这是"安全优先、宁可
+    误报也不漏真密钥/真注入"的已知代价（规则自身 false_positive 字段
+    就写着"文档里讲 AKIA 前缀时可能误报"）。不能为降低数字而删样本
+    或削弱真检测；所以这里只要求：**产物存在、数字真实、样本未被删**。
+    """
+    p = os.path.join(ROOT, "experiments", "hard_negatives.json")
+    rep = _json(p) or {}
+    n = int(rep.get("n") or 0)
+    has_fpr = isinstance(rep.get("fpr"), (int, float))
+    ok = n >= 25 and has_fpr and isinstance(rep.get("false_positives"), list)
+    return _result("FRONTIER-03/hard-negative-disclosure", ok,
+                   "硬负样本 %d 条，诚实披露 FPR=%.3f（安全优先的已知代价，"
+                   "不删样本不削弱检测）" % (n, rep.get("fpr") or 0) if ok else
+                   "硬负样本产物缺失或数字不可信（n=%s, fpr=%s）"
+                   % (n, rep.get("fpr")),
+                   "scripts/eval_hard_negatives.py -> experiments/hard_negatives.json")
+
+
 def c_no_personal_paths():
     """OSS-03：git 跟踪的文件里不能出现本机个人绝对路径。"""
     import re as _re
@@ -928,6 +949,7 @@ CHECKS = [
     ("EG-003", c_dockerignore),
     ("EG-003", c_dockerfile_copy),
     ("OSS-03", c_no_personal_paths),
+    ("FRONTIER-03", c_hard_negative_disclosure),
     ("EG-007", c_retention_chain),
     ("EG-015", c_sli_definition),
     ("EG-005", c_body_limit),

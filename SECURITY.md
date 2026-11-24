@@ -58,6 +58,13 @@
 - **技能的适用条件在轨迹无 env 证据时不设防**：`lookup()` 只在轨迹能推出
   环境域（`applies_when.env_domains`）时按域过滤；推不出就退回通用匹配。
   这是有意的保守（不因信息缺失禁掉可用技能），但意味着「无证据不设防」。
+- **硬负样本误报率很高（FPR≈0.52，27 条中 14 条）**：默认文本栈会把
+  "讨论/翻译攻击句式""文档里的官方示例假密钥"当成真攻击。这是安全优先的
+  已知代价（检测器规则的 `false_positive` 字段本就写明"文档里讲 AKIA
+  前缀时可能误报"），不是可以靠删样本解决的 bug。实测明细见
+  `experiments/hard_negatives.json`，可离线重跑
+  `python scripts/eval_hard_negatives.py`。接入对生产部署的含义：
+  面向开发者的安全文档/教学场景需要把文本检测置于 audit 而非 enforce。
 - 检测器 v2 **未过预注册判定线**（AUC 下降 0.032 > 允许 0.01），负结果照记；
   v3 只完成预注册、实验未跑，见 `docs/semantic-injection-v3-plan.md`。
 
