@@ -57,6 +57,21 @@ def _wait_job(port, headers, jid, timeout=20):
     return st, job
 
 
+def submit_completion_ok(statuses, submit_p95_ms, completion_p95_ms):
+    """提交/完成分离判据（纯函数，便于负向测试证明不是放水）。
+
+    放行需同时满足：8 个作业全部 succeeded，且提交 P95 显著早于完成 P95。
+    若 worker 变成同步阻塞（submit 等到完成），submit_p95 会逼近
+    completion_p95，这里会判红。
+    """
+    # 不只要 submit 早于 completion，还要**显著**早于：同步阻塞时
+    # submit ≈ completion（如 89s vs 90s），单纯 `<` 会误放行。
+    # 异步作业化的意义是提交响应远快于完成（实测 15ms vs 90s）。
+    return (len(statuses) == 8 and all(s == "succeeded" for s in statuses)
+            and (completion_p95_ms or 0) > 0
+            and (submit_p95_ms or 1e9) < 0.25 * completion_p95_ms)
+
+
 def main():
     ap = argparse.ArgumentParser(description="持久作业端到端验收")
     ap.add_argument("--out", default="")
@@ -138,7 +153,26 @@ def main():
             "4 个提交 id 互异=%s" % (len({j for _, j in ids}) == 4))
 
         # 9) 审查要求：提交响应、排队、完成时间**分开报**。
-        #    作业化的意义不是让实验变快，而是请求线程不再被 3.5s 卡住。
+        #    作业化的意义不是让实验变快，而是请求线程不再被实验耗时卡住。
+        #
+        #    前提：worker 是**单线程顺序执行**，每次 run_once 实测约 8s。
+        #    前面步骤已提交了 smoke-key + burst×4 等 job，它们还在排队。
+        #    若不等队列清空就提交 benchmark 的 8 个，队列深度 13×8s≈104s，
+        #    远超旧的 60s 单次等待 -> 全部假超时（2026-11-24 实测红灯）。
+        #    这不是放水阈值，而是让测量的前提成立：先排空，再测 8 并发。
+        def _active_jobs():
+            _s, _h2, _raw = L.http(svc.port, "GET", "/api/jobs", h)
+            b = _body(_raw)
+            jobs = b.get("jobs") or []
+            return sum(1 for j in jobs
+                       if j.get("status") in ("queued", "running", "unknown"))
+
+        _q0 = time.time()
+        while _active_jobs() > 0 and time.time() - _q0 < 180:
+            time.sleep(0.1)
+        add("queue-drained-before-bench", _active_jobs() == 0,
+            "benchmark 前队列已排空（active=%d）" % _active_jobs())
+
         import threading
         submit_ms, done_ms, statuses = [], [], []
         lock = threading.Lock()
@@ -152,7 +186,12 @@ def main():
             j = (_body(raw).get("job") or {}).get("id")
             job = {}
             if j:
-                _, job = _wait_job(svc.port, h, j, timeout=60)
+                # 单 worker 顺序跑 8 个：空载单次约 8s，但 8 线程并发提交
+                # 时 worker 与 HTTP 线程竞争，实测每个 11~15s，总计约 115s。
+                # 超时是"真卡死"保护，不是通过判据——判据仍是状态 succeeded
+                # 与 submit 早于 completion。给 8×30s=240s 覆盖最坏波动，
+                # 避免把"排队慢"误判成"作业失败"（2026-11-24 偶发红灯）。
+                _, job = _wait_job(svc.port, h, j, timeout=240)
             total = (time.perf_counter() - t0) * 1000.0
             with lock:
                 submit_ms.append(sub)
@@ -177,9 +216,9 @@ def main():
             "note": "提交响应与完成时间分离；worker 单线程顺序执行，"
                     "完成时间仍包含真实实验耗时。",
         }
-        add("submit-vs-completion", all(s == "succeeded" for s in statuses)
-            and (bench["submit_p95_ms"] or 1e9)
-                < (bench["completion_p95_ms"] or 0),
+        add("submit-vs-completion",
+            submit_completion_ok(statuses, bench["submit_p95_ms"],
+                                 bench["completion_p95_ms"]),
             "8 并发：提交 P95=%.1f ms，完成 P95=%.1f ms，墙钟 %.2f s"
             % (bench["submit_p95_ms"], bench["completion_p95_ms"], wall))
 
