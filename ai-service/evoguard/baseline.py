@@ -82,6 +82,11 @@ SECURITY_SWITCHES = (
     "AGENTLAB_ALLOW_AUTO_APPROVE",
     "AGENTLAB_DEEP_MODEL",
     "AGENTLAB_SEMANTIC_MODEL",
+    # 审计链 HMAC：不配就只有 hash 链，**持库写权者可整链重写**（已实测：
+    # tests/test_audit_chain_rewrite.py 里无 key 时 verify 仍通过）。
+    # 放进这份可见配置，是为了让人跑 `evoguard config` 就能看到它没配；
+    # 值本身由 _mask_value 脱敏成 <redacted>/<unset>，不会泄露密钥。
+    "EVOGUARD_AUDIT_HMAC_KEY",
 )
 
 # 技能库内容指纹覆盖的字段。status/version/active_version 也算：
