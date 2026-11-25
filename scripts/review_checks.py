@@ -822,8 +822,15 @@ def c_sandbox_no_orphans():
         try:
             box = _sbx.DockerCodeSandbox()
             docker = box.docker
-            _sp.run([docker, "info"], capture_output=True, timeout=15,
-                    check=True)
+            _info = _sp.run([docker, "info", "--format", "{{.OSType}}"],
+                            capture_output=True, text=True, timeout=15,
+                            check=True)
+            if (_info.stdout or "").strip().lower() != "linux":
+                return _result("DEEP-01/no-orphans", False,
+                               "Docker 为非 Linux 容器模式（OSType=%s），"
+                               "无法运行 Linux 沙箱镜像（未用桩伪造通过）"
+                               % ((_info.stdout or "").strip() or "unknown"),
+                               "live docker info -> non-linux", skipped=True)
         except Exception:
             # 不 mock、不冒充： daemon 不在就如实 skip，等真机现场复验
             return _result("DEEP-01/no-orphans", False,
