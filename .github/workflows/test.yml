@@ -50,7 +50,7 @@ jobs:
       - name: Objective per-finding gates (strict on ubuntu)
         if: matrix.os != 'windows-latest'
         run: python scripts/review_checks.py --gate --out gate_artifacts
-      - name: Objective per-finding gates (windows: allow no-orphans only)
+      - name: "Objective per-finding gates (windows, allow no-orphans only)"
         if: matrix.os == 'windows-latest'
         run: >-
           python scripts/review_checks.py --gate --out gate_artifacts

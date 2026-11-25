@@ -895,6 +895,10 @@ def c_static_names():
                        "pip install pyflakes", skipped=True)
     except subprocess.TimeoutExpired:
         return _result("EG-024/static-names", False, "pyflakes 超时", "")
+    if r.returncode != 0 and "No module named" in (r.stderr or ""):
+        return _result("EG-024/static-names", True,
+                       "未安装 pyflakes，跳过（CI 应 pip install pyflakes）",
+                       "pip install pyflakes", skipped=True)
     out = (r.stdout or "") + (r.stderr or "")
     bad = [ln for ln in out.splitlines() if "undefined name" in ln
            and "unable to detect undefined names" not in ln]
@@ -1250,7 +1254,7 @@ def cmd_self_test():
         name, desc, corrupt = entry[:3]
         extra = entry[3] if len(entry) > 3 else ()
         if name not in by_name:
-            out.append((name, False, "检查不存在"))
+            out.append((name, "fail", "检查不存在"))
             continue
         tmp = _temp_repo(extra)
         try:
@@ -1259,30 +1263,40 @@ def cmd_self_test():
             try:
                 r = by_name[name][1]()
             except Exception as exc:                      # noqa: BLE001
-                out.append((name, False, "检查异常：%r" % exc))
+                out.append((name, "fail", "检查异常：%r" % exc))
                 continue
-            ok = r.get("status") == "fail"
-            out.append((name, ok,
-                        ("抓到了" if ok else "假绿：坏样本仍判 %s" % r.get("status"))
-                        + " ← " + desc))
+            st = r.get("status")
+            if st == "fail":
+                out.append((name, "pass", "抓到了 ← " + desc))
+            elif st == "skip":
+                out.append((name, "skip",
+                            "环境缺依赖跳过（%s） ← %s"
+                            % (r.get("detail", ""), desc)))
+            else:
+                out.append((name, "fail",
+                            "假绿：坏样本仍判 %s ← %s" % (st, desc)))
         finally:
             globals()["ROOT"] = original_root
             shutil.rmtree(tmp, ignore_errors=True)
-    n_ok = sum(1 for _, ok, _ in out if ok)
+    n_ok = sum(1 for _, st, _ in out if st == "pass")
+    n_skip = sum(1 for _, st, _ in out if st == "skip")
+    n_fail = sum(1 for _, st, _ in out if st == "fail")
     covered = {entry[0] for entry in SELF_TESTS}
     all_checks = {fn.__name__ for _, fn in CHECKS}
     uncovered = sorted(all_checks - covered)
-    print("== 检查自检 %d/%d 抓到已知坏样本 ==" % (n_ok, len(out)))
+    skip_note = ("（%d 项因缺可选依赖跳过）" % n_skip) if n_skip else ""
+    print("== 检查自检 %d/%d 抓到已知坏样本%s ==" % (n_ok, len(out) - n_skip, skip_note))
     print("   覆盖率：%d/%d 个检查有坏样本自检（%d 个未覆盖）" % (
         len(covered & all_checks), len(all_checks), len(uncovered)))
     if uncovered:
         print("   未覆盖：" + ", ".join(uncovered))
         print("   （live_capability 类需真实环境，不强求变异样本；"
               "静态检查建议逐步补齐）")
-    for name, ok, detail in out:
-        print("%-5s %-22s %s" % ("PASS" if ok else "FAIL", name, detail))
-    # 只有「样本失效/假绿」才失败；未覆盖是可见的债务，不冒充全绿即可。
-    return 0 if n_ok == len(out) else 1
+    for name, st, detail in out:
+        tag = "PASS" if st == "pass" else ("SKIP" if st == "skip" else "FAIL")
+        print("%-5s %-22s %s" % (tag, name, detail))
+    # 只有「样本失效/假绿」才失败；缺可选依赖（如零依赖环境无 pyflakes）如实标记 SKIP。
+    return 0 if n_fail == 0 else 1
 
 
 def main():

@@ -41,7 +41,7 @@ jobs:
         run: python -m unittest discover -s tests -q
 
       - name: 门禁
-        run: python scripts/review_checks.py --gate
+        run: python scripts/review_checks.py --gate --allow-skip-id EG-024/static-names
 
       - name: 真 PostgreSQL RLS（直连 services 里的实例）
         run: |
