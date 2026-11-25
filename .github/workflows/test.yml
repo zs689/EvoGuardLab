@@ -45,8 +45,16 @@ jobs:
       # 先证明检查工具本身会红，再看检查结果。否则 35/35 可能是假绿。
       - name: Check-tool self-test (known-bad samples must fail)
         run: python scripts/review_checks.py --self-test
-      - name: Objective per-finding gates
+      # PREPUSH-01：ubuntu 主矩阵保持 0-skip 严格模式；Windows runner 无法
+      # 跑 Linux Docker 容器，DEEP-01/no-orphans 必然 SKIP，按 id 精确放行。
+      - name: Objective per-finding gates (strict on ubuntu)
+        if: matrix.os != 'windows-latest'
         run: python scripts/review_checks.py --gate --out gate_artifacts
+      - name: Objective per-finding gates (windows: allow no-orphans only)
+        if: matrix.os == 'windows-latest'
+        run: >-
+          python scripts/review_checks.py --gate --out gate_artifacts
+          --allow-skip-id DEEP-01/no-orphans
       - name: Docker build-context gate (static)
         # 两个脚本都要跑：check_docker_context 验黑名单/运行资产，
         # check_build_context 验 .dockerignore 与 **pyproject 声明是否被
@@ -95,9 +103,13 @@ jobs:
       - name: CLI works from a bare checkout
         working-directory: fresh
         run: python evoguard_cli.py config
+      # clean-clone 故意不装 dev 依赖（无 pyflakes），EG-024 必然 SKIP；
+      # 只放行这一项，其它任何 SKIP 仍让 CI 红。
       - name: Objective gates on a bare checkout
         working-directory: fresh
-        run: python scripts/review_checks.py --gate --out gate_artifacts
+        run: >-
+          python scripts/review_checks.py --gate --out gate_artifacts
+          --allow-skip-id EG-024/static-names
       - name: Scorecard on a bare checkout (informational)
         working-directory: fresh
         run: python evoguard_cli.py scorecard

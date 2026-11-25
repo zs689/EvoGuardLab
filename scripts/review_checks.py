@@ -1125,8 +1125,15 @@ def _break_file(root, rel, old, new, count=1):
 
 
 def _break_ci_gate(root):
-    _break_file(root, ".github/workflows/test.yml",
-                "review_checks.py --gate", "review_checks.py --NO-gate")
+    # PREPUSH-01 后 CI 有 3 处 gate 调用（ubuntu / windows / clean-clone）；
+    # 只破坏 1 处仍满足 ">=2"，自检会假绿。必须全部破坏。
+    p = os.path.join(root, ".github", "workflows", "test.yml")
+    t = io.open(p, encoding="utf-8").read()
+    if "review_checks.py --gate" not in t:
+        raise AssertionError("自检样本失效：CI 里找不到 gate 调用")
+    with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+        f.write(t.replace("review_checks.py --gate",
+                          "review_checks.py --NO-gate"))
 
 
 def _break_static_names(root):
@@ -1287,7 +1294,10 @@ def main():
     ap.add_argument("--gate", action="store_true",
                     help="任一 fail 就非零退出；skip 也视为失败（防静默少查）")
     ap.add_argument("--allow-skip", action="store_true",
-                    help="显式允许检查跳过；用了就必须说明为什么（会写进报告）")
+                    help="显式允许**全部**跳过（向后兼容；CI 应优先用 --allow-skip-id）")
+    ap.add_argument("--allow-skip-id", action="append", default=[],
+                    metavar="CHECK_ID",
+                    help="按 id 精确允许某一项跳过，可重复；白名单外的 SKIP 仍使 gate 失败")
     a = ap.parse_args()
 
     if a.self_test:
@@ -1311,6 +1321,11 @@ def main():
     n_pass = sum(1 for r in results if r["status"] == "pass")
     n_fail = sum(1 for r in results if r["status"] == "fail")
     n_skip = sum(1 for r in results if r["status"] == "skip")
+    skipped = [r for r in results if r["status"] == "skip"]
+    allowed_ids = set(a.allow_skip_id or [])
+    unexpected = ([r["id"] for r in skipped
+                   if r["id"] not in allowed_ids]
+                  if not a.allow_skip else [])
     report = {
         "version": 1,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -1319,9 +1334,17 @@ def main():
             text=True).stdout.strip() if _exists(".git/HEAD") else "unknown",
         "seconds": round(time.time() - t0, 2),
         "summary": {"total": len(results), "pass": n_pass, "fail": n_fail,
-                    "skip": n_skip, "skip_allowed": bool(a.allow_skip),
-                    "skip_reason": ("显式 --allow-skip（理由应写进 CI 步骤注释）"
-                                    if a.allow_skip and n_skip else None)},
+                    "skip": n_skip,
+                    "skip_allowed": bool(a.allow_skip) or
+                                    (bool(allowed_ids) and not unexpected),
+                    "allow_skip_ids": sorted(allowed_ids),
+                    "unexpected_skips": unexpected,
+                    "skip_reason": ("显式 --allow-skip"
+                                    if a.allow_skip and n_skip else
+                                    "按 id 精确放行：" + ", ".join(sorted(
+                                        r["id"] for r in skipped
+                                        if r["id"] in allowed_ids))
+                                    if allowed_ids and n_skip else None)},
         "checks": results,
         "note": "每项对应独立审查 finding 的验收条件；修前留红、修后重跑转绿。",
     }
@@ -1332,9 +1355,17 @@ def main():
             json.dump(report, f, ensure_ascii=False, indent=2, sort_keys=True)
             f.write("\n")
         print("[√] %s（%d pass / %d fail）" % (p, n_pass, n_fail))
+    skip_note = (""
+                 if n_skip == 0 else
+                 "（已按 id 放行：%s）" % ", ".join(sorted(
+                     r["id"] for r in skipped if r["id"] in allowed_ids))
+                 if allowed_ids and not a.allow_skip else
+                 "（--allow-skip 全部放行）" if a.allow_skip else
+                 "  ← skip 未获显式允许，gate 视为失败")
+    if unexpected and not a.allow_skip:
+        skip_note += "；白名单外仍跳过：" + ", ".join(unexpected)
     print("== %d/%d pass, %d fail, %d skip%s ==" % (
-        n_pass, len(results), n_fail, n_skip,
-        "" if n_skip == 0 or a.allow_skip else "  ← skip 未获显式允许，gate 视为失败"))
+        n_pass, len(results), n_fail, n_skip, skip_note))
     kinds = check_kinds()
     for kind in ("hygiene", "live_capability"):
         group = [r for r in results if r.get("gate_kind") == kind]
@@ -1343,7 +1374,9 @@ def main():
     # 关键：skip 不等于通过。以前只看 n_fail，CI 少查一项仍退出 0，
     # 「34/35」和「35/35」都显示全绿——这就是静默少查的根源。
     # 现在必须显式 --allow-skip 才放行，且理由会写进报告。
-    return 1 if (a.gate and (n_fail or (n_skip and not a.allow_skip))) else 0
+    return 1 if (a.gate and (n_fail or unexpected or
+                             (n_skip and not a.allow_skip and
+                              not (allowed_ids and not unexpected)))) else 0
 
 
 if __name__ == "__main__":
