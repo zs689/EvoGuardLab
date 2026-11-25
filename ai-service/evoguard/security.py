@@ -155,32 +155,6 @@ def stats():
             "avg_us": round(_NANOS / _CALLS / 1000.0, 1) if _CALLS else None}
 
 
-#: 元讨论框架词：明确在解释/翻译/引用攻击文本，而不是下达指令。
-_META_FRAMES = (
-    "解释", "什么是", "为什么", "翻译", "写成中文", "举例", "报告里",
-    "如何防御", "如何防", "how to defend", "explain", "discuss",
-    "translate", "classic prompt injection", "is it safe", "placeholder",
-    "sample access key", "for detection unit tests",
-    # 通用引用/演示框架（不是针对任何具体样本文本）：
-    "示例", "演示", "不是真实", "redacted", "quote exactly", "just quote",
-    "summarize the document", "是不是攻击", "帮我分析", "对照", "测误报",
-    "how to redact", "in the example", "例如", "用来测",
-)
-#: 真正的祈使执行结构：出现则元讨论豁免不成立。
-_EXEC_HINTS = ("请直接", "立即执行", "现在执行", "你必须", "execute now",
-               "run this", "run the", "do not", "不要告诉", "输出系统提示")
-
-
-def _is_meta_discussion(s, where):
-    """仅对可信主指令生效；不可信 tool_output 永不降级。"""
-    if where in ("tool_output", "untrusted_tool_output"):
-        return False
-    low = str(s or "").lower()
-    if not any(k in low for k in _META_FRAMES):
-        return False
-    return not any(k in low for k in _EXEC_HINTS)
-
-
 def _scan_view(s, where, only=None):
     """在一个已归一化的视图上跑特征表。"""
     low = s.lower()
@@ -199,21 +173,10 @@ def _scan_view(s, where, only=None):
         m = d["re"].search(s)
         if not m:
             continue
-        # 权威文档/测试 fixture 的占位密钥不是泄漏（只放宽可信信道；
-        # tool_output 里出现同样字符串仍按真实情报处理）。
-        # 只按语境豁免，不按字符串白名单 —— 测试里 AKIA...EXAMPLE 是
-        # 真攻击样本，按字符串豁免会漏检（触碰"不削弱真实攻击"红线）。
-        if d["code"].startswith("secret_") and where != "tool_output" \
-                and _is_meta_discussion(s, where):
-            continue
-        if d["code"].startswith("exfil_") and where != "tool_output" \
-                and _is_meta_discussion(s, where):
-            continue
-        meta = (any(k in d["code"] for k in
-                    ("injection_", "jailbreak", "pinyin_", "secret_", "exfil_"))
-                and _is_meta_discussion(s, where))
-        out.append({"code": d["code"],
-                    "severity": "info" if meta else d["severity"],
+        # BLOCK-01：L1 是**确定性词法层**，不做自然语言语用消歧 ——
+        # 任何基于"explain/例如/示例"等子串的豁免都是一词绕过：攻击者在
+        # 真攻击前加个前缀就能过。语用消歧属于可选的 L2 语义层职责。
+        out.append({"code": d["code"], "severity": d["severity"],
                     "where": where,
                     "match": s[max(0, m.start() - 20):m.end() + 20][:120],
                     "detail": d["detail"], "false_positive": d["false_positive"]})
@@ -243,12 +206,8 @@ def scan(text, where="text", only=None):
             import pinyin_guard as _PG
             pr = _PG.scan(clean)
             if pr["hit"]:
-                # 安全教学/翻译语境里引用注入句式是元讨论，不是指令。
-                # 只在可信主指令降级；tool_output 仍保持 error 硬拦。
-                meta = _is_meta_discussion(clean, where)
                 out.append({
-                    "code": "pinyin_injection",
-                    "severity": "info" if meta else "error",
+                    "code": "pinyin_injection", "severity": "error",
                     "where": where, "match": clean[:120],
                     "detail": "拼音/谐音/首字母形式的注入意图："
                               + ",".join(pr["matched"][:4]),

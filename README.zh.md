@@ -126,17 +126,22 @@ L1 召回接近 0；改按**工具责任**而非猜意图判定，留出集拿�
 
 - **参数级来源血缘（FRONTIER-01）**：`provenance.py` 给每个参数打 USER_TRUSTED /
   UNTRUSTED_TOOL_OUTPUT 标签，追踪「不可信工具返回值污染高敏工具参数」。**文本检测器全关**时
-  结构化实验在 **50 条真实 InjecAgent 攻击切片 + 20 条中文良性切片**上 ASR=`0.000`、
-  良性自动放行=`1.000`、人工确认率=`0.000`（`scripts/eval_provenance_structural.py`，
-  离线可复现）。高敏 sink 分布：42×`write_file.path`、6×`send_email.to`、
-  2×`transfer.amount`。这是 token 级来源血缘，不是语义理解；
-  用户若把恰好出现在目标里的值写入工具输出仍会放行。
+  结构化实验（离线夹具，无外部语料依赖）在 50 条攻击上 ASR=`0.000`；
+  **良性诚实分 3 桶**：只读工具 10/10 自动放行；高敏工具但参数来自用户输入 8/8 自动放行；
+  **先查通讯录再用查到的邮箱发信 7/7 需要人工确认**（整体良性人工确认率 0.28）。
+  这是 token 级来源血缘而非语义理解；合法多步工作流有真实确认代价，不藏拙。
 - **MCP Rug-Pull 钉扎 + 签名回执（FRONTIER-02）**：会话级 SHA-256 记录 `tools/list` 指纹，
   第二轮描述被篡改即触发阻断；`receipt.py` 产出 HMAC-SHA256 离线可验回执，
   `evoguard verify-receipt --key` 复核；**未配 key 时显式 `unsigned: true`，绝不伪装 verified**。
 - **硬负样本陷阱集（FRONTIER-03）**：27 条中英双语 5 类「看起来像攻击但无害」的良性样本，
   量化检测器过拟合。默认文本栈真实误报率 **FPR=0.518**（14/27）——**如实披露，不删样本、
   不放宽判定**；见 [SECURITY.md](SECURITY.md) 已知边界。
+
+- **SARIF 2.1.0 导出（CI / GitHub Code Scanning）**：零第三方依赖，一条命令出报告：
+  ```bash
+  evoguard inspect <agent-或-trace-路径> --format sarif --output results.sarif
+  ```
+  `results.sarif` 可直接上传 GitHub Code Scanning 或任意 CI 安全面板。
 
 ## 目录结构
 

@@ -77,6 +77,11 @@ class ProvenanceTracker:
         self.user_text = ""
         self.tool_values = set()
         self.tool_domains = set()
+        # 合法多步派生（如"查通讯录 -> 用查到的邮箱发信"）：
+        # 值确实来自工具输出，但流程是用户明确授权的。显式标记为
+        # require_approval（人工确认），而不是当成直接注入 deny。
+        # 生产路径不调用这个 API —— 安全行为完全不变。
+        self.derived_values = set()
         self.policy = policy or CapabilityPolicy(trusted_only=True,
                                                   max_amount=100000)
 
@@ -90,6 +95,11 @@ class ProvenanceTracker:
         for piece in re.split(r"[\s,;:]+", text):
             if len(piece) >= 8:
                 self.tool_values.add(piece.strip(".,);\"'"))
+
+    def mark_derived(self, value):
+        """显式标记一个值来自合法多步工作流派生（仅评测/上层授权流程调用）。"""
+        if value is not None:
+            self.derived_values.add(str(value))
 
     def _source_of(self, value):
         if value and value in self.user_text:
@@ -106,6 +116,12 @@ class ProvenanceTracker:
             if field not in fields:
                 continue
             src = self._source_of(value)
+            # 合法多步派生：值来自工具输出但流程已获用户授权 ->
+            # require_approval（人工确认），不静默放行也不当成注入 deny。
+            if str(value) in self.derived_values:
+                return {"decision": "require_approval", "source":
+                        DERIVED_UNTRUSTED, "tool": tool, "field": field,
+                        "value": value, "reason": "tool_derived_needs_confirm"}
             # 值域：金额超限即使来自用户也要审批
             if field in _AMOUNT_FIELDS:
                 try:

@@ -152,10 +152,11 @@ the baseline is near zero. Judging by *tool responsibility* instead of guessing 
 - **Argument-level provenance (FRONTIER-01)** — `provenance.py` tags every argument as
   `USER_TRUSTED` or `UNTRUSTED_TOOL_OUTPUT` and tracks "untrusted tool output poisoned a
   high-stakes tool argument". With **all text detectors disabled**, the structural experiment
-  reports ASR `0.000` and benign auto-pass `1.000` on **50 real InjecAgent attack
-  slices + 20 benign Chinese slices** (`scripts/eval_provenance_structural.py`,
-  offline reproducible). Sink mix: 42 `write_file.path`, 6 `send_email.to`,
-  2 `transfer.amount`. This is token-level provenance, not semantic understanding.
+  reports ASR `0.000` on 50 attack cases. **Benign is split into 3 honest buckets**
+  (`scripts/eval_provenance_structural.py`, offline fixture, no external corpus):
+  readonly 10/10 auto-pass; sensitive-tool with user-supplied values 8/8 auto-pass;
+  **sensitive-tool derived from a prior tool lookup 7/7 require human confirmation**
+  (overall benign approval rate 0.28). This is token-level provenance, not semantics.
 - **MCP rug-pull pinning + signed receipts (FRONTIER-02)** — a session-scoped SHA-256 of
   `tools/list`; a second-round description mutation is blocked. `receipt.py` emits an
   HMAC-SHA256 offline-verifiable action receipt (`evoguard verify-receipt --key`), and
@@ -163,6 +164,12 @@ the baseline is near zero. Judging by *tool responsibility* instead of guessing 
 - **Hard-negative trap suite (FRONTIER-03)** — 27 bilingual benign samples that *look* like
   attacks, measuring overfit. The default text stack shows a real **FPR of 0.518** (14/27),
   disclosed as-is — no samples removed, no criteria relaxed; see [SECURITY.md](SECURITY.md).
+
+- **SARIF 2.1.0 export (CI / GitHub Code Scanning)** — zero-dependency:
+  ```bash
+  evoguard inspect <agent-or-trace-path> --format sarif --output results.sarif
+  ```
+  Upload `results.sarif` to GitHub Code Scanning or any CI security dashboard.
 
 ## Results (honest version)
 

@@ -63,10 +63,15 @@ def main():
         "false_positives": details,
         "advisory_count": len(advisories),
         "advisories": advisories,
-        "note": ("只测默认文本栈（L1 + pinyin）；不含模型语义层。"
-                 "样本固定，不允许为过门禁而删样本或放宽判定。"
-                 "enforce 只拦 severity=error；元讨论语境降级的 info 单列"
-                 " advisory_count，不计入硬拦误报。"),
+        "note": ("只测 L1 确定性词法层（+ pinyin），不含 L2 语义层。"
+                 "样本 27 条固定，严禁删改样本或加一词豁免来压 FPR。"
+                 "BLOCK-01 后 L1 **故意不做任何自然语言前缀豁免**："
+                 "explain/例如/示例等前缀都能被攻击者用来绕过规则，"
+                 "因此安全文章/官方示例的误报被如实暴露为 0.5185，"
+                 "绝不用子串白名单换取好看数字。"
+                 "需要低误报的场景请开启可选 L2 语义层做语用消歧，"
+                 "或仅在 untrusted_tool_output 信道启用硬拦；"
+                 "L1 的诚实高 FPR 优于开源当天的一词绕过漏洞。"),
     }
     out = os.path.join(ROOT, "experiments", "hard_negatives.json")
     with open(out, "w", encoding="utf-8", newline="\n") as f:

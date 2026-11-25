@@ -931,6 +931,26 @@ def c_receipt_wiring():
                    "tests/test_receipt_mainpath_e2e.py")
 
 
+def c_no_stray_root_artifacts():
+    """BLOCK-03：仓库根不得有工具名/占位名之类的 0 字节孤儿文件。
+
+    071c044 曾把一次测试遗留的 0 字节 `send_email` 文件 git add -A 收进
+    仓库 —— 文件名正好是高敏工具名，开源后既难看又容易被误读为配置。
+    """
+    bad = []
+    for name in os.listdir(ROOT):
+        p = os.path.join(ROOT, name)
+        if os.path.isfile(p) and os.path.getsize(p) == 0 \
+                and name in ("send_email", "http_post", "transfer",
+                             "write_file", "shell"):
+            bad.append(name)
+    ok = not bad
+    return _result("BLOCK-03/no-stray-artifacts", ok,
+                   ("根目录无工具名孤儿文件" if ok
+                    else "发现 0 字节孤儿文件：%s" % bad),
+                   "git ls-files | 根目录")
+
+
 def c_eval_self_checks():
     """EG-025：评测产物必须自带 self_checks，而不是靠人记得排错。
 
@@ -978,6 +998,7 @@ CHECKS = [
     ("OSS-03", c_no_personal_paths),
     ("FRONTIER-03", c_hard_negative_disclosure),
     ("LAUNCH-01", c_receipt_wiring),
+    ("BLOCK-03", c_no_stray_root_artifacts),
     ("EG-007", c_retention_chain),
     ("EG-015", c_sli_definition),
     ("EG-005", c_body_limit),
