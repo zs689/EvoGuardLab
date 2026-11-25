@@ -124,6 +124,12 @@ def cmd_scan(a):
     return 0
 
 
+def cmd_inspect(a):
+    """离线检查 Agent 定义/轨迹；--format sarif 输出 SARIF 2.1.0。"""
+    import evoguard_inspect.cli as IC
+    return IC.main(list(a.rest or []))
+
+
 def cmd_mcp_proxy(_a):
     """PROD-02-T2：MCP stdio 安全代理。"""
     import mcp_proxy as MP
@@ -369,6 +375,12 @@ def main(argv=None):
     p.add_argument("--tool", help="工具名；给了就走完整返回值守卫（含职责判断）")
     p.add_argument("--json", action="store_true", help="输出 JSON")
     p.set_defaults(func=cmd_scan)
+
+    p = sub.add_parser("inspect",
+                       help="离线检查 Agent 定义/轨迹（支持 --format sarif）")
+    p.add_argument("rest", nargs=argparse.REMAINDER,
+                   help="传给 inspect 的参数（如 --agent def.json --format sarif）")
+    p.set_defaults(func=cmd_inspect)
 
     p = sub.add_parser("mcp-proxy",
                        help="MCP stdio 安全代理（tools/call 强制门禁）")

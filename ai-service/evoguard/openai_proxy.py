@@ -16,6 +16,7 @@
 **边界**：这是**协议代理**，不替第三方执行工具 —— 它只决定 tool_calls
 放不放行。真正的写操作仍须由调用方在审批后执行（见 execution.py）。
 """
+import base64
 import json
 import os
 import time
@@ -182,7 +183,32 @@ def output_blocking_enabled():
     return _sec.enforcing()
 
 
-def proxy(payload, *, upstream_url=None, opener=None, agent_type="react",
+def attach_receipt(audit, payload, *, boundary="openai_proxy"):
+    """每次代理决策都签发回执，放 audit 供 HTTP 层写响应头。
+
+    receipt.py 此前只被 CLI 与单测调用 —— 主路径从不签发，等于"可离线验签"
+    这个能力在真实请求里不存在。未配 HMAC key 时 receipt 自带 unsigned=true。
+    """
+    try:
+        import receipt as _rc
+        body = {"request": payload if isinstance(payload, dict) else {},
+                "policy": {"agent_type": (payload or {}).get("evoguard_agent")
+                           if isinstance(payload, dict) else None},
+                "decision": audit.get("decision") or "allow",
+                "executed": bool(audit.get("executed")),
+                "reason": str(audit.get("reason") or "")}
+        rec = _rc.sign(body, boundary=boundary)
+        audit["receipt"] = rec
+        audit["receipt_header"] = base64.urlsafe_b64encode(
+            json.dumps(rec, ensure_ascii=False, sort_keys=True,
+                       separators=(",", ":")).encode("utf-8")
+        ).decode("ascii").rstrip("=")
+    except Exception:                                        # noqa: BLE001
+        audit["receipt_error"] = "sign_failed"
+    return audit
+
+
+def _proxy_core(payload, *, upstream_url=None, opener=None, agent_type="react",
           registry=None, rails=None, use_semantic=False, judge=None,
           execute=False, enforce_input=None, enforce_output=None):
     """完整代理流程。返回 (status_code, response_body, audit)。
@@ -425,7 +451,7 @@ def process_sse(lines, *, payload, agent_type, registry, rails, cfg,
     return out, audit
 
 
-def proxy_stream(payload, *, upstream_url=None, opener=None,
+def _proxy_stream_core(payload, *, upstream_url=None, opener=None,
                  agent_type="react", registry=None, rails=None,
                  use_semantic=False, judge=None, enforce_input=None,
                  enforce_output=None):
@@ -499,3 +525,28 @@ def _iter_lines(resp):
     text = data.decode("utf-8", "replace") if isinstance(data, bytes) else data
     for line in text.splitlines():
         yield line
+
+
+# ---- LAUNCH-01：主路径签发回执（薄包装，不改任何既有调用签名）----
+def proxy(payload, *, upstream_url=None, opener=None, agent_type="react",
+          registry=None, rails=None, use_semantic=False, judge=None,
+          execute=False, enforce_input=None, enforce_output=None):
+    """与 _proxy_core 完全同构，额外在 audit 里附可离线验签的回执。"""
+    code, resp, audit = _proxy_core(
+        payload, upstream_url=upstream_url, opener=opener, agent_type=agent_type,
+        registry=registry, rails=rails, use_semantic=use_semantic, judge=judge,
+        execute=execute, enforce_input=enforce_input,
+        enforce_output=enforce_output)
+    return code, resp, attach_receipt(audit, payload)
+
+
+def proxy_stream(payload, *, upstream_url=None, opener=None,
+                 agent_type="react", registry=None, rails=None,
+                 use_semantic=False, judge=None, enforce_input=None,
+                 enforce_output=None):
+    code, lines, audit = _proxy_stream_core(
+        payload, upstream_url=upstream_url, opener=opener, agent_type=agent_type,
+        registry=registry, rails=rails, use_semantic=use_semantic, judge=judge,
+        enforce_input=enforce_input, enforce_output=enforce_output)
+    return code, lines, attach_receipt(audit, payload,
+                                       boundary="openai_proxy_stream")

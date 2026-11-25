@@ -43,6 +43,8 @@ def h_openai_chat(self):
             agent_type=str(body.get("evoguard_agent") or "react"))
     except ValueError as exc:
         return self._err("E_NOT_READY", str(exc), 503)
+    _rh = (audit or {}).get("receipt_header")
+    self._extra_headers = {"X-EvoGuard-Receipt": _rh} if _rh else {}
     if audit.get("decision") == "deny":
         self._audit(self._rid, "POST", "/v1/chat/completions", code,
                     getattr(self, "_actor", "anonymous"), "denied")
@@ -375,6 +377,9 @@ def _send_stream(self, _op, body):
         return self._send(code, lines)
     self._response_status = 200
     self.send_response(200)
+    _rh = (audit or {}).get("receipt_header")
+    if _rh:
+        self.send_header("X-EvoGuard-Receipt", _rh)
     self.send_header("Content-Type", "text/event-stream; charset=utf-8")
     self.send_header("Cache-Control", "no-store")
     self.send_header("X-Accel-Buffering", "no")

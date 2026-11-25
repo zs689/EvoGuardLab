@@ -50,7 +50,7 @@
     "calib_default_threshold": {
       "recall": 0.9641,
       "fpr": 0.0479,
-      "p95_ms": 5.687,
+      "p95_ms": 11.499,
       "confusion": {
         "tp": 188,
         "fn": 7,
@@ -69,7 +69,7 @@
   "L1_only": {
     "recall": 0.2393,
     "fpr": 0.0,
-    "p95_ms": 1.612,
+    "p95_ms": 3.221,
     "confusion": {
       "tp": 39,
       "fn": 124,
@@ -80,7 +80,7 @@
   "L1_plus_light": {
     "recall": 0.9509,
     "fpr": 0.04,
-    "p95_ms": 6.206,
+    "p95_ms": 13.701,
     "confusion": {
       "tp": 155,
       "fn": 8,

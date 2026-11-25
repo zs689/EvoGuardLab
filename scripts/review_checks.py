@@ -905,6 +905,32 @@ def c_static_names():
                    "pyflakes ai-service/evoguard/*.py")
 
 
+def c_receipt_wiring():
+    """LAUNCH-01：回执必须在两条主路径真实签发，不能只活在 CLI 与单测里。
+
+    曾经 receipt.py 的调用方只有 evoguard_cli.py 和测试 —— "可离线验签"
+    这个能力在真实代理请求里根本不存在，且所有测试全绿。这里用静态接线
+    校验兜底（E2E 闭环在 tests/test_receipt_mainpath_e2e.py）。
+    """
+    targets = ("ai-service/evoguard/openai_proxy.py",
+               "ai-service/evoguard/mcp_proxy.py")
+    missing = []
+    for rel in targets:
+        p = os.path.join(ROOT, rel)
+        if not os.path.isfile(p):
+            missing.append(rel + ":文件缺失")
+            continue
+        with open(p, encoding="utf-8") as f:
+            src = f.read()
+        if "sign(" not in src or "receipt" not in src:
+            missing.append(rel + ":无签发调用")
+    ok = not missing
+    return _result("LAUNCH-01/receipt-wiring", ok,
+                   ("openai_proxy 与 mcp_proxy 主路径均签发回执"
+                    if ok else "回执未接线：%s" % missing),
+                   "tests/test_receipt_mainpath_e2e.py")
+
+
 def c_eval_self_checks():
     """EG-025：评测产物必须自带 self_checks，而不是靠人记得排错。
 
@@ -951,6 +977,7 @@ CHECKS = [
     ("EG-003", c_dockerfile_copy),
     ("OSS-03", c_no_personal_paths),
     ("FRONTIER-03", c_hard_negative_disclosure),
+    ("LAUNCH-01", c_receipt_wiring),
     ("EG-007", c_retention_chain),
     ("EG-015", c_sli_definition),
     ("EG-005", c_body_limit),

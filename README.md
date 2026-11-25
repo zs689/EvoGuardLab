@@ -152,8 +152,10 @@ the baseline is near zero. Judging by *tool responsibility* instead of guessing 
 - **Argument-level provenance (FRONTIER-01)** — `provenance.py` tags every argument as
   `USER_TRUSTED` or `UNTRUSTED_TOOL_OUTPUT` and tracks "untrusted tool output poisoned a
   high-stakes tool argument". With **all text detectors disabled**, the structural experiment
-  reports ASR `0.000` and benign auto-pass `1.000` (3+3 cases — mechanism self-check, not a
-  generalization claim).
+  reports ASR `0.000` and benign auto-pass `1.000` on **50 real InjecAgent attack
+  slices + 20 benign Chinese slices** (`scripts/eval_provenance_structural.py`,
+  offline reproducible). Sink mix: 42 `write_file.path`, 6 `send_email.to`,
+  2 `transfer.amount`. This is token-level provenance, not semantic understanding.
 - **MCP rug-pull pinning + signed receipts (FRONTIER-02)** — a session-scoped SHA-256 of
   `tools/list`; a second-round description mutation is blocked. `receipt.py` emits an
   HMAC-SHA256 offline-verifiable action receipt (`evoguard verify-receipt --key`), and

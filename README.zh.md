@@ -126,7 +126,11 @@ L1 召回接近 0；改按**工具责任**而非猜意图判定，留出集拿�
 
 - **参数级来源血缘（FRONTIER-01）**：`provenance.py` 给每个参数打 USER_TRUSTED /
   UNTRUSTED_TOOL_OUTPUT 标签，追踪「不可信工具返回值污染高敏工具参数」。**文本检测器全关**时
-  结构化实验 ASR=`0.000`、良性自动放行=`1.000`（3+3 小样本，仅机制自检，不作泛化声明）。
+  结构化实验在 **50 条真实 InjecAgent 攻击切片 + 20 条中文良性切片**上 ASR=`0.000`、
+  良性自动放行=`1.000`、人工确认率=`0.000`（`scripts/eval_provenance_structural.py`，
+  离线可复现）。高敏 sink 分布：42×`write_file.path`、6×`send_email.to`、
+  2×`transfer.amount`。这是 token 级来源血缘，不是语义理解；
+  用户若把恰好出现在目标里的值写入工具输出仍会放行。
 - **MCP Rug-Pull 钉扎 + 签名回执（FRONTIER-02）**：会话级 SHA-256 记录 `tools/list` 指纹，
   第二轮描述被篡改即触发阻断；`receipt.py` 产出 HMAC-SHA256 离线可验回执，
   `evoguard verify-receipt --key` 复核；**未配 key 时显式 `unsigned: true`，绝不伪装 verified**。

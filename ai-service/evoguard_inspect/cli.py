@@ -50,7 +50,7 @@ def print_rules(groups=None):
     print("\n共 %d 条规则" % len(registry.RULES))
 
 
-def run_static(args, cfg=None):
+def run_static(args, cfg=None, sarif_out=False):
     from . import report as _report
     cfg = cfg or config.load(args.config)
     defs = []
@@ -74,6 +74,17 @@ def run_static(args, cfg=None):
     issues = []
     for d in defs:
         issues.extend(static_rules.check(d, cfg, rules))
+    if sarif_out:
+        from . import sarif as _sarif
+        text = _sarif.dumps(issues)
+        path = getattr(args, "output", None)
+        if path:
+            with open(path, "w", encoding="utf-8", newline="\n") as f:
+                f.write(text + "\n")
+            print("SARIF 2.1.0 -> %s" % path)
+        else:
+            print(text)
+        return 0
     by_sev, by_rule, by_group = _report.summarize(issues)
     cov = coverage.analyze_static(
         defs, issues, cfg,
@@ -124,7 +135,11 @@ def main(argv=None):
                     help="列出静态规则库后退出")
     ap.add_argument("--split-dir", action="store_true",
                     help="把 --agent 目录下的一级子目录各当一个 Agent（仓库里通常有多个）")
-    ap.add_argument("--format", default=None, choices=["otel", "langsmith"])
+    # --format sarif 表示**输出格式**（输入自动检测）；otel/langsmith 仍是显式输入格式
+    ap.add_argument("--format", default=None,
+                    choices=["otel", "langsmith", "sarif"])
+    ap.add_argument("--output", default=None,
+                    help="输出文件路径（配合 --format sarif）")
     ap.add_argument("--config", default=None, help="配置文件（JSON），用于适配不同 Agent")
     ap.add_argument("--out", default=None, help="输出目录")
     ap.add_argument("--json", action="store_true", help="终端输出 JSON")
@@ -148,6 +163,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     args.trace = [p for group in (args.trace or []) for p in group]
     args.agent = [p for group in (args.agent or []) for p in group]
+    sarif_out = (getattr(args, "format", None) == "sarif")
 
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -173,7 +189,7 @@ def main(argv=None):
 
     # ---- 静态检查分支（只读定义，不执行 Agent）----
     if args.agent:
-        return run_static(args, cfg=None)
+        return run_static(args, cfg=None, sarif_out=sarif_out)
 
     if not args.trace:
         print("[×] 没有输入：用 --trace 指定轨迹、用 --agent 指定定义，"
@@ -186,7 +202,8 @@ def main(argv=None):
         print("[×] 配置加载失败：%s" % e)
         return 2
 
-    traces, load_failures = report.inspect_files_safe(args.trace, args.format)
+    traces, load_failures = report.inspect_files_safe(
+        args.trace, None if sarif_out else args.format)
     for f in load_failures:
         print("[!] 输入解析失败：%s（%s）" % (f["path"], f["error"]))
 

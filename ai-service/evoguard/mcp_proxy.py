@@ -73,6 +73,73 @@ def guard_result(name, payload, *, rails=None):
             "status": r.get("status")}
 
 
+def _with_receipt(resp, state, msg, *, decision, reason=""):
+    """给每个 MCP 决策附可离线验签的回执，并落入会话审计事件。
+
+    receipt.py 此前只被 CLI/单测调用，mcp_proxy 一次都不签发 —— 单测通过
+    但主路径不存在该能力。这里在 tools/list 与 tools/call 的**所有**决策
+    返回点统一附加：成功进 result._meta，阻断进 error.data。
+    """
+    try:
+        import receipt as _rc
+        rec = _rc.sign(
+            {"request": msg if isinstance(msg, dict) else {},
+             "policy": {"method": str((msg or {}).get("method") or "")},
+             "decision": decision, "executed": False, "reason": reason},
+            boundary="mcp_proxy")
+        state.setdefault("receipt_events", []).append(rec)
+        if "error" in resp:
+            resp["error"].setdefault("data", {})["evoguard_receipt"] = rec
+        else:
+            resp.setdefault("result", {}).setdefault(
+                "_meta", {})["evoguard_receipt"] = rec
+    except Exception:                                        # noqa: BLE001
+        pass
+    return resp
+
+
+def _normalize_tool_name(name):
+    """NFKC + 去不可见字符 + 常见同形字折叠（零依赖）。"""
+    import unicodedata
+    s = unicodedata.normalize("NFKC", str(name or "")).lower()
+    s = "".join(c for c in s
+                if unicodedata.category(c) not in ("Cf", "Cc", "Mn"))
+    table = {"\u0131": "i", "\u017f": "s", "\u0430": "a",
+             "\u0435": "e", "\u043e": "o", "\u0440": "p",
+             "\u0441": "c", "\u0445": "x", "\u0456": "i",
+             "\u00a0": "", "\u200b": ""}
+    return "".join(table.get(c, c) for c in s)
+
+
+def _tool_shadowing(tools, state, *, server_id):
+    """跨服同名/Unicode 形近冲突 -> 返回 (code, detail) 或 None。
+
+    单服哈希钉扎只防"同一工具描述被改"，防不了恶意服务器注册一个和别家
+    同名（或形近）的工具来劫持调用。会话级 tool_owners 记录规范化名 ->  owner。
+    """
+    owners = dict(state.get("tool_owners") or {})
+    conflicts = []
+    for t in tools:
+        if not isinstance(t, dict) or not t.get("name"):
+            continue
+        norm = _normalize_tool_name(t["name"])
+        prev = owners.get(norm)
+        if prev is not None and prev[0] != server_id:
+            exact = (prev[1].lower() == str(t["name"]).lower())
+            conflicts.append({"tool": t["name"], "owner": prev[0],
+                              "previous_name": prev[1], "exact": exact,
+                              "normalized": norm})
+    if conflicts:
+        return ("mcp_tool_shadowing" if any(c["exact"] for c in conflicts)
+            else "mcp_tool_name_confusion"), conflicts
+    for t in tools:
+        if isinstance(t, dict) and t.get("name"):
+            owners[_normalize_tool_name(t["name"])] = (
+                server_id, str(t["name"]))
+    state["tool_owners"] = owners
+    return None
+
+
 def handle_message(msg, *, registry, rails=None, state=None):
     """处理一条 JSON-RPC 请求，返回响应 dict（或 None 表示通知）。
 
@@ -85,6 +152,21 @@ def handle_message(msg, *, registry, rails=None, state=None):
 
     if method == "tools/list":
         tools = list(params.get("tools") or [])
+        # LAUNCH-03：跨服 Tool Shadowing / Unicode 形近混淆。
+        # 单服哈希钉扎只防同一工具被改描述，防不了另一台服务器注册同名/形近
+        # 工具来劫持调用。enforce 模式直接阻断，audit 模式留痕。
+        server = str(params.get("server_id") or state.get("server_id")
+                     or "default")
+        shadow = _tool_shadowing(tools, state, server_id=server)
+        if shadow:
+            code, detail = shadow
+            state["tool_shadowing"] = detail
+            if _sec.enforcing():
+                return _with_receipt(
+                    {"jsonrpc": "2.0", "id": mid,
+                     "error": {"code": -32100, "message": code,
+                               "data": {"conflicts": detail}}},
+                    state, msg, decision="deny", reason=code) if mid is not None else None
         # FRONTIER-02：会话级 SHA-256 钉扎，防 Rug-Pull（第 1 轮正常、
         # 第 2 轮偷偷改 description 注入指令）。规范化只覆盖描述与 schema。
         import hashlib as _hl
@@ -107,10 +189,12 @@ def handle_message(msg, *, registry, rails=None, state=None):
             state["rugpull_tools"] = drift
             if mid is None:
                 return None
-            return {"jsonrpc": "2.0", "id": mid,
-                    "error": {"code": -32099,
-                              "message": "mcp_tool_rugpull_drift",
-                              "data": {"tools": drift}}}
+            return _with_receipt(
+                {"jsonrpc": "2.0", "id": mid,
+                 "error": {"code": -32099,
+                           "message": "mcp_tool_rugpull_drift",
+                           "data": {"tools": drift}}},
+                state, msg, decision="deny", reason="tool_rugpull_drift")
         # 首次 tools/list 也要过投毒检查：description 里的 Unicode Tag
         # 隐写 / 指令注入不能靠"正常工具"身份混进 registry。
         poisoned = []
@@ -127,17 +211,21 @@ def handle_message(msg, *, registry, rails=None, state=None):
             state["rugpull_tools"] = poisoned
             if mid is None:
                 return None
-            return {"jsonrpc": "2.0", "id": mid,
-                    "error": {"code": -32098,
-                              "message": "mcp_tool_description_poisoned",
-                              "data": {"tools": poisoned}}}
+            return _with_receipt(
+                {"jsonrpc": "2.0", "id": mid,
+                 "error": {"code": -32098,
+                           "message": "mcp_tool_description_poisoned",
+                           "data": {"tools": poisoned}}},
+                state, msg, decision="deny",
+                reason="tool_description_poisoned")
         state["tool_fingerprints"] = {**pinned, **fp}
         reg = register_tools(tools, registry=registry)
         state["registry"] = reg
         if mid is None:
             return None
-        return {"jsonrpc": "2.0", "id": mid,
-                "result": {"tools": tools}}
+        return _with_receipt(
+            {"jsonrpc": "2.0", "id": mid, "result": {"tools": tools}},
+            state, msg, decision="allow", reason="tools_list_ok")
 
     if method == "tools/call":
         name = str(params.get("name") or "")
@@ -147,14 +235,18 @@ def handle_message(msg, *, registry, rails=None, state=None):
         if mid is None:
             return None
         if not ok:
-            return {"jsonrpc": "2.0", "id": mid,
-                    "error": {"code": -32001,
-                              "message": "blocked by evoguard: %s" % rec["reason"],
-                              "data": rec}}
+            return _with_receipt(
+                {"jsonrpc": "2.0", "id": mid,
+                 "error": {"code": -32001,
+                           "message": "blocked by evoguard: %s" % rec["reason"],
+                           "data": rec}},
+                state, msg, decision="deny", reason=str(rec["reason"]))
         # 放行：返回给调用方一个「可以去执行」的信号，executed 仍为 False
-        return {"jsonrpc": "2.0", "id": mid,
-                "result": {"allowed": True, "tool": name,
-                           "arguments": args, "evoguard": rec}}
+        return _with_receipt(
+            {"jsonrpc": "2.0", "id": mid,
+             "result": {"allowed": True, "tool": name,
+                        "arguments": args, "evoguard": rec}},
+            state, msg, decision="allow", reason="call_allowed")
 
     if mid is None:
         return None

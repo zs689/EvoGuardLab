@@ -38,6 +38,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        # LAUNCH-01：代理层签发的 Action Receipt（compact base64url JSON）
+        for hk, hv in (getattr(self, "_extra_headers", None) or {}).items():
+            self.send_header(hk, str(hv))
         # 传统 IT 安全的基本输出侧约束：不让浏览器「猜」内容类型、
         # 不允许被内嵌、不允许把本域当脚本源执行。
         # 这些不是锦上添花 —— 少了 nosniff，一个 JSON 接口里的
