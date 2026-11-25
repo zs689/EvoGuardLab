@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
 # EG-023：不靠「unittest 绿灯 + 一个自评总分」放行。每个强制检查都有
 # 自己的命令、产物与退出码；关键检查没运行到，release-gate 就过不去。
 # 自评分数只作回归提示，**不单独作为放行条件**。
@@ -94,7 +98,9 @@ jobs:
       - name: No build artefacts leaked into the tree
         working-directory: fresh
         run: |
-          test ! -d data/external || { echo "data/external 被提交了"; exit 1; }
+          for d in injecagent agentdojo jailbreak chinese; do
+            test ! -d "data/external/$d" || { echo "外部语料 data/external/$d 被提交了"; exit 1; }
+          done
           test ! -d data/tenants || { echo "data/tenants 被提交了"; exit 1; }
           test ! -d .venv || { echo ".venv 被提交了"; exit 1; }
       - name: Run suite without installing the package

@@ -22,6 +22,14 @@ import subprocess
 import sys
 import tempfile
 
+# 英文 Windows 控制台默认 cp1252，输出中文 JSON/提示会触发 UnicodeEncodeError
+for _s in (sys.stdout, sys.stderr):
+    if hasattr(_s, "reconfigure"):
+        try:
+            _s.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:                                   # noqa: BLE001
+            pass
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 EVO = os.path.join(ROOT, "ai-service", "evoguard")
 IS_CHECKOUT = os.path.isdir(EVO)

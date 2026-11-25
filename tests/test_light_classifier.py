@@ -92,6 +92,10 @@ class TestTrainingReport(unittest.TestCase):
         self.assertGreaterEqual(en["recall"], 0.80, "英文留出召回未达标：%s" % en)
         self.assertLessEqual(en["fpr"], 0.05, "英文留出误报超标：%s" % en)
 
+    @unittest.skipUnless(
+        os.path.isfile(os.path.join(ROOT, "data", "external", "chinese", "cases.jsonl")),
+        "缺少外部语料 data/external/chinese/cases.jsonl",
+    )
     def test_holdout_disjoint_from_train(self):
         """用同一 seed 重放切分，验证 train/holdout 无文本交集。"""
         sys.path.insert(0, os.path.join(ROOT, "scripts"))

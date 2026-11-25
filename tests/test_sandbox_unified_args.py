@@ -42,12 +42,15 @@ class TestUnifiedArgs(unittest.TestCase):
     def test_run_workspace_no_pycache_error(self):
         box = SB.DockerCodeSandbox()
         d = tempfile.mkdtemp(prefix="ws-")
+        os.chmod(d, 0o755)  # Linux 容器内以 65534:65534 (nobody) 只读挂载，0700 会不可进入
         try:
             with open(os.path.join(d, "m.py"), "w", encoding="utf-8") as f:
                 f.write("X = 1\n")
             with open(os.path.join(d, "test_m.py"), "w",
                       encoding="utf-8") as f:
                 f.write("from m import X\nassert X == 1\n")
+            for fn in ("m.py", "test_m.py"):
+                os.chmod(os.path.join(d, fn), 0o644)
             r = box.run_workspace(d, ["python", "-m", "unittest",
                                       "test_m", "-q"])
             self.assertTrue(r["ok"], r)

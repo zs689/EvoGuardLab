@@ -12,7 +12,10 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
+_EXT_JB = os.path.join(ROOT, "data", "external", "jailbreak", "cases.jsonl")
 
+
+@unittest.skipUnless(os.path.isfile(_EXT_JB), "缺少外部公开语料 data/external/jailbreak")
 class TestUtilityExpanded(unittest.TestCase):
     def test_load_expanded_benign_unique_ge_100(self):
         import eval_public_benchmarks as E

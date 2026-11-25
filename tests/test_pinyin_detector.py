@@ -73,6 +73,10 @@ class TestSecurityIntegration(unittest.TestCase):
         self.assertNotIn("pinyin_injection", codes, codes)
 
 
+@unittest.skipUnless(
+    os.path.isfile(os.path.join(ROOT, "data", "external", "chinese", "cases.jsonl")),
+    "缺少外部中文良性语料 data/external/chinese/cases.jsonl",
+)
 class TestRealCorpusRegression(unittest.TestCase):
     """真实中文语料良性上的误报必须为 0（防规则改动悄悄引入误报）。"""
 

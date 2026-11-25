@@ -21,6 +21,7 @@ class TestDockerSession(unittest.TestCase):
         except Exception as exc:                            # noqa: BLE001
             self.skipTest("docker daemon 不可用：%s" % exc)
         self.tmp = tempfile.mkdtemp(prefix="dockersess-")
+        os.chmod(self.tmp, 0o755)  # Linux 容器内 65534:65534 只读挂载需可进入
         with open(os.path.join(self.tmp, "m.py"), "w", encoding="utf-8") as f:
             f.write("def add(a,b):\n    return a+b\n")
         with open(os.path.join(self.tmp, "test_m.py"), "w",
@@ -29,6 +30,8 @@ class TestDockerSession(unittest.TestCase):
                     "class T(unittest.TestCase):\n"
                     "    def test_add(self):\n"
                     "        self.assertEqual(add(1,2),3)\n")
+        for fn in ("m.py", "test_m.py"):
+            os.chmod(os.path.join(self.tmp, fn), 0o644)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)

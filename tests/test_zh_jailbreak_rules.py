@@ -23,6 +23,13 @@ def _load(name):
         return [json.loads(l) for l in f if l.strip()]
 
 
+_HAS_ZH_CORPUS = (
+    os.path.isfile(os.path.join(ROOT, "data", "external", "chinese", "cases.jsonl"))
+    and os.path.isfile(os.path.join(ROOT, "data", "external", "chinese_jailbreak", "cases.jsonl"))
+)
+
+
+@unittest.skipUnless(_HAS_ZH_CORPUS, "缺少外部中文语料 data/external/chinese*")
 class TestZhJailbreak(unittest.TestCase):
     def _rates(self, rows, cls=None):
         atk = [r for r in rows if r.get("label") == "attack"
