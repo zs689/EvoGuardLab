@@ -16,6 +16,7 @@ import sandbox_executor as SB                               # noqa: E402
 @unittest.skipUnless(shutil.which("docker"), "本机无 docker")
 class TestDockerSession(unittest.TestCase):
     def setUp(self):
+        import subprocess
         try:
             r = subprocess.run(["docker", "info", "--format", "{{.OSType}}"],
                                capture_output=True, text=True,
