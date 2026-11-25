@@ -173,9 +173,10 @@ frontend/index.html     BoardUI 风格看板（双主题，零依赖）
 ## 接本地模型
 
 ```bash
-# 1. 拉模型（Ollama 安装位置、模型目录按本机情况设定，不要写死盘符）
-ollama pull qwen3:4b
-# 2. 探针：确认它真能按格式输出 JSON（Qwen3 4B 默认开思考模式，content 可能为空）
+# 1. 拉一个任意 Ollama 模型（这里只是占位示例，不是推荐/绑定某个厂商）
+#    也可用任意 OpenAI 兼容端点；核心逻辑对模型与厂商无依赖。
+ollama pull <任意本地模型名>
+# 2. 探针：确认它真能按格式输出 JSON（部分模型默认开思考模式，content 可能为空）
 python scripts/check_model.py --base http://127.0.0.1:11434/v1
 # 3. 切到真实模型重跑
 export AGENTLAB_LLM=local

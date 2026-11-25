@@ -125,9 +125,25 @@ def cmd_scan(a):
 
 
 def cmd_inspect(a):
-    """离线检查 Agent 定义/轨迹；--format sarif 输出 SARIF 2.1.0。"""
+    """离线检查 Agent 定义/轨迹；--format sarif 输出 SARIF 2.1.0。
+
+    用显式声明的参数转发，而不是 argparse.REMAINDER —— 后者在嵌套
+    subparsers 下会把选项留给它自己的 parser，wheel 安装后实测报
+    "unrecognized arguments"（源码直调 IC.main 的单测发现不了）。
+    """
     import evoguard_inspect.cli as IC
-    return IC.main(list(a.rest or []))
+    argv = []
+    for attr, flag in (("trace", "--trace"), ("agent", "--agent"),
+                       ("format", "--format"), ("output", "--output"),
+                       ("config", "--config")):
+        v = getattr(a, attr, None)
+        if v:
+            argv += [flag, v]
+    if getattr(a, "list_static_rules", False):
+        argv.append("--list-static-rules")
+    if getattr(a, "out", None):
+        argv += ["--out", a.out]
+    return IC.main(argv)
 
 
 def cmd_mcp_proxy(_a):
@@ -378,8 +394,14 @@ def main(argv=None):
 
     p = sub.add_parser("inspect",
                        help="离线检查 Agent 定义/轨迹（支持 --format sarif）")
-    p.add_argument("rest", nargs=argparse.REMAINDER,
-                   help="传给 inspect 的参数（如 --agent def.json --format sarif）")
+    p.add_argument("--agent", help="Agent 定义文件或目录")
+    p.add_argument("--trace", help="轨迹文件")
+    p.add_argument("--format", help="输出/输入格式：sarif|otel|langsmith")
+    p.add_argument("--output", help="输出文件路径（配合 --format sarif）")
+    p.add_argument("--config", help="配置 JSON")
+    p.add_argument("--out", help="报告输出目录")
+    p.add_argument("--list-static-rules", action="store_true",
+                   help="列出静态规则后退出")
     p.set_defaults(func=cmd_inspect)
 
     p = sub.add_parser("mcp-proxy",
