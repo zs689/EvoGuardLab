@@ -17,6 +17,12 @@ import sandbox_executor as SB                               # noqa: E402
 class TestDockerSession(unittest.TestCase):
     def setUp(self):
         try:
+            r = subprocess.run(["docker", "info", "--format", "{{.OSType}}"],
+                               capture_output=True, text=True,
+                               timeout=10, check=False)
+            if r.returncode != 0 or r.stdout.strip().lower() != "linux":
+                self.skipTest("docker daemon 非 Linux 容器模式（OSType=%s）"
+                              % (r.stdout.strip() or "unreachable"))
             self.box = SB.DockerCodeSandbox()
         except Exception as exc:                            # noqa: BLE001
             self.skipTest("docker daemon 不可用：%s" % exc)

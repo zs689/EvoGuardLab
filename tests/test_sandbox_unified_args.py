@@ -13,15 +13,16 @@ import sandbox_executor as SB                               # noqa: E402
 
 
 def _docker_daemon_up():
-    """client 存在不等于 daemon 可达；离线环境里真跑容器的用例应 skip。"""
+    """client 存在不等于 Linux 容器 daemon 可达；离线或 Windows 容器模式应 skip。"""
     import subprocess
     exe = shutil.which("docker")
     if not exe:
         return False
     try:
-        r = subprocess.run([exe, "info"], capture_output=True,
+        r = subprocess.run([exe, "info", "--format", "{{.OSType}}"],
+                           capture_output=True, text=True,
                            timeout=10, check=False)
-        return r.returncode == 0
+        return r.returncode == 0 and r.stdout.strip().lower() == "linux"
     except Exception:                                        # noqa: BLE001
         return False
 
