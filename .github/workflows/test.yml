@@ -63,6 +63,7 @@ jobs:
         # 两个脚本都要跑：check_docker_context 验黑名单/运行资产，
         # check_build_context 验 .dockerignore 与 **pyproject 声明是否被
         # COPY 覆盖**（漏拷 evoguard_inspect 那次就是后者抓到的）。
+        shell: bash
         run: |
           mkdir -p gate_artifacts
           python scripts/check_docker_context.py --out gate_artifacts
