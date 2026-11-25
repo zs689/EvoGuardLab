@@ -29,7 +29,6 @@ jobs:
 
     env:
       PGPASSWORD: postgres
-      EVOGUARD_REDIS_URL: redis://127.0.0.1:6379/0
 
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +50,8 @@ jobs:
             --out docs/review-remediation/probes/pg_rls_live.json
 
       - name: 双副本 Redis 压测
+        env:
+          EVOGUARD_REDIS_URL: redis://127.0.0.1:6379/0
         run: python scripts/distributed_stress.py --url "$EVOGUARD_REDIS_URL" \
                --out docs/review-remediation/probes/distributed_stress.json
 
