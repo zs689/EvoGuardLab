@@ -471,7 +471,7 @@ select:focus, input.fld:focus { border-color: var(--primary); }
             <span class="chip" id="run-status">待运行</span>
             <span style="flex:1"></span>
             <span class="chip" title="复合故障：两个落在不同逻辑步的持久故障">复合靶场</span>
-            <select id="r-comp" aria-label="选择复合故障">
+            <select id="r-comp" aria-label="选择复合故障"></select>
             <button class="btn" id="btn-comp">⛓ 跑复合故障</button>
           </div>
           <div class="grid g21">
@@ -606,10 +606,15 @@ function md2html(src) {
 const COLORS = {A:'var(--text-3)', B:'var(--info)', C:'var(--warn)', D:'var(--success)',
                 baseline:'var(--text-3)', SINGLE:'var(--info)', CHAIN:'var(--primary)', single:'var(--info)', chain:'var(--primary)'};
 function bars(el, rows) {
-  el.innerHTML = rows.map(r => '<div class="bar-row">' +
-    '<div class="bar-name">' + esc(r.label) + '</div>' +
-    '<div class="bar-track"><div class="bar-fill" style="width:' + Math.max(0, Math.min(100, r.value)) + '%;background:' + (r.color || 'var(--primary)') + '"></div></div>' +
-    '<div class="bar-val">' + fmt(r.value) + (r.unit || '%') + '</div></div>').join('');
+  if (!el) return;
+  el.innerHTML = rows.map(r => {
+    const nameHtml = (r.tag ? '<b>' + esc(r.tag) + '</b> ' : '') +
+      (r.muted ? '<span style="color:var(--text-3)">' + esc(r.label) + '</span>' : esc(r.label));
+    return '<div class="bar-row">' +
+      '<div class="bar-name">' + nameHtml + '</div>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + Math.max(0, Math.min(100, r.value)) + '%;background:' + (r.color || 'var(--primary)') + '"></div></div>' +
+      '<div class="bar-val">' + fmt(r.value) + (r.unit || '%') + '</div></div>';
+  }).join('');
 }
 function chainHtml(chain) {
   const c = (chain && chain.length) ? chain : ['–'];
@@ -636,7 +641,8 @@ function renderKpis() {
   $('#four-desc').textContent = '独立测试集 ' + METRICS.four_groups.n + ' 个用例 · 15 类故障';
   $('#chip-four').textContent = 'D − B = +' + (r.D - r.B).toFixed(1) + ' pp';
   bars($('#four-bars'), ['A','B','C','D'].map(k => ({
-    label: '<b>' + k + '</b>' + ({A:'无恢复',B:'固定规则',C:'宽松经验',D:'完整闭环'}[k]),
+    tag: k,
+    label: {A:'无恢复',B:'固定规则',C:'宽松经验',D:'完整闭环'}[k],
     value: r[k], color: COLORS[k]
   })));
 
@@ -684,10 +690,10 @@ function renderComposite() {
     ' 个复合用例</div><div class="kpi-bar"><i style="width:' + Math.min(100,x.value) +
     '%;background:' + x.color + '"></i></div></div>').join('');
   bars($('#comp-bars'), [
-    {label:'<b>A</b> 无恢复', value:r.A, color:COLORS.A},
-    {label:'<b>SINGLE</b> 最优单策略', value:r.single, color:COLORS.single},
-    {label:'<b>CHAIN</b> ' + c.best_chain.join(' → '), value:r.chain, color:COLORS.chain},
-    {label:'<b>D</b> 闭环自动调用技能', value:r.D, color:COLORS.D},
+    {tag:'A', label:'无恢复', value:r.A, color:COLORS.A},
+    {tag:'SINGLE', label:'最优单策略', value:r.single, color:COLORS.single},
+    {tag:'CHAIN', label:c.best_chain.join(' → '), value:r.chain, color:COLORS.chain},
+    {tag:'D', label:'闭环自动调用技能', value:r.D, color:COLORS.D},
   ]);
   $('#comp-note').innerHTML = '<b>为什么单策略必然不够：</b>诊断每轮只返回<b>一个</b>坏点；' +
     '处理完重放，第二个坏点才暴露。链的第 2 轮重新诊断、按新根因换策略。' +
@@ -923,12 +929,12 @@ async function loadReal() {
         '<div class="kpi-bar"><i style="width:' + r.rate + '%;background:' + COLORS[k] + '"></i></div></div>';
     }).join('');
     bars($('#real-single-bars'), ['A','B','C','D'].flatMap(k => [
-      {label:'<b>'+k+'</b> 真实模型', value:(sr[k]||{}).rate||0, color:COLORS[k]},
-      {label:'<span style="color:var(--text-3)">'+k+' mock 基线</span>', value:((m.mock_baseline||{}).four_groups||{})[k]||0, color:'var(--border-strong)'},
+      {tag:k, label:'真实模型', value:(sr[k]||{}).rate||0, color:COLORS[k]},
+      {label:k + ' mock 基线', muted:true, value:((m.mock_baseline||{}).four_groups||{})[k]||0, color:'var(--border-strong)'},
     ]));
-    const crs = ['A','B','C','D'].map(k => ({label:'<b>'+k+'</b> 复合故障', value:(cr[k]||{}).rate||0, color:COLORS[k]}));
+    const crs = ['A','B','C','D'].map(k => ({tag:k, label:'复合故障', value:(cr[k]||{}).rate||0, color:COLORS[k]}));
     const ctl = m.grammar_control;
-    if (ctl) crs.push({label:'<b>RAW</b> 无约束严格 JSON 率', value:ctl.strict_rate, color:'var(--warn)'});
+    if (ctl) crs.push({tag:'RAW', label:'无约束严格 JSON 率', value:ctl.strict_rate, color:'var(--warn)'});
     bars($('#real-comp-bars'), crs);
     $('#real-control').innerHTML = ctl ?
       ('<b>无 grammar 对照</b>：' + ctl.strict_ok + '/' +
